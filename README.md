@@ -11,6 +11,10 @@ Copyright (c) 2021 NUMATH https://numath.dmae.upm.es
 
 HORSES3D supports curvilinear, hexahedral, conforming meshes in GMSH, HDF5 and SpecMesh/HOHQMesh format. A hybrid CPU-based parallelisation strategy (shared and distributed memory) with OpenMP and MPI is followed.
 
+## Acknowledgments
+The authors acknowledge the funding received by the Grant DeepCFD (Project No. PID2022-137899OB-I00) funded by MICIU/AEI/10.13039/501100011033 and by ERDF, EU and also the
+funding from the European Union (ERC, Off-coustics, project number 101086075). Views and opinions expressed are, however, those of the authors only and do not necessarily reflect those of the European Union or the European Research Council. Neither the European Union nor the granting authority can be held responsible for the
+
 
 ## External libraries
 
