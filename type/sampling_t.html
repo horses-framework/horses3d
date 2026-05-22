@@ -132,12 +132,12 @@
       </a>
       <div id="vars-0" class="collapse">
         <div class="list-group list-group-flush">
-            <a class="list-group-item" href="../type/sampling_t.html#variable-solution_file~2">solution_file</a>
+            <a class="list-group-item" href="../type/sampling_t.html#variable-solution_file~12">solution_file</a>
             <a class="list-group-item" href="../type/sampling_t.html#variable-no_of_surfacesamplings">no_of_surfaceSamplings</a>
             <a class="list-group-item" href="../type/sampling_t.html#variable-no_of_planesamplings">no_of_planeSamplings</a>
             <a class="list-group-item" href="../type/sampling_t.html#variable-no_of_spatialmeannodes">no_of_spatialMeanNodes</a>
-            <a class="list-group-item" href="../type/sampling_t.html#variable-dt_restriction">dt_restriction</a>
-            <a class="list-group-item" href="../type/sampling_t.html#variable-write_dt_restriction">write_dt_restriction</a>
+            <a class="list-group-item" href="../type/sampling_t.html#variable-dt_restriction~2">dt_restriction</a>
+            <a class="list-group-item" href="../type/sampling_t.html#variable-write_dt_restriction~2">write_dt_restriction</a>
             <a class="list-group-item" href="../type/sampling_t.html#variable-surfacesamplings">surfaceSamplings</a>
             <a class="list-group-item" href="../type/sampling_t.html#variable-planesamplings">planeSamplings</a>
             <a class="list-group-item" href="../type/sampling_t.html#variable-spatialmeannodes">spatialMeanNodes</a>
@@ -167,13 +167,13 @@
       </a>
       <div id="boundprocs-0" class="collapse">
         <div class="list-group list-group-flush">
-            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-construct">Construct</a>
-            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-updateinterp">UpdateInterp</a>
-            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-updatevalues">UpdateValues</a>
-            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-writetofile~2">WriteToFile</a>
-            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-destruct~2">destruct</a>
-            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-copy~2">copy</a>
-            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-assignment%28%3D%29~2">assignment(=)</a>
+            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-construct~2">Construct</a>
+            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-updateinterp~2">UpdateInterp</a>
+            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-updatevalues~2">UpdateValues</a>
+            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-writetofile~8">WriteToFile</a>
+            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-destruct~11">destruct</a>
+            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-copy~8">copy</a>
+            <a class="list-group-item" href="../type/sampling_t.html#boundprocedure-assignment%28%3D%29~8">assignment(=)</a>
         </div>
       </div>
     </div>
@@ -212,7 +212,7 @@
     <tbody>
         <tr>
             <td>
-              <span class="anchor" id="variable-solution_file~2"></span>
+              <span class="anchor" id="variable-solution_file~12"></span>
               character(len=LINE_LENGTH),
             </td>
               <td>public</td>
@@ -280,7 +280,7 @@
         </tr>
         <tr>
             <td>
-              <span class="anchor" id="variable-dt_restriction"></span>
+              <span class="anchor" id="variable-dt_restriction~2"></span>
               integer,
             </td>
               <td>public</td>
@@ -297,7 +297,7 @@
         </tr>
         <tr>
             <td>
-              <span class="anchor" id="variable-write_dt_restriction"></span>
+              <span class="anchor" id="variable-write_dt_restriction~2"></span>
               logical,
             </td>
               <td>public</td>
@@ -376,7 +376,7 @@
           <div class="row">
               <div class="card mt-3">
     <div class="card-header codesum">
-      <span class="anchor" id="boundprocedure-construct"></span>
+      <span class="anchor" id="boundprocedure-construct~2"></span>
       <h3>
           procedure, public ::
   <strong>Construct</strong> => Samplings_Construct
@@ -459,7 +459,7 @@
           <div class="row">
               <div class="card mt-3">
     <div class="card-header codesum">
-      <span class="anchor" id="boundprocedure-updateinterp"></span>
+      <span class="anchor" id="boundprocedure-updateinterp~2"></span>
       <h3>
           procedure, public ::
   <strong>UpdateInterp</strong> => Samplings_UpdateLagrangeInterp
@@ -527,7 +527,7 @@
           <div class="row">
               <div class="card mt-3">
     <div class="card-header codesum">
-      <span class="anchor" id="boundprocedure-updatevalues"></span>
+      <span class="anchor" id="boundprocedure-updatevalues~2"></span>
       <h3>
           procedure, public ::
   <strong>UpdateValues</strong> => Sampling_UpdateValues
@@ -610,7 +610,7 @@
           <div class="row">
               <div class="card mt-3">
     <div class="card-header codesum">
-      <span class="anchor" id="boundprocedure-writetofile~2"></span>
+      <span class="anchor" id="boundprocedure-writetofile~8"></span>
       <h3>
           procedure, public ::
   <strong>WriteToFile</strong> => Sampling_WriteToFile
@@ -693,7 +693,7 @@
           <div class="row">
               <div class="card mt-3">
     <div class="card-header codesum">
-      <span class="anchor" id="boundprocedure-destruct~2"></span>
+      <span class="anchor" id="boundprocedure-destruct~11"></span>
       <h3>
           procedure, public ::
   <strong>destruct</strong> => Sampling_Destruct
@@ -746,7 +746,7 @@
           <div class="row">
               <div class="card mt-3">
     <div class="card-header codesum">
-      <span class="anchor" id="boundprocedure-copy~2"></span>
+      <span class="anchor" id="boundprocedure-copy~8"></span>
       <h3>
           procedure, public ::
   <strong>copy</strong> => Sampling_Assign
@@ -814,10 +814,10 @@
           <div class="row">
               <div class="card mt-3">
     <div class="card-header codesum">
-      <span class="anchor" id="boundprocedure-assignment%28%3D%29~2"></span>
+      <span class="anchor" id="boundprocedure-assignment%28%3D%29~8"></span>
       <h3>
           generic, public ::
-  <strong>assignment(=)</strong> => <a href='/home/runner/work/horses3d/horses3d/doc/doc_output/type/sampling_t.html#boundprocedure-copy~2'>copy</a>
+  <strong>assignment(=)</strong> => <a href='/home/runner/work/horses3d/horses3d/doc/doc_output/type/sampling_t.html#boundprocedure-copy~8'>copy</a>
         
       </h3>
     </div>
@@ -924,7 +924,7 @@
             <p class="text-end">
               Documentation generated by
               <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
- on 2026-05-14 13:22 +0000             </p>
+ on 2026-05-22 08:32 +0000             </p>
           </div>
         </div>
         <br>
