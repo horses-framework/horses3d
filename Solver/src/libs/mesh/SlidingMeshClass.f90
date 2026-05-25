@@ -29,15 +29,15 @@ MODULE SlidingMeshClass
       !
       !   Column description:
       !     (1)  : ID of the sliding interface element (current element)
-      !     (2)  : ID of the neighboring sliding element across the interface
-      !     (3)  : ID of the neighboring non-sliding element (mortar element)
+      !     (2)  : ID of the neighboring sliding element across the interface (left of (1))
+      !     (3)  : ID of the neighboring non-sliding element (mortar element) (top of (2))
       !     (4)  : local face index of (1) connected to the mortar interface
       !     (5)  : local face index of (2) connected to the mortar interface
       !     (6)  : local face index of (3) connected to the mortar interface
       !     (7)  : rotation of face (1)
       !     (8)  : rotation of face (2)
       !     (9)  : rotation of face (3)
-      !     (10) : additional neighboring non-sliding element (connectivity extension)
+      !     (10) : ID of the second non-sliding master element connected to (1)
       !     (11) : corresponding local face index for (10)
       !     (12) : rotation associated with (10)
       !
@@ -47,10 +47,12 @@ MODULE SlidingMeshClass
       integer                                :: numBFacePoints
       integer                                :: numSlidingElements
       integer                                :: numSlidingInterfaceElements 
+      integer                                :: currentSectorID
       real(KIND=RP)                          :: theta        ! rotation angle
       real(KIND=RP)                          :: omega
-      logical                                :: initialized
-      logical                                :: conforming
+      real(KIND=RP)                          :: localAngle
+      logical                                :: initialized=.false.
+      logical                                :: conforming=.false.
 
     contains
 
@@ -101,7 +103,8 @@ subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingE
        self % neighborConnectivity      = 0
        self % face_nodes                = 0
        self % face_othernodes           = 0
-    
+       self % localAngle                = 0
+       self % currentSectorID           = 0
        self % numSlidingInterfaceElements = numSlidingInterfaceElements
        self % numSlidingElements          = numSlidingElements
        self % numBFacePoints              = numBFacePoints
