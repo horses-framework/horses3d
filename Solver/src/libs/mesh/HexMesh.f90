@@ -85,7 +85,7 @@ MODULE HexMeshClass
          integer,                     allocatable  :: HO_ElementsMPI(:)        !List of MPI elements with polynomial order greater than 1
          integer,                     allocatable  :: HO_ElementsSequential(:) !List of sequential elements with polynomial order greater than 1
          logical                                   :: nonconforming= .FALSE. 
-         logical                                   :: sliding= .FALSE.
+         !logical                                   :: sliding= .FALSE.
          logical                                   :: slidingflux= .FALSE.
          real(kind=RP)                             :: omega=0.0_RP
          !!!!!
@@ -236,7 +236,19 @@ MODULE HexMeshClass
                call self% IBM% destruct( .false. )
             end if
          end if
-         
+
+!
+!        ----------------
+!        Sliding Mesh storage
+!        ----------------
+!
+         if( self% SlidingMesh % active ) then
+     
+            call self% SlidingMesh% Destruct
+            call self % mortar_faces % Destruct
+            DEALLOCATE( self % mortar_faces )
+   
+         end if
       END SUBROUTINE HexMesh_Destruct
 !
 !     -------------
@@ -716,10 +728,14 @@ SUBROUTINE ConstructFaces( self, success, numberOfElements, HorsesMortars, globa
 
       if (((masterNodeIDs(3)==slaveNodeIDs(2)) .AND. (masterNodeIDs(4)==slaveNodeIDs(1))) .OR. &
       ((slaveNodeIDs(2)==masterNodeIDs(3)) .AND. (slaveNodeIDs(1)==masterNodeIDs(4)))) then 
+
          facerotation4sliding=0
+
       elseif (((masterNodeIDs(1)==slaveNodeIDs(1)) .AND. (masterNodeIDs(2)==slaveNodeIDs(2))) .OR. &
          ((slaveNodeIDs(3)==masterNodeIDs(3)) .AND. (slaveNodeIDs(4)==masterNodeIDs(4)))) then 
+
             facerotation4sliding=7
+
       end if 
    END FUNCTION facerotation4sliding
 !
