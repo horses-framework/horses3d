@@ -823,8 +823,17 @@ end module ProblemFileFunctions
 
 # ── Write output ───────────────────────────────────────────────────────────────
 
-with open(OUTPUT_FILE, 'w') as f:
+# Resolve OUTPUT_FILE relative to this script's own directory so the generator
+# can be launched from any working directory (e.g. python3 path/to/generate_*.py).
+# Absolute paths are honoured as-is.
+if os.path.isabs(OUTPUT_FILE):
+    output_path = OUTPUT_FILE
+else:
+    output_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                               OUTPUT_FILE)
+
+with open(output_path, 'w') as f:
     f.write(pf)
 
-print(f"Written {OUTPUT_FILE} ({len(pf.splitlines())} lines)", file=sys.stderr)
+print(f"Written {output_path} ({len(pf.splitlines())} lines)", file=sys.stderr)
 print(f"Next step: compile with make in your SETUP directory.", file=sys.stderr)

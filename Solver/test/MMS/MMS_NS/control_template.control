@@ -20,7 +20,7 @@
                                  AOA phi = 0.0
 !
 !------------------------- Discretization:-
-! MANUFACTURED SOLUTIONS TESTED CASE IMPORTANTE
+! 
                         Polynomial order = {P}
                     Discretization nodes = Gauss-Lobatto !Has to match generate_problemfile_NS.py
                           Riemann solver = Roe

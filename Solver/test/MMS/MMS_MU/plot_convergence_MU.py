@@ -71,7 +71,7 @@ MESH_MARKERS = ["v","o","p","s","^","D","h","*"]
 def load_csv(csv_path):
     data   = defaultdict(dict)
     p_data = defaultdict(dict)
-    t_final = None
+    t_finals = set()
     with open(csv_path, newline='') as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -83,11 +83,11 @@ def load_csv(csv_path):
             label  = f"{N}\u00d7{N}\u00d7{N}"
             data[label][P] = L2
             p_data[P][N]   = L2
-            if t_final is None:
-                t_final = tf
+            # Round to suppress float-repr noise before deduping
+            t_finals.add(float(f"{tf:.12g}"))
     ordered = dict(sorted(data.items(),
                           key=lambda kv: int(kv[0].split('\u00d7')[0])))
-    return ordered, p_data, t_final
+    return ordered, p_data, sorted(t_finals)
 
 
 def ndof_from_label(label, P):
@@ -120,7 +120,7 @@ def fit_slope(ns, errors):
     return coeffs[0], coeffs[1]   # slope, intercept
 
 
-def make_plots(data, p_data, t_final, outdir):
+def make_plots(data, p_data, t_finals, outdir):
     fig, axes = plt.subplots(1, 3, figsize=(20, 5.8))
     fig.patch.set_facecolor('#FAFAFA')
     fig.suptitle('Multiphase (MU) — MMS Convergence',
@@ -239,10 +239,18 @@ def make_plots(data, p_data, t_final, outdir):
     ax_h.legend(fontsize=8, framealpha=0.9, loc='lower right')
     ax_p.legend(fontsize=10, framealpha=0.9, loc='upper right')
 
+    if len(t_finals) == 1:
+        tf_str = f"t_final = {t_finals[0]:.3g}"
+    elif len(t_finals) > 1:
+        tf_str = ("t_final = MIXED " +
+                  "(" + ", ".join(f"{tf:.3g}" for tf in t_finals) + ")")
+    else:
+        tf_str = "t_final = n/a"
+
     fig.text(0.5, 0.005,
              f'Faded markers: time-integration floor '
              f'(ratio < {FLOOR_RATIO_THRESHOLD}).  '
-             f't_final = {t_final:.3g}',
+             f'{tf_str}',
              ha='center', fontsize=8, color='#777777', style='italic')
 
     plt.tight_layout(pad=2.0, rect=[0, 0.03, 1, 1])
@@ -257,13 +265,21 @@ def make_plots(data, p_data, t_final, outdir):
 def main():
     parser = argparse.ArgumentParser(
         description="Plot MU MMS convergence from errors.csv")
-    parser.add_argument("--csv", default="errors.csv",
-                        help="Path to errors.csv (default: errors.csv)")
+    parser.add_argument("--csv", default=None,
+                        help="Path to errors.csv (default: errors.csv next to this script)")
     parser.add_argument("--outdir", default=None,
                         help="Output directory for plots (default: same as CSV)")
     args = parser.parse_args()
 
-    csv_path = Path(args.csv)
+    # When --csv is not given, default to errors.csv next to this script so
+    # the plotter can be launched from any working directory.  An explicit
+    # --csv argument is honoured as-is (relative paths resolve against cwd).
+    script_dir = Path(__file__).resolve().parent
+    if args.csv is None:
+        csv_path = script_dir / "errors.csv"
+    else:
+        csv_path = Path(args.csv)
+
     if not csv_path.exists():
         print(f"ERROR: {csv_path} not found.")
         print("Run run_convergence_MU.py first to generate results.")
@@ -273,7 +289,7 @@ def main():
     os.makedirs(outdir, exist_ok=True)
 
     print(f"Reading {csv_path}...")
-    data, p_data, t_final = load_csv(str(csv_path))
+    data, p_data, t_finals = load_csv(str(csv_path))
 
     if not data:
         print("ERROR: no data found in CSV.")
@@ -286,7 +302,7 @@ def main():
         print(f"  {label} : P = {ps}")
     print()
 
-    pdf_path, png_path = make_plots(data, p_data, t_final, outdir)
+    pdf_path, png_path = make_plots(data, p_data, t_finals, outdir)
     print(f"Saved: {pdf_path}")
     print(f"Saved: {png_path}")
 

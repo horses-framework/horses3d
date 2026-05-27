@@ -11,7 +11,7 @@ USAGE
 
 The script will:
   - Generate one control file per (mesh, P) combination
-  - Run ./horses3d.mu for each case sequentially
+  - Run the solver binary for each case sequentially
   - Read mms_l2_error.dat after each run
   - Append results to errors.csv
   - Skip cases already present in errors.csv (safe to restart after a crash)
@@ -28,8 +28,8 @@ errors.csv — one row per case:
 import os
 import sys
 import csv
+import math
 import subprocess
-import shutil
 import argparse
 from pathlib import Path
 
@@ -63,8 +63,8 @@ ERRORS_CSV = "errors.csv"
 # Mesh numbers, meshes are expected to be named meshN with changing N
 MESH_SIZES = [4, 5, 6]
 
-# Polynomial orders to test, cannot be higher than the max p in problemfile generator
-# By default the max is set to 7
+# Polynomial orders to test, cannot be higher than MAX_ORDER in the problem-file generator
+# (MAX_ORDER = 8 by default)
 P_VALUES = [2, 3, 4, 5, 6]
 
 # Time step — kept fixed across all cases to avoid introducing
@@ -73,7 +73,7 @@ P_VALUES = [2, 3, 4, 5, 6]
 DT = 1.0e-7
 
 # Final simulation time
-T_FINAL = 0.000001
+T_FINAL = 1.0e-6
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  END OF USER CONFIGURATION 
@@ -84,7 +84,6 @@ CSV_HEADER = ["nelems", "P", "NDOF", "L2_error", "t_final"]
 
 def n_steps(dt, t_final):
     """Compute number of time steps, ceiling-based to guarantee t_final is reached."""
-    import math
     return max(1, math.ceil(t_final / dt))
 
 
@@ -107,6 +106,22 @@ def load_completed(csv_path):
     return completed
 
 
+def csv_t_finals(csv_path):
+    """Return the set of distinct t_final values found in errors.csv (rounded
+    to 12 significant digits to avoid float-noise false positives)."""
+    seen = set()
+    if not os.path.exists(csv_path):
+        return seen
+    with open(csv_path, newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            try:
+                seen.add(float(f"{float(row['t_final']):.12g}"))
+            except (KeyError, ValueError):
+                pass
+    return seen
+
+
 def append_result(csv_path, row):
     """Append one result row to errors.csv, creating with header if needed."""
     write_header = not os.path.exists(csv_path)
@@ -123,7 +138,6 @@ def make_control_file(template_path, output_path, N, P, dt, t_final,
     with open(template_path) as f:
         content = f.read()
 
-    nelems   = N**3
     steps    = n_steps(dt, t_final)
     mesh_file  = os.path.join(mesh_dir,    f"mesh{N}.h5")
     sol_file   = os.path.join(results_dir, f"MMS_N{N}_P{P}.hsol")
@@ -197,12 +211,17 @@ def main():
     args = parser.parse_args()
 
     # ── Validate paths ──────────────────────────────────────────────────────
-    script_dir = Path(__file__).parent
+    script_dir = Path(__file__).resolve().parent
 
-    # Resolve the binary path relative to the script's own directory so the
-    # check and the subprocess invocation are consistent regardless of where
-    # the user's shell cwd happens to be.
+    # Resolve every path relative to the script's own directory so that all
+    # file I/O, the subprocess cwd, and the paths written into the control
+    # file are consistent regardless of where the user's shell cwd happens
+    # to be when this script is launched.
     horses_binary = str((script_dir / HORSES_BINARY).resolve())
+    mesh_dir      = str((script_dir / MESH_DIR).resolve())
+    results_dir   = str((script_dir / RESULTS_DIR).resolve())
+    control_dir   = str((script_dir / CONTROL_DIR).resolve())
+    errors_csv    = str((script_dir / ERRORS_CSV).resolve())
 
     template_path = script_dir / TEMPLATE_FILE
     if not template_path.exists():
@@ -213,16 +232,45 @@ def main():
         print(f"ERROR: binary not found: {horses_binary}")
         sys.exit(1)
 
+    # Validate mesh directory and per-N mesh files upfront so the user gets
+    # a clear error before any case is launched.  Skipped under --dry-run so
+    # users can preview the case list before meshes are in place.
+    if not args.dry_run:
+        if not os.path.isdir(mesh_dir):
+            print(f"ERROR: mesh directory not found: {mesh_dir}")
+            sys.exit(1)
+        missing_meshes = [N for N in MESH_SIZES
+                          if not os.path.exists(os.path.join(mesh_dir, f"mesh{N}.h5"))]
+        if missing_meshes:
+            print(f"ERROR: missing mesh files in {mesh_dir}:")
+            for N in missing_meshes:
+                print(f"  mesh{N}.h5")
+            sys.exit(1)
+
     # ── Set up directories ──────────────────────────────────────────────────
-    os.makedirs(RESULTS_DIR, exist_ok=True)
-    os.makedirs(CONTROL_DIR, exist_ok=True)
+    os.makedirs(results_dir, exist_ok=True)
+    os.makedirs(control_dir, exist_ok=True)
 
     # ── Build run list ──────────────────────────────────────────────────────
-    completed = load_completed(ERRORS_CSV)
+    completed = load_completed(errors_csv)
     cases     = build_case_list(MESH_SIZES, P_VALUES, completed)
 
+    # Warn if the existing CSV holds results from a different time-integration
+    # setup.  Mixing such rows produces misleading convergence plots, but is
+    # easy to do accidentally when iterating on study parameters.
+    seen_tfinals = csv_t_finals(errors_csv)
+    current_tfinal_rounded = float(f"{float(T_FINAL):.12g}")
+    other_tfinals = seen_tfinals - {current_tfinal_rounded}
+    if other_tfinals:
+        print(f"WARNING: {errors_csv} contains rows with t_final values "
+              f"{sorted(other_tfinals)} that differ from the current "
+              f"T_FINAL = {T_FINAL}.  Mixing these rows in the same CSV "
+              "yields misleading convergence comparisons.  Delete the CSV "
+              "to force a fresh sweep.")
+        print()
+
     total = len(MESH_SIZES) * len(P_VALUES)
-    print(f"MMS Convergence Study — Multiphase (MU)")
+    print("MMS Convergence Study — Multiphase (MU)")
     print(f"  Binary   : {horses_binary}")
     print(f"  Meshes   : {MESH_SIZES}")
     print(f"  P values : {P_VALUES}")
@@ -242,7 +290,7 @@ def main():
 
     if not cases:
         print("All cases already complete. Nothing to run.")
-        print(f"Results are in {ERRORS_CSV}")
+        print(f"Results are in {errors_csv}")
         return
 
     # ── Run cases ────────────────────────────────────────────────────────────
@@ -257,22 +305,22 @@ def main():
               f"(nelems={nelems}, NDOF={ndof(nelems,P)}, steps={steps})",
               end="  ", flush=True)
 
-        # Write control file
-        ctrl_path = os.path.join(CONTROL_DIR, f"mms_N{N}_P{P}.control")
+        # Write control file (absolute path so cwd of caller doesn't matter)
+        ctrl_path = os.path.join(control_dir, f"mms_N{N}_P{P}.control")
         make_control_file(
             template_path = str(template_path),
             output_path   = ctrl_path,
             N=N, P=P, dt=DT, t_final=T_FINAL,
-            mesh_dir    = MESH_DIR,
-            results_dir = RESULTS_DIR,
+            mesh_dir    = mesh_dir,
+            results_dir = results_dir,
         )
 
         # Remove stale dat file so a crashed run doesn't give a false result
         if os.path.exists(dat_path):
             os.remove(dat_path)
 
-        # Run solver
-        log_path = os.path.join(CONTROL_DIR, f"mms_N{N}_P{P}.log")
+        # Run solver (absolute log path)
+        log_path = os.path.join(control_dir, f"mms_N{N}_P{P}.log")
         success, retcode = run_case(horses_binary, ctrl_path, run_dir, log_path)
 
         if not success:
@@ -286,13 +334,13 @@ def main():
             continue
 
         # Append to CSV
-        append_result(ERRORS_CSV, result)
+        append_result(errors_csv, result)
         print(f"L2 = {result['L2_error']:.6e}")
 
     # ── Summary ──────────────────────────────────────────────────────────────
     print()
-    completed_now = load_completed(ERRORS_CSV)
-    print(f"Done. {len(completed_now)}/{total} cases in {ERRORS_CSV}")
+    completed_now = load_completed(errors_csv)
+    print(f"Done. {len(completed_now)}/{total} cases in {errors_csv}")
 
 
 if __name__ == "__main__":

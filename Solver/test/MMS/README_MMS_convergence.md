@@ -8,23 +8,44 @@ identical layout and workflow.
 
 ## Directory structure
 
+Each solver folder (`NS/`, `iNS/`, `MU/`) is laid out identically.  Mesh
+files are **not** stored per-solver; they live in a shared `TestMeshes/Cubes/`
+directory two levels above the solver folder so all three solvers reuse the
+same meshes.
+
 ```
-<solver>/
-├── SETUP/
-│   ├── generate_problemfile_<solver>.py   # symbolic source-term generator  <- edit here
-│   └── Makefile                           # compiles ProblemFile.f90
-├── MESH/
-│   └── mesh<N>.h5                         # structured hex meshes (N^3 elements)
-├── CONTROL/
-│   ├── mms_N<N>_P<P>.control             # auto-generated per run  (do not edit)
-│   └── mms_N<N>_P<P>.log                 # solver log per run      (do not edit)
-├── RESULTS/
-│   └── MMS_N<N>_P<P>.hsol                # solver output           (do not edit)
-├── control_template.control               # solver settings  <- edit here
-├── run_convergence_<solver>.py            # study config and orchestration  <- edit here
-├── plot_convergence_<solver>.py           # plot styling (optional edit)
-└── errors.csv                             # accumulated results (auto-created)
+<repo-root>/
+├── bin/
+│   └── horses3d.{ns,ins,mu}                  # compiled solver binaries
+└── <parent>/
+    ├── TestMeshes/
+    │   └── Cubes/
+    │       └── mesh<N>.h5                    # structured hex meshes (N^3 elements)  <- shared by all solvers
+    └── <solver-group>/
+        └── <solver>/                         # NS / iNS / MU
+            ├── SETUP/
+            │   ├── generate_problemfile_<solver>.py   # symbolic source-term generator  <- edit here
+            │   └── Makefile                           # builds the problem-file shared library
+            ├── CONTROL/
+            │   ├── mms_N<N>_P<P>.control             # auto-generated per run  (do not edit)
+            │   └── mms_N<N>_P<P>.log                 # solver log per run      (do not edit)
+            ├── RESULTS/
+            │   └── MMS_N<N>_P<P>.hsol                # solver output           (do not edit)
+            ├── control_template.control               # solver settings  <- edit here
+            ├── run_convergence_<solver>.py            # study config and orchestration  <- edit here
+            ├── plot_convergence_<solver>.py           # plot styling (optional edit)
+            └── errors.csv                             # accumulated results (auto-created)
 ```
+
+The default paths in `run_convergence_<solver>.py` are:
+
+| Constant | Default | Resolves to |
+|---|---|---|
+| `HORSES_BINARY` | `../../../bin/horses3d.<ext>` | `<repo-root>/bin/horses3d.<ext>` |
+| `MESH_DIR`      | `./../../TestMeshes/Cubes`    | shared mesh directory two levels up |
+
+Both are resolved relative to the script's own directory, so the runner can be
+launched from any working directory.
 
 ---
 
@@ -40,16 +61,23 @@ make
 ```
 
 This writes `ProblemFile.f90` with the MMS source terms and L2 error routine
-hard-coded, and compiles it into the solver binary.
+hard-coded, then `make` builds it into a shared library
+(e.g. `libproblemfile_ns.so`) that the existing HORSES3D binary loads at
+runtime.  The HORSES3D executable itself is not relinked.
 
-> **Always recompile after changing the manufactured solution or physical
-> parameters.**
+> **Always rebuild the problem-file library after changing the manufactured
+> solution or physical parameters.**
 
 ### 2 — Prepare meshes
 
-Place structured hex meshes in `MESH/` named `mesh<N>.h5` where `N` is the
-number of elements per side (e.g. `mesh3.h5`, `mesh4.h5`, `mesh5.h5`,
-`mesh6.h5`).
+Meshes are **shared across all three solvers** (NS, iNS, MU) and live in
+`TestMeshes/Cubes/` two levels above each solver folder.  Place structured
+hex meshes there named `mesh<N>.h5`, where `N` is the number of elements per
+side (e.g. `mesh3.h5`, `mesh4.h5`, `mesh5.h5`, `mesh6.h5`).
+
+If your meshes are in a different location, update `MESH_DIR` in **Section 1**
+of `run_convergence_<solver>.py`.  The path is resolved relative to the
+script's own directory.
 
 ### 3 — Configure the run
 
@@ -74,7 +102,7 @@ runtime:
 | `{SOLUTION_FILE}` | Path to output `.hsol` |
 | `{P}` | Polynomial order |
 | `{DT}` | Time step |
-| `{N_STEPS}` | `round(T_FINAL / DT)` |
+| `{N_STEPS}` | `max(1, ceil(T_FINAL / DT))` — ceiling-based to guarantee `T_FINAL` is reached |
 
 ### 4 — Run
 
@@ -187,8 +215,9 @@ g_val = 9.81   # m/s^2 or non-dimensional equivalent
 S_mom_z = S_mom_z - rho * g_val
 ```
 
-3. Re-run the generator and recompile.  The Fortran output will contain the
-   correct modified source term automatically.  No other file needs changing.
+3. Re-run the generator and rebuild the library (`make`).  The Fortran output
+   will contain the correct modified source term automatically.  No other file
+   needs changing.
 
 ---
 
@@ -199,7 +228,7 @@ turbulence model, surface tension, etc.):
 
 1. Identify which equations and which terms are modified.
 2. Add the corresponding SymPy expressions to the generator's source-term block.
-3. Regenerate `ProblemFile.f90` and recompile (`make`).
+3. Regenerate `ProblemFile.f90` and rebuild the library (`make`).
 4. Run the sweep.
 
 **Interpreting results:**
@@ -262,8 +291,9 @@ update `TEMPLATE_FILE` in Section 1.
 
 **`ERROR: could not read mms_l2_error.dat`**
 The solver ran but `UserDefinedFinalize` did not write output.  Check the log
-in `CONTROL/mms_N<N>_P<P>.log`.  Most common cause: binary compiled without
-the correct `#ifdef` flag (`NAVIERSTOKES`, `CAHNHILLIARD`, etc.). 
+in `CONTROL/mms_N<N>_P<P>.log`.  Most common cause: the problem-file library
+was built without the correct `#ifdef` flag (`NAVIERSTOKES`, `CAHNHILLIARD`,
+etc.) — verify the flag in `SETUP/Makefile` matches the solver you are running.
 
 **Slopes consistently below p+1 for all cases**
 Reduce `DT` by 10x and re-run.  Also verify that physical parameters in the
