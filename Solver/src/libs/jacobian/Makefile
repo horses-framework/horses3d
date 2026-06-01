@@ -41,6 +41,21 @@ LIBOBJS_NSSA = ./build_nssa/JacobianDefinitions.o \
 				./build_nssa/JacobianComputerClass.o \
 				./build_nssa/NumericalJacobian.o
 
+LIBOBJS_NSTPT = ./build_nstpt/JacobianDefinitions.o \
+	        ./build_nstpt/ColorsClass.o \
+			    ./build_nstpt/mkl_spblas.o \
+					./build_nstpt/GenericMatrixClass.o \
+			    ./build_nstpt/LinkedListMatrixClass.o \
+			    ./build_nstpt/CSRMatrixClass.o \
+			    ./build_nstpt/PETScMatrixClass.o \
+			    ./build_nstpt/DenseBlockDiagonalMatrixClass.o \
+			    ./build_nstpt/SparseBlockDiagonalMatrixClass.o \
+			    ./build_nstpt/StaticCondensedMatrixClass.o \
+			    ./build_nstpt/MatrixFreeClass.o \
+			    ./build_nstpt/MatrixClass.o \
+				  ./build_nstpt/JacobianComputerClass.o \
+				./build_nstpt/NumericalJacobian.o
+
 LIBOBJS_iNS = ./build_ins/JacobianDefinitions.o \
          	./build_ins/ColorsClass.o \
 			    ./build_ins/mkl_spblas.o \
@@ -110,7 +125,7 @@ LIB = jacobian
 ############################################
 .DEFAULT_GOAL:=all
 
-all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a  lib$(LIB)_caa.a
+all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_nstpt.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a  lib$(LIB)_caa.a
 
 ./build_ns/%.o: %.f90
 	@echo
@@ -121,6 +136,11 @@ all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu
 	@echo
 	@echo $<
 	$(FC) $(FFLAGS) -DNAVIERSTOKES -DSPALARTALMARAS -I./include_nssa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nssa -c $< -o $@ $(MOD_FLAG) ./include_nssa
+
+./build_nstpt/%.o: %.f90
+	@echo
+	@echo $<
+	$(FC) $(FFLAGS) -DNAVIERSTOKES -I./include_nstpt $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nstpt -c $< -o $@ $(MOD_FLAG) ./include_nstpt
 
 ./build_ins/%.o: %.f90
 	@echo
@@ -158,6 +178,15 @@ lib$(LIB)_nssa.a: header mkdirs $(LIBOBJS_NSSA)
 	@echo "---------------------------------"
 	@$(RM) $@
 	$(AR) $(ARFLAGS) $@ $(LIBOBJS_NSSA)
+	@$(RANLIB) $@
+
+lib$(LIB)_nstpt.a: header mkdirs $(LIBOBJS_NSTPT)
+	@echo
+	@echo "---------------------------------"
+	@echo "| Linking library" $@ "|"
+	@echo "---------------------------------"
+	@$(RM) $@
+	$(AR) $(ARFLAGS) $@ $(LIBOBJS_NSTPT)
 	@$(RANLIB) $@
 
 lib$(LIB)_ins.a: header mkdirs $(LIBOBJS_iNS)
@@ -199,12 +228,14 @@ lib$(LIB)_caa.a: header mkdirs $(LIBOBJS_CAA)
 install: all
 	cp -p lib$(LIB)_ns.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_nssa.a $(INSTALL_DIR)/lib/
+	cp -p lib$(LIB)_nstpt.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_ins.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_ch.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_mu.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_caa.a $(INSTALL_DIR)/lib/
 	cp -p ./include_ns/*.mod $(INSTALL_DIR)/include_ns/
 	cp -p ./include_nssa/*.mod $(INSTALL_DIR)/include_nssa/
+	cp -p ./include_nstpt/*.mod $(INSTALL_DIR)/include_nstpt/
 	cp -p ./include_ins/*.mod $(INSTALL_DIR)/include_ins/
 	cp -p ./include_ch/*.mod $(INSTALL_DIR)/include_ch/
 	cp -p ./include_mu/*.mod $(INSTALL_DIR)/include_mu/
@@ -230,6 +261,12 @@ install-nssa: lib$(LIB)_nssa.a
 	@echo
 	@echo
 
+install-nstpt: lib$(LIB)_nstpt.a
+	cp -p lib$(LIB)_nstpt.a $(INSTALL_DIR)/lib/
+	cp -p ./include_nstpt/*.mod $(INSTALL_DIR)/include_nstpt/
+	@echo
+	@echo
+
 install-caa: lib$(LIB)_caa.a
 	cp -p lib$(LIB)_caa.a $(INSTALL_DIR)/lib/
 	cp -p ./include_caa/*.mod $(INSTALL_DIR)/include_caa/
@@ -251,13 +288,14 @@ header: FORCE
 	@echo
 
 mkdirs: FORCE
-	@mkdir -p ./include_ns ./include_nssa ./include_ins ./include_ch ./include_mu ./include_caa
-	@mkdir -p ./build_ns ./build_nssa ./build_ins ./build_ch ./build_mu ./build_caa
+	@mkdir -p ./include_ns ./include_nssa ./include_nstpt ./include_ins ./include_ch ./include_mu ./include_caa
+	@mkdir -p ./build_ns ./build_nssa ./build_nstpt ./build_ins ./build_ch ./build_mu ./build_caa
 
 clean: FORCE
-	$(RM) lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a lib$(LIB)_caa.a
+	$(RM) lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_nstpt.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a lib$(LIB)_caa.a
 	$(RM) ./build_ns/*.o ./include_ns/*.mod
 	$(RM) ./build_nssa/*.o ./include_nssa/*.mod
+	$(RM) ./build_nstpt/*.o ./include_nstpt/*.mod
 	$(RM) ./build_ins/*.o ./include_ins/*.mod
 	$(RM) ./build_ch/*.o ./include_ch/*.mod
 	$(RM) ./build_mu/*.o ./include_mu/*.mod

@@ -58,6 +58,31 @@ LIBOBJS_NSSA = 	./build_nssa/ConnectivityClass.o \
 		./build_nssa/Read_GMSH.o \
 		./build_nssa/ReadMeshFile.o
 
+LIBOBJS_NSTPT = 	./build_nstpt/ConnectivityClass.o \
+		./build_nstpt/MeshTypes.o \
+		./build_nstpt/WallDistance.o \
+		./build_nstpt/StorageClass.o \
+		./build_nstpt/FacePatchClass.o \
+		./build_nstpt/TransfiniteMaps3D.o \
+		./build_nstpt/MappedGeometry.o \
+		./build_nstpt/NodeClass.o \
+		./build_nstpt/HexElementConnectivityDefinitions.o \
+		./build_nstpt/FaceClass.o \
+		./build_nstpt/HexElementClass.o \
+		./build_nstpt/ZoneClass.o \
+		./build_nstpt/TessellationTypes.o \
+		./build_nstpt/OrientedBoundingBox.o \
+		./build_nstpt/MPI_IBMUtilities.o \
+		./build_nstpt/KDClass.o \
+		./build_nstpt/IBMClass.o \
+		./build_nstpt/HexMesh.o \
+		./build_nstpt/MeshPartitioning.o \
+		./build_nstpt/SurfaceMesh.o \
+		./build_nstpt/Read_HDF5Mesh_HOPR.o \
+		./build_nstpt/Read_SpecMesh.o \
+		./build_nstpt/Read_GMSH.o \
+		./build_nstpt/ReadMeshFile.o
+
 LIBOBJS_iNS = 	./build_ins/ConnectivityClass.o \
 		./build_ins/MeshTypes.o \
 		./build_ins/WallDistance.o \
@@ -166,7 +191,7 @@ LIB = mesh
 ############################################
 .DEFAULT_GOAL:=all
 
-all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a  lib$(LIB)_caa.a
+all: lib$(LIB)_ns.a lib$(LIB)_nstpt.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a  lib$(LIB)_caa.a
 
 ./build_ns/METISPartitioning.o: ./METISPartitioning.f90		# METIS calls require this, and only this flags... so it is separated
 	@echo
@@ -177,6 +202,11 @@ all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu
 	@echo
 	@echo $<
 	$(FC) -cpp -O2 -ffree-line-length-0 -DNAVIERSTOKES -DSPALARTALMARAS -I./include_nssa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nssa -c $< -o $@ $(MOD_FLAG) ./include_nssa
+
+./build_nstpt/METISPartitioning.o: ./METISPartitioning.f90		# METIS calls require this, and only this flags... so it is separated
+	@echo
+	@echo $<
+	$(FC) -cpp -O2 -ffree-line-length-0 -DNAVIERSTOKES -I./include_nstpt $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nstpt -c $< -o $@ $(MOD_FLAG) ./include_nstpt
 
 ./build_ins/METISPartitioning.o: ./METISPartitioning.f90		# METIS calls require this, and only this flags... so it is separated
 	@echo
@@ -207,6 +237,11 @@ all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu
 	@echo
 	@echo $<
 	$(FC) $(FFLAGS) -DNAVIERSTOKES -DSPALARTALMARAS -I./include_nssa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_nssa -c $< -o $@ $(MOD_FLAG) ./include_nssa
+
+./build_nstpt/%.o: %.f90
+	@echo
+	@echo $<
+	$(FC) $(FFLAGS) -DNAVIERSTOKES -I./include_nstpt $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_nstpt -c $< -o $@ $(MOD_FLAG) ./include_nstpt
 
 ./build_ins/%.o: %.f90
 	@echo
@@ -244,6 +279,15 @@ lib$(LIB)_nssa.a: header mkdirs $(LIBOBJS_NSSA) ./build_nssa/METISPartitioning.o
 	@echo "---------------------------------"
 	@$(RM) $@
 	$(AR) $(ARFLAGS) $@ $(LIBOBJS_NSSA) ./build_nssa/METISPartitioning.o
+	@$(RANLIB) $@
+
+lib$(LIB)_nstpt.a: header mkdirs $(LIBOBJS_NSTPT) ./build_nstpt/METISPartitioning.o
+	@echo
+	@echo "---------------------------------"
+	@echo "| Linking library" $@ "|"
+	@echo "---------------------------------"
+	@$(RM) $@
+	$(AR) $(ARFLAGS) $@ $(LIBOBJS_NSTPT) ./build_nstpt/METISPartitioning.o
 	@$(RANLIB) $@
 
 lib$(LIB)_ins.a: header mkdirs $(LIBOBJS_iNS) ./build_ins/METISPartitioning.o
@@ -285,12 +329,14 @@ lib$(LIB)_caa.a: header mkdirs $(LIBOBJS_CAA) ./build_caa/METISPartitioning.o
 install: all
 	cp -p lib$(LIB)_ns.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_nssa.a $(INSTALL_DIR)/lib/
+	cp -p lib$(LIB)_nstpt.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_ins.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_ch.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_mu.a $(INSTALL_DIR)/lib/
 	cp -p lib$(LIB)_caa.a $(INSTALL_DIR)/lib/
 	cp -p ./include_ns/*.mod $(INSTALL_DIR)/include_ns/
 	cp -p ./include_nssa/*.mod $(INSTALL_DIR)/include_nssa/
+	cp -p ./include_nstpt/*.mod $(INSTALL_DIR)/include_nstpt/
 	cp -p ./include_ins/*.mod $(INSTALL_DIR)/include_ins/
 	cp -p ./include_ch/*.mod $(INSTALL_DIR)/include_ch/
 	cp -p ./include_mu/*.mod $(INSTALL_DIR)/include_mu/
@@ -316,6 +362,12 @@ install-nssa: lib$(LIB)_nssa.a
 	@echo
 	@echo
 
+install-nstpt: lib$(LIB)_nstpt.a
+	cp -p lib$(LIB)_nstpt.a $(INSTALL_DIR)/lib/
+	cp -p ./include_nstpt/*.mod $(INSTALL_DIR)/include_nstpt/
+	@echo
+	@echo
+
 install-caa: lib$(LIB)_caa.a
 	cp -p lib$(LIB)_caa.a $(INSTALL_DIR)/lib/
 	cp -p ./include_caa/*.mod $(INSTALL_DIR)/include_caa/
@@ -336,13 +388,14 @@ header: FORCE
 	@echo
 	@echo
 mkdirs: FORCE
-	@mkdir -p ./include_ns ./include_nssa ./include_ins ./include_ch ./include_mu ./include_caa
-	@mkdir -p ./build_ns ./build_nssa ./build_ins ./build_ch ./build_mu ./build_caa
+	@mkdir -p ./include_ns ./include_nssa ./include_nstpt ./include_ins ./include_ch ./include_mu ./include_caa
+	@mkdir -p ./build_ns ./build_nssa ./build_nstpt ./build_ins ./build_ch ./build_mu ./build_caa
 
 clean: FORCE
-	$(RM) lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a lib$(LIB)_caa.a
+	$(RM) lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_nstpt.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a lib$(LIB)_caa.a
 	$(RM) ./build_ns/*.o ./include_ns/*.mod 
 	$(RM) ./build_nssa/*.o ./include_nssa/*.mod 
+	$(RM) ./build_nstpt/*.o ./include_nstpt/*.mod 
 	$(RM) ./build_ins/*.o ./include_ins/*.mod 
 	$(RM) ./build_ch/*.o ./include_ch/*.mod
 	$(RM) ./build_mu/*.o ./include_mu/*.mod

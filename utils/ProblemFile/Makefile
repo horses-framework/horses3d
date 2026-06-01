@@ -64,12 +64,14 @@ ifeq ($(PLATFORM),MACOSX)
    LIBSUFFIX=.dylib
    TARGET_NS=$(TARGET)_ns$(LIBSUFFIX)
    TARGET_NSSA=$(TARGET)_nssa$(LIBSUFFIX)
+   TARGET_NSTPT=$(TARGET)_nstpt$(LIBSUFFIX)
    TARGET_iNS=$(TARGET)_ins$(LIBSUFFIX)
    TARGET_CH=$(TARGET)_ch$(LIBSUFFIX)
    TARGET_MU=$(TARGET)_mu$(LIBSUFFIX)
    TARGET_CAA=$(TARGET)_caa$(LIBSUFFIX)
    DYNLIB_FLAG_NS=-fPIC -shared -install_name @rpath/$(TARGET_NS) -o $(TARGET_NS)#
    DYNLIB_FLAG_NSSA=-fPIC -shared -install_name @rpath/$(TARGET_NSSA) -o $(TARGET_NSSA)
+   DYNLIB_FLAG_NSTPT=-fPIC -shared -install_name @rpath/$(TARGET_NSTPT) -o $(TARGET_NSTPT)#
    DYNLIB_FLAG_iNS=-fPIC -shared -install_name @rpath/$(TARGET_iNS) -o $(TARGET_iNS)
    DYNLIB_FLAG_CH=-fPIC -shared -install_name @rpath/$(TARGET_CH) -o $(TARGET_CH)
    DYNLIB_FLAG_MU=-fPIC -shared -install_name @rpath/$(TARGET_MU) -o $(TARGET_MU)
@@ -78,6 +80,7 @@ else ifeq ($(PLATFORM),LINUX)
    LIBSUFFIX=.so
    TARGET_NS=$(TARGET)_ns$(LIBSUFFIX)
    TARGET_NSSA=$(TARGET)_nssa$(LIBSUFFIX)
+   TARGET_NSTPT=$(TARGET)_nstpt$(LIBSUFFIX)
    TARGET_iNS=$(TARGET)_ins$(LIBSUFFIX)
    TARGET_CH=$(TARGET)_ch$(LIBSUFFIX)
    TARGET_MU=$(TARGET)_mu$(LIBSUFFIX)
@@ -165,6 +168,7 @@ endif
 ##############################################################
 HORSES_LIBS_NS=-ltimeintegrator_ns -ljacobian_ns -ldiscretization_ns -lmonitors_ns -lparticles_ns -lmesh_ns -lphysics_ns -lphysicsns -lio -lspectral -lmpiutils -lfoundation -lftobject
 HORSES_LIBS_NSSA=-ltimeintegrator_nssa -ljacobian_nssa -ldiscretization_nssa -lmonitors_nssa -lparticles_nssa -lmesh_nssa -lphysics_nssa -lphysicsnssa -lio -lspectral -lmpiutils -lfoundation -lftobject
+HORSES_LIBS_NSTPT=-ltimeintegrator_nstpt -ljacobian_nstpt -ldiscretization_nstpt -lmonitors_nstpt -lparticles_nstpt -lmesh_nstpt -lphysics_nstpt -lphysicsnstpt -lio -lspectral -lmpiutils -lfoundation -lftobject
 HORSES_LIBS_iNS=-ltimeintegrator_ins -ljacobian_ins -ldiscretization_ins -lmonitors_ins -lparticles_ins -lmesh_ins -lphysics_ins -lphysicsns -lio -lspectral -lmpiutils -lfoundation -lftobject
 HORSES_LIBS_CH=-ltimeintegrator_ch -ljacobian_ch -ldiscretization_ch -lmonitors_ch -lparticles_ch -lmesh_ch -lphysics_ch -lphysicsch -lio -lspectral -lmpiutils -lfoundation -lftobject
 HORSES_LIBS_MU=-ltimeintegrator_mu -ljacobian_mu -ldiscretization_mu -lmonitors_mu -lparticles_mu -lmesh_mu -lphysics_mu -lphysicsch -lphysicsmu -lio -lspectral -lmpiutils -lfoundation -lftobject
@@ -172,13 +176,16 @@ HORSES_LIBS_CAA=-ltimeintegrator_caa -ljacobian_caa -ldiscretization_caa -lmonit
 
 .DEFAULT_GOAL := all
 
-all: $(TARGET_NS) $(TARGET_NSSA) $(TARGET_iNS) $(TARGET_CH) $(TARGET_MU) $(TARGET_CAA)
+all: $(TARGET_NS) $(TARGET_NSSA) $(TARGET_NSTPT) $(TARGET_iNS) $(TARGET_CH) $(TARGET_MU) $(TARGET_CAA)
 
 $(TARGET_NS): FORCE ./ProblemFile_NS.o
 	$(FC) $(WHOLE_FILE) $(DYNLIB_FLAG_NS) $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_ns ./ProblemFile_NS.o -L$(HOME_DIR)/lib $(HORSES_LIBS_NS)
 
 $(TARGET_NSSA): FORCE ./ProblemFile_NSSA.o
 	$(FC) $(WHOLE_FILE) $(DYNLIB_FLAG_NSSA) $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_nssa ./ProblemFile_NSSA.o -L$(HOME_DIR)/lib $(HORSES_LIBS_NSSA)
+
+$(TARGET_NSTPT): FORCE ./ProblemFile_NSTPT.o
+	$(FC) $(WHOLE_FILE) $(DYNLIB_FLAG_NSTPT) $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_nstpt ./ProblemFile_NSTPT.o -L$(HOME_DIR)/lib $(HORSES_LIBS_NSTPT)
 
 $(TARGET_iNS): FORCE ./ProblemFile_iNS.o
 	$(FC) $(WHOLE_FILE) $(DYNLIB_FLAG_iNS) $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_ins ./ProblemFile_iNS.o -L$(HOME_DIR)/lib $(HORSES_LIBS_iNS)
@@ -200,6 +207,9 @@ $(TARGET_CAA): FORCE ./ProblemFile_CAA.o
 ./ProblemFile_NSSA.o: FORCE ./ProblemFile.f90
 	$(FC) -fPIC -shared -DNAVIERSTOKES -DSPALARTALMARAS $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_nssa -c ./ProblemFile.f90 -o $@
 
+./ProblemFile_NSTPT.o: FORCE ./ProblemFile.f90
+	$(FC) -fPIC -shared -DNAVIERSTOKES $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_nstpt -c ./ProblemFile.f90 -o $@
+
 ./ProblemFile_iNS.o: FORCE ./ProblemFile.f90
 	$(FC) -fPIC -shared -DINCNS $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_ins -c ./ProblemFile.f90 -o $@
 
@@ -214,7 +224,7 @@ $(TARGET_CAA): FORCE ./ProblemFile_CAA.o
 
 
 clean: FORCE
-	rm -f ./ProblemFile_NS.o ./ProblemFile_NSSA.o ./ProblemFile_iNS.o ./ProblemFile_CH.o ./ProblemFile_MU.o ./ProblemFile_CAA.o ./*.mod
+	rm -f ./ProblemFile_NS.o ./ProblemFile_NSSA.o ./ProblemFile_NSTPT.o ./ProblemFile_iNS.o ./ProblemFile_CH.o ./ProblemFile_MU.o ./ProblemFile_CAA.o ./*.mod
 	rm -f ./*__genmod.f90
 	
 allclean: FORCE clean
@@ -227,6 +237,9 @@ allclean: FORCE clean
 	rm -f ./libproblemfile_nssa.so
 	rm -f ./libproblemfile_nssa.dylib
 	rm -f ./libproblemfile_nssa.dSYM
+    rm -f ./libproblemfile_nstpt.so
+	rm -f ./libproblemfile_nstpt.dylib
+	rm -f ./libproblemfile_nstpt.dSYM
 	rm -f ./libproblemfile_ins.so
 	rm -f ./libproblemfile_ins.dylib
 	rm -f ./libproblemfile_ins.dSYM

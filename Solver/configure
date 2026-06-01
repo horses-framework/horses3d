@@ -153,6 +153,7 @@ for subdir in $TEST_CASES; do
 	cp -v ./test/Makefile.template ./test/$subdir/SETUP/Makefile
 	ln -fsv $PWD/bin/horses3d.ns ./test/$subdir
 	ln -fsv $PWD/bin/horses3d.nssa ./test/$subdir
+	ln -fsv $PWD/bin/horses3d.nstpt ./test/$subdir
 	ln -fsv $PWD/bin/horses3d.ch ./test/$subdir
 	ln -fsv $PWD/bin/horses3d.ins ./test/$subdir
 	ln -fsv $PWD/bin/horses3d.mu ./test/$subdir
@@ -166,9 +167,11 @@ for subdir in $TUTORIAL_CASES; do
 	cp -v ../tutorials/Makefile.template ../tutorials/$subdir/SETUP/Makefile
 	ln -fsv $PWD/bin/horses3d.ns ../tutorials/$subdir
 	ln -fsv $PWD/bin/horses3d.nssa ../tutorials/$subdir
+	ln -fsv $PWD/bin/horses3d.nstpt ../tutorials/$subdir
 	ln -fsv $PWD/bin/horses3d.ch ../tutorials/$subdir
 	ln -fsv $PWD/bin/horses3d.ins ../tutorials/$subdir
 	ln -fsv $PWD/bin/horses3d.mu ../tutorials/$subdir
+	ln -fsv $PWD/bin/horses3d.caa ../tutorials/$subdir
 done
 
 

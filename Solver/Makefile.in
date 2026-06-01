@@ -60,6 +60,7 @@ ARFLAGS=crv
 ifeq ($(PLATFORM),MACOSX)
    PROBLEM_LIB_NS=$(HOME_DIR)/lib/libproblemfile_ns.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
    PROBLEM_LIB_NSSA=$(HOME_DIR)/lib/libproblemfile_nssa.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
+   PROBLEM_LIB_NSTPT=$(HOME_DIR)/lib/libproblemfile_nstpt.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
    PROBLEM_LIB_iNS=$(HOME_DIR)/lib/libproblemfile_ins.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
    PROBLEM_LIB_CH=$(HOME_DIR)/lib/libproblemfile_ch.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
    PROBLEM_LIB_MU=$(HOME_DIR)/lib/libproblemfile_mu.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
@@ -67,6 +68,7 @@ ifeq ($(PLATFORM),MACOSX)
 else ifeq ($(PLATFORM),LINUX)
    PROBLEM_LIB_NS=-L$(HOME_DIR)/lib -lproblemfile_ns -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
    PROBLEM_LIB_NSSA=-L$(HOME_DIR)/lib -lproblemfile_nssa -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
+   PROBLEM_LIB_NSTPT=-L$(HOME_DIR)/lib -lproblemfile_nstpt -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
    PROBLEM_LIB_iNS=-L$(HOME_DIR)/lib -lproblemfile_ins -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
    PROBLEM_LIB_CH=-L$(HOME_DIR)/lib -lproblemfile_ch -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
    PROBLEM_LIB_MU=-L$(HOME_DIR)/lib -lproblemfile_mu -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
@@ -230,6 +232,7 @@ HORSES_LIBS=$(HORSES_LIBS_GENERAL) $(HORSES_LIBS_PARTICULAR)
 HORSES_LIBS_iNS=-L$(HOME_DIR)/lib -ltimeintegrator_ins -ljacobian_ins -ldiscretization_ins -lmonitors_ins -lparticles_ins -lmesh_ins -lphysics_ins -lphysicsins -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_ins -lml
 HORSES_LIBS_NS=-L$(HOME_DIR)/lib -ltimeintegrator_ns -ljacobian_ns -ldiscretization_ns -lmonitors_ns -lparticles_ns -lmesh_ns -lphysics_ns -lphysicsns -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_ns -lml
 HORSES_LIBS_NSSA=-L$(HOME_DIR)/lib -ltimeintegrator_nssa -ljacobian_nssa -ldiscretization_nssa -lmonitors_nssa -lparticles_nssa -lmesh_nssa -lphysics_nssa -lphysicsnssa -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_nssa -lml
+HORSES_LIBS_NSTPT=-L$(HOME_DIR)/lib -ltimeintegrator_nstpt -ljacobian_nstpt -ldiscretization_nstpt -lmonitors_nstpt -lparticles_nstpt -lmesh_nstpt -lphysics_nstpt -lphysicsnstpt -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_nstpt -lml
 HORSES_LIBS_CH=-L$(HOME_DIR)/lib -ltimeintegrator_ch -ljacobian_ch -ldiscretization_ch -lmonitors_ch -lparticles_ch -lmesh_ch -lphysics_ch -lphysicsch -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_ch -lml
 HORSES_LIBS_MU=-L$(HOME_DIR)/lib -ltimeintegrator_mu -ljacobian_mu -ldiscretization_mu -lmonitors_mu -lparticles_mu -lmesh_mu -lphysics_mu -lphysicsch -lphysicsmu -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_mu -lml
 HORSES_LIBS_CAA=-L$(HOME_DIR)/lib -ltimeintegrator_caa -ljacobian_caa -ldiscretization_caa -lmonitors_caa -lparticles_caa -lmesh_caa -lphysics_caa -lphysicscaa -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_caa -lml
@@ -272,6 +275,16 @@ HORSES_NSSA_FLAGS= FC='$(FC)' \
 	         MACROS='$(MACROS)' \
 	   	 LIBS='$(LIBS)'
 
+HORSES_NSTPT_FLAGS= FC='$(FC)' \
+ 	         FFLAGS='$(FFLAGS)'\
+                 INCLUDE='$(INCLUDE)' \
+				 INCLUDEO='$(INCLUDEO)' \
+                 INSTALL_DIR='$(INSTALL_DIR)' \
+	         MOD_FLAG='$(MOD_FLAG)'\
+	         HORSES_LIBS_EXEC='$(HORSES_LIBS_NSTPT) $(PROBLEM_LIB_NSTPT)' \
+	         EXTLIB_INC='$(EXTLIB_INC)' \
+	         MACROS='$(MACROS)' \
+	   	 LIBS='$(LIBS)'
 
 HORSES_iNS_FLAGS= FC='$(FC)' \
  	         FFLAGS='$(FFLAGS)'\
@@ -335,11 +348,12 @@ ADDONSFLAGS= FC='$(FC)' \
 
 .DEFAULT_GOAL := all
 
-all: header mkdirs horseslibs horses3d.ns horses3d.nssa horses3d.ins horses3d.ch horses3d.mu horses3d.caa addons
+all: header mkdirs horseslibs horses3d.ns horses3d.nssa horses3d.nstpt horses3d.ins horses3d.ch horses3d.mu horses3d.caa addons
 
 mu: header mkdirs horseslibs-mu horses3d.mu 
 ns: header mkdirs horseslibs-ns horses3d.ns
 nssa: header mkdirs horseslibs-nssa horses3d.nssa
+nstpt: header mkdirs horseslibs-nstpt horses3d.nstpt
 caa: header mkdirs horseslibs-caa horses3d.caa 
 ins: header mkdirs horseslibs-ins horses3d.ins
 
@@ -354,6 +368,12 @@ horses3d.nssa:
 	@echo "================================"
 	@echo ">>  NNSA - SUCCESFULLY COMPILED "
 	@echo "================================"
+
+horses3d.nstpt: 
+	(cd $(HOME_DIR)/src/NavierStokesTransportSolver/ && $(MAKE) $(HORSES_NSTPT_FLAGS) install) || exit 1; 
+	@echo "==================================="
+	@echo ">>  NSTPT   - SUCCESFULLY COMPILED "
+	@echo "==================================="
 
 horses3d.ins: 
 	(cd $(HOME_DIR)/src/IncompressibleNSSolver/ && $(MAKE) $(HORSES_iNS_FLAGS) install) || exit 1; 
@@ -443,6 +463,24 @@ horseslibs-nssa:
 		fi \
 	done
 
+horseslibs-nstpt:
+	@for subdir in $(HORSES_LIBS_GENERAL) ; do \
+		if [ "$$subdir" = "problemfile" ] ; \
+		then  \
+			(cd $(HOME_DIR)/src/libs/problemfile/ && $(MAKE) PLATFORM=$(PLATFORM) $(LIBFLAGS) DYNLIB_FLAG='$(DYNLIB_FLAG)' install) || exit 1 ; \
+	    	else \
+			(cd $(HOME_DIR)/src/libs/$$subdir && $(MAKE) $(LIBFLAGS) install) || exit 1; \
+		fi \
+	done
+	@for subdir in $(HORSES_LIBS_PARTICULAR) ; do \
+		if [ "$$subdir" = "problemfile" ] ; \
+		then  \
+			(cd $(HOME_DIR)/src/libs/problemfile/ && $(MAKE) PLATFORM=$(PLATFORM) $(LIBFLAGS) DYNLIB_FLAG='$(DYNLIB_FLAG)' install-nstpt) || exit 1 ; \
+	    	else \
+			(cd $(HOME_DIR)/src/libs/$$subdir && $(MAKE) $(LIBFLAGS) install-nstpt) || exit 1; \
+		fi \
+	done
+
 horseslibs-caa:
 	@for subdir in $(HORSES_LIBS_GENERAL) ; do \
 		if [ "$$subdir" = "problemfile" ] ; \
@@ -503,12 +541,14 @@ clean: FORCE horseslibclean problemfileclean horsesclean addonsclean
 	@rm -f $(HOME_DIR)/build/*.o* $(HOME_DIR)/include/*.mod $(HOME_DIR)/include/*.h $(HOME_DIR)/lib/*.a
 	@rm -f $(HOME_DIR)/build_ns/*.o* $(HOME_DIR)/include_ns/*.mod $(HOME_DIR)/include_ns/*.h
 	@rm -f $(HOME_DIR)/build_nssa/*.o* $(HOME_DIR)/include_nssa/*.mod $(HOME_DIR)/include_nssa/*.h
+	@rm -f $(HOME_DIR)/build_nstpt/*.o* $(HOME_DIR)/include_nstpt/*.mod $(HOME_DIR)/include_nstpt/*.h
 	@rm -f $(HOME_DIR)/build_ins/*.o* $(HOME_DIR)/include_ins/*.mod $(HOME_DIR)/include_ins/*.h
 	@rm -f $(HOME_DIR)/build_ch/*.o* $(HOME_DIR)/include_ch/*.mod $(HOME_DIR)/include_ch/*.h
 	@rm -f $(HOME_DIR)/build_mu/*.o* $(HOME_DIR)/include_mu/*.mod $(HOME_DIR)/include_mu/*.h
 	@rm -f $(HOME_DIR)/build_caa/*.o* $(HOME_DIR)/include_caa/*.mod $(HOME_DIR)/include_caa/*.h
 	@rm -f $(HOME_DIR)/lib/libproblemfile_ns.so
 	@rm -f $(HOME_DIR)/lib/libproblemfile_nssa.so
+	@rm -f $(HOME_DIR)/lib/libproblemfile_nstpt.so
 	@rm -f $(HOME_DIR)/lib/libproblemfile_ch.so
 	@rm -f $(HOME_DIR)/lib/libproblemfile_mu.so
 	@rm -f $(HOME_DIR)/lib/libproblemfile_ins.so
@@ -535,6 +575,7 @@ problemfileclean: FORCE
 horsesclean: FORCE
 	(cd $(HOME_DIR)/src/NavierStokesSolver && $(MAKE) $(HORSES_NS_FLAGS) clean) || exit 1;
 	(cd $(HOME_DIR)/src/NavierStokesSolverRANS && $(MAKE) $(HORSES_NSSA_FLAGS) clean) || exit 1;
+	(cd $(HOME_DIR)/src/NavierStokesTransportSolver && $(MAKE) $(HORSES_NSTPT_FLAGS) clean) || exit 1;
 	(cd $(HOME_DIR)/src/IncompressibleNSSolver && $(MAKE) $(HORSES_iNS_FLAGS) clean) || exit 1;
 	(cd $(HOME_DIR)/src/CahnHilliardSolver && $(MAKE) $(HORSES_CH_FLAGS) clean) || exit 1;
 	(cd $(HOME_DIR)/src/MultiphaseSolver && $(MAKE) $(HORSES_MU_FLAGS) clean) || exit 1;
@@ -546,8 +587,8 @@ addonsclean: FORCE
 	done
 
 mkdirs: FORCE
-	@mkdir -p $(HOME_DIR)/build $(HOME_DIR)/build_ns $(HOME_DIR)/build_nssa $(HOME_DIR)/build_ins $(HOME_DIR)/build_ch $(HOME_DIR)/build_mu $(HOME_DIR)/build_caa
-	@mkdir -p $(HOME_DIR)/include $(HOME_DIR)/include_ns $(HOME_DIR)/include_nssa $(HOME_DIR)/include_ins $(HOME_DIR)/include_ch $(HOME_DIR)/include_mu $(HOME_DIR)/include_caa
+	@mkdir -p $(HOME_DIR)/build $(HOME_DIR)/build_ns $(HOME_DIR)/build_nssa $(HOME_DIR)/build_nstpt $(HOME_DIR)/build_ins $(HOME_DIR)/build_ch $(HOME_DIR)/build_mu $(HOME_DIR)/build_caa
+	@mkdir -p $(HOME_DIR)/include $(HOME_DIR)/include_ns $(HOME_DIR)/include_nssa $(HOME_DIR)/include_nstpt $(HOME_DIR)/include_ins $(HOME_DIR)/include_ch $(HOME_DIR)/include_mu $(HOME_DIR)/include_caa
 	@mkdir -p $(HOME_DIR)/bin
 	@mkdir -p $(HOME_DIR)/lib
 

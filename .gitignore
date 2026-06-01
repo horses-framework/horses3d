@@ -50,6 +50,7 @@ Tests/TestMeshes/CylinderNSpol3_v2.mesh
 *.ch
 *.ns
 *.nssa
+*.nstpt
 *.ins
 *.caa
 bin/
