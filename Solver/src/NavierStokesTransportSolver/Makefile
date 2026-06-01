@@ -49,7 +49,7 @@ OBJS_HORSES_BUILD=$(foreach obj,$(OBJS_HORSES),./build/$(obj).o)
 	@echo $<
 	$(FC) $(FFLAGS) -I./include $(INCLUDE) $(INCLUDE)_nstpt $(MACROS) $(EXTLIB_INC) -c $< -o $@ $(MOD_FLAG) ./include
 
-./build_ns/%.o: ./**/%.f90
+./build_nstpt/%.o: ./**/%.f90
 	@echo
 	@echo $<
 	$(FC) $(FFLAGS) -I./include $(INCLUDE) $(INCLUDE)_nstpt $(MACROS) $(EXTLIB_INC) -c $< -o $@ $(MOD_FLAG) ./include_nstpt

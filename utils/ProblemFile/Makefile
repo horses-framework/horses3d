@@ -87,6 +87,7 @@ else ifeq ($(PLATFORM),LINUX)
    TARGET_CAA=$(TARGET)_caa$(LIBSUFFIX)
    DYNLIB_FLAG_NS=-fPIC -shared -o $(TARGET_NS)
    DYNLIB_FLAG_NSSA=-fPIC -shared -o $(TARGET_NSSA)
+   DYNLIB_FLAG_NSTPT=-fPIC -shared -o $(TARGET_NSTPT)
    DYNLIB_FLAG_iNS=-fPIC -shared -o $(TARGET_iNS)
    DYNLIB_FLAG_CH=-fPIC -shared -o $(TARGET_CH)
    DYNLIB_FLAG_MU=-fPIC -shared -o $(TARGET_MU)
@@ -237,7 +238,7 @@ allclean: FORCE clean
 	rm -f ./libproblemfile_nssa.so
 	rm -f ./libproblemfile_nssa.dylib
 	rm -f ./libproblemfile_nssa.dSYM
-    rm -f ./libproblemfile_nstpt.so
+	rm -f ./libproblemfile_nstpt.so
 	rm -f ./libproblemfile_nstpt.dylib
 	rm -f ./libproblemfile_nstpt.dSYM
 	rm -f ./libproblemfile_ins.so
