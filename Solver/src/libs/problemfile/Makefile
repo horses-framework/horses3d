@@ -81,7 +81,7 @@ all: lib$(LIB)_ns$(LIBSUFFIX) lib$(LIB)_nssa$(LIBSUFFIX) lib$(LIB)_nstpt$(LIBSUF
 	$(FC) -fPIC -shared -DNAVIERSTOKES -DSPALARTALMARAS $(FFLAGS) $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nssa $(MOD_FLAG)./include_nssa -c $< -o $@
 
 ./build_nstpt/ProblemFile.o: ./ProblemFile.f90
-	$(FC) -fPIC -shared -DNAVIERSTOKES $(FFLAGS) $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nstpt $(MOD_FLAG)./include_nstpt -c $< -o $@
+	$(FC) -fPIC -shared -DNAVIERSTOKES -DTRANSPORT $(FFLAGS) $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nstpt $(MOD_FLAG)./include_nstpt -c $< -o $@
 
 ./build_ins/ProblemFile.o: ./ProblemFile.f90
 	$(FC) -fPIC -shared -DINCNS $(FFLAGS) $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_ins $(MOD_FLAG)./include_ins -c $< -o $@

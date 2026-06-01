@@ -65,7 +65,7 @@ all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_nstpt.a lib$(LIB)_ins.a lib$(LIB)
 ./build_nstpt/%.o: %.f90
 	@echo
 	@echo $<
-	$(FC) $(FFLAGS) -DNAVIERSTOKES -I./include_nstpt $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nstpt -c $< -o $@ $(MOD_FLAG) ./include_nstpt
+	$(FC) $(FFLAGS) -DNAVIERSTOKES -DTRANSPORT -I./include_nstpt $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nstpt -c $< -o $@ $(MOD_FLAG) ./include_nstpt
 
 ./build_ins/%.o: %.f90
 	@echo

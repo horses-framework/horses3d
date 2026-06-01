@@ -208,7 +208,7 @@ $(TARGET_CAA): FORCE ./ProblemFile_CAA.o
 	$(FC) -fPIC -shared -DNAVIERSTOKES -DSPALARTALMARAS $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_nssa -c ./ProblemFile.f90 -o $@
 
 ./ProblemFile_NSTPT.o: FORCE ./ProblemFile.f90
-	$(FC) -fPIC -shared -DNAVIERSTOKES $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_nstpt -c ./ProblemFile.f90 -o $@
+	$(FC) -fPIC -shared -DNAVIERSTOKES -DTRANSPORT $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_nstpt -c ./ProblemFile.f90 -o $@
 
 ./ProblemFile_iNS.o: FORCE ./ProblemFile.f90
 	$(FC) -fPIC -shared -DINCNS $(MACROS) $(FFLAGS) $(INCLUDE) $(INCLUDE)_ins -c ./ProblemFile.f90 -o $@

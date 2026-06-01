@@ -206,7 +206,7 @@ all: lib$(LIB)_ns.a lib$(LIB)_nstpt.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)
 ./build_nstpt/METISPartitioning.o: ./METISPartitioning.f90		# METIS calls require this, and only this flags... so it is separated
 	@echo
 	@echo $<
-	$(FC) -cpp -O2 -ffree-line-length-0 -DNAVIERSTOKES -I./include_nstpt $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nstpt -c $< -o $@ $(MOD_FLAG) ./include_nstpt
+	$(FC) -cpp -O2 -ffree-line-length-0 -DNAVIERSTOKES -DTRANSPORT -I./include_nstpt $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_nstpt -c $< -o $@ $(MOD_FLAG) ./include_nstpt
 
 ./build_ins/METISPartitioning.o: ./METISPartitioning.f90		# METIS calls require this, and only this flags... so it is separated
 	@echo
