@@ -867,8 +867,12 @@ DO k = sem  % numberOfTimeSteps, self % initial_iter + self % numTimeSteps-1
 !        ---------------
    call Monitors % UpdateValues( sem % mesh, t, k+1, maxResidual, self% autosave% Autosave(k+1), dt )
 
-   if (sem%mesh%slidingflux) then 
-      IF( (MOD( k+1, self % outputInterval) == 0) .or. (k .eq. self % initial_iter) ) call sem % mesh % Export( "malla"//achar(48+(k/99)) )
+   if (sem%mesh%SlidingMesh%active) then 
+      
+      IF( (MOD( k+1, self % outputInterval) == 0) .or. (k .eq. self % initial_iter) ) then 
+         !write(*,*) 'writing malla',achar(48+(k/9))
+        ! call sem % mesh % Export( "malla"//achar(48+(k/9)) )
+      end if 
    end if 
 !
 !        Update samplings

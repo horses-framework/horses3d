@@ -14,6 +14,7 @@ Module DGSEMClass
    use MeshTypes                 , only: HOPRMESH
    use ElementClass
    USE HexMeshClass
+   USE SlidingMeshProcedures
    USE PhysicsStorage
    use FileReadingUtilities      , only: getFileName
    use MPI_Process_Info          , only: MPI_Process
@@ -327,7 +328,24 @@ Module DGSEMClass
 !
       if (MPI_Process % isRoot) write(STD_OUT,'(/,5X,A)') "Reading mesh..."
       CALL constructMeshFromFile( self % mesh, self % mesh % meshFileName, CurrentNodes, Nx, Ny, Nz, MeshInnerCurves , dir2D, useRelaxPeriodic, success )
-      if (.not. self % mesh % child) call mpi_partition % ConstructGeneralInfo (self % mesh % no_of_allElements)   
+      if (.not. self % mesh % child) call mpi_partition % ConstructGeneralInfo (self % mesh % no_of_allElements) 
+      
+!
+!     **********************************************************
+!     *              SLIDING MESH CONSTRUCTION            *
+!     **********************************************************
+
+!     
+!     Sliding Mesh parameter
+!     -----------------------------------
+      call self% mesh% SlidingMesh% read_info( controlVariables )
+
+      if (self% mesh% SlidingMesh% isConfigured) then 
+
+         call AdvanceSlidingMesh(self% mesh, self% mesh% SlidingMesh% radius, self% mesh% SlidingMesh%center &
+         , self% mesh% numBFacePoints, self% mesh% nodeType, .FALSE.)
+
+      end if 
 !     
 !     Immersed boundary method parameter
 !     -----------------------------------

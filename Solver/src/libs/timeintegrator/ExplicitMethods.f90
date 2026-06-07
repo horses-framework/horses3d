@@ -14,6 +14,7 @@ MODULE ExplicitMethods
    use DGSEMClass, only: ComputeTimeDerivative_f
    use ParticlesClass
    use PhysicsStorage, only: CTD_IGNORE_MODE
+   use SlidingMeshProcedures
    IMPLICIT NONE
 
    private
@@ -718,13 +719,13 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
          do k = 1,3
             tk = t + b(k)*deltaT
             call ComputeTimeDerivative( mesh, particles, tk, CTD_IGNORE_MODE)
-            if (mesh%sliding) then
+            !if (mesh % slidingMesh % active .and. mesh % slidingflux) then
+            if (mesh % slidingMesh % active) then
                center(1)=0.0_RP
                center(2)=0.0_RP
                rad=1.01_RP
                angle=(omega(2)*deltaT) * auxiliar(k)
-   
-               CALL MESH % UpdateSlidingMesh(rotationRadius=rad, rotationCenter=center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
+               !CALL AdvanceSlidingMesh(mesh=mesh, rotationRadius=rad, rotationCenter=center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
             end if
             if ( present(dts) ) then
                if (dts) call ComputePseudoTimeDerivative(mesh, tk, global_dt)
@@ -761,12 +762,13 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
          do k = 1,3
             tk = t + b(k)*deltaT
             call ComputeTimeDerivative( mesh, particles, tk, CTD_IGNORE_MODE)
-            if (mesh%sliding) then
+                  !if (mesh % slidingMesh % active .and. mesh % slidingflux) then
+            if (mesh % slidingMesh % active) then
                center(1)=0.0_RP
                center(2)=0.0_RP
                rad=1.01_RP
                angle=(omega(2)*deltaT) * auxiliar(k)
-               CALL MESH % UpdateSlidingMesh(rotationRadius=rad, rotationCenter=center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
+               !CALL AdvanceSlidingMesh(mesh=mesh, rotationRadius=rad, rotationCenter=center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
             end if
             if ( present(dts) ) then
                if (dts) call ComputePseudoTimeDerivative(mesh, tk, global_dt)
