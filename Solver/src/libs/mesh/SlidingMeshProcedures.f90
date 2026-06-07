@@ -21,7 +21,7 @@ module SlidingMeshProcedures
 #ifdef _HAS_MPI_
     use mpi
 #endif
-
+   use Headers
     implicit none
 
     private
@@ -34,7 +34,6 @@ module SlidingMeshProcedures
     public :: ConstructSlidingMortars
     public :: PrintMortarConnectivity
     public :: UpdateSlidingMortarsConnectivity
-    !public :: ConstructSlidingMortarsConforming
 
 contains
 
@@ -43,7 +42,7 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
    use Physics
    use PartitionedMeshClass
    use MPI_Process_Info
-
+   use Headers
    implicit none 
 
    class(HexMesh), intent(inout)        :: mesh
@@ -81,31 +80,47 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
    integer :: numberOfNodes
    integer :: originalFaceCount
 
-   integer :: l, i, j 
+   integer :: l, i, j, eID, fID 
    integer :: sectorID 
    logical :: success
    logical :: isConforming = .FALSE.
 
 
    !========================
-   ! Geometry / math
+   ! Geometry 
    !========================
    real(kind=RP) :: offsetParams(4)
    real(kind=RP) :: scaleParams(4)
-   real(kind=RP) :: th
 
    real(kind=RP) :: PI 
    real(kind=RP) :: theta
 
+   !========================
+   ! Mesh Data
+   !========================
+   integer :: no_interior_faces, no_boundary_faces, no_mpi_faces
+   integer :: no_sequential_elems, no_mpi_elems
+   integer :: aux_array(1:3)
+
    associate(SM => mesh % SlidingMesh)
 
-      !mesh%sliding=.false.
+      if (.not. SM % active) then
+         if ( MPI_Process % isRoot ) then
+            write(STD_OUT,'(/)')
+            call Section_Header("Sliding mesh configuration")
+            write(STD_OUT,'(/)')
+   
+            write(STD_OUT,'(30X,A,A30,"(",1pE12.5,", ",1pE12.5,")")') "->", "Center:", SM % Center(1), SM % Center(2)
+            write(STD_OUT,'(30X,A,A30,1pG10.3)') "->", "Radius: ", SM % Radius  
+            write(STD_OUT,'(30X,A,A30,1pG10.3)') "->", "Angle of rotation: ", SM % theta  
+            write(STD_OUT,'(/)')
+         end if
+      end if
+
       if (.not. SM % active) then
          call IdentifySlidingRegion(mesh, rotationRadius, rotationCenter, numSlidingElements, numSlidingInterfaceElements)
       end if
-      
-      !if (present(rotateEntireMesh) .AND. (.not. SM%sliding)) SM%sliding=.TRUE.
-      
+            
       if (.not. SM % active) then
       
          originalNodeCount = size(mesh % nodes)
@@ -138,33 +153,22 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
       
       end if
 
-      PI    = 4.0_RP * DATAN(1.0_RP)
-      theta = PI / 160.0_RP !sectorID=0
-      theta = 9*PI / 160.0_RP !nsectorID=1
-      theta = 17*PI / 160.0_RP !sectorID=2
-      theta = 25*PI / 160.0_RP !sectorID=3
-      theta = 33*PI / 160.0_RP !sectorID=4
-      theta = 41*PI / 160.0_RP !sectorID=5
-      theta = 49*PI / 160.0_RP !sectorID=6
-      theta = 57*PI / 160.0_RP !nsectorID=7
-      theta = 65*PI / 160.0_RP !sectorID=8
-      theta = 73*PI / 160.0_RP !sectorID=9
-      theta = 81*PI / 160.0_RP !sectorID=10
-      !theta = PI / 20.0_RP !sectorID=10
-      theta = PI / 160.0_RP !sectorID=0
-      theta = 3*PI/20.00  !sectorID=0
-      theta = PI / 160.0_RP !sectorID=0
       sectorID=0
 
-      call SM % Initialize(numSlidingInterfaceElements, numSlidingElements, numBFacePoints)
-      
+      if (.not. SM % active) then 
+
+         call SM % Initialize(numSlidingInterfaceElements, numSlidingElements, numBFacePoints)
+
+      end if 
+
       !========================
       ! Optional angle override
       !========================
-      if (present(angle)) theta = angle
-      
-      SM %omega = SM %omega + theta 
-      
+      if (present(angle)) then 
+         SM %omega = SM %omega + angle  
+      else 
+        SM %omega = SM %omega + SM % theta 
+      end if 
       
       !========================
       ! Core mesh modification
@@ -172,7 +176,7 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
 
       call GetSlidingTopologyState(SM % omega, SM % numSlidingInterfaceElements, sectorID, isConforming, SM % localAngle)
 
-      call InitializeSlidingConnectivity(mesh, nodes, numSlidingInterfaceElements, rotationCenter, offsetParams, scaleParams, originalNodeCount, th, numberOfNodes, theta )
+      call InitializeSlidingConnectivity(mesh, nodes, SM % numSlidingInterfaceElements, rotationCenter, offsetParams, scaleParams, originalNodeCount, numberOfNodes, theta )
 
          if (sectorID .NE. SM % currentSectorID) then 
 
@@ -189,7 +193,7 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
                do j = 1, 6
          
                   if (mesh % elements(SM % slidingMortarElems(l)) % MortarFaces(j) == 1) then 
-                     !mesh % mortararr2(l,1) = SM % slidingMortarElems(l)
+
                      SM  % mortararr2(l,1) = SM  % slidingMortarConnectivity(l,1)
                      SM  % mortararr2(l,2) = SM  % slidingMortarConnectivity(l,4)
          
@@ -197,9 +201,8 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
                   end if 
          
                   if (mesh % elements(SM  % mortarNeighborElems(l)) % MortarFaces(j) == 1) then 
-                     !mesh % mortararr1(l,1) = mesh % mortarNeighborElems(l)
+
                      SM  % mortararr1(l,1) = SM  % slidingMortarConnectivity(l,3)
-                     !SM  % mortararr1(l,2) = j
                      SM  % mortararr1(l,2) = SM  % slidingMortarConnectivity(l,6)
          
                      mesh % elements(SM  % mortarNeighborElems(l)) % MortarFaces = 0
@@ -218,8 +221,6 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
          !========================
 
          if (.not. SM  % active) then 
-         
-            !write(*,*) 'about to destruct faces'
          
             do i = 1, size(mesh % faces)
                call mesh % faces(i) % Destruct
@@ -314,36 +315,104 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
          !========================
          ! Mortar geometry cleanup
          !========================
-         !if ( th .EQ. 0.0_RP ) isConforming=.TRUE. 
-         !SM %omega=SM %omega
          
          if (allocated(mesh % mortar_faces)) then 
          
             do l = 1, size(mesh % mortar_faces)
                call mesh % mortar_faces(l) % geom % destruct
             end do 
-         
-            !do l=1, size(mesh%mortar_faces)
-            !   call mesh % mortar_faces(l) % destruct
-            !end do 
-            !deallocate(mesh%mortar_faces)
-         
-            ! mesh%slidingflux=.true.
-         
+            
          end if
 
-         if (.not. present(rotateEntireMesh)) then
-            !call ConstructSlidingMortars(mesh, nodes, offsetParams, scaleParams, isConforming )
+         !
+      !===============================================================================
+      ! Create three arrays that contain the fIDs of interior, mpi, and boundary faces
+      !===============================================================================
 
+         if (.not. SM  % active ) then 
+            mesh % no_of_faces = size(mesh % faces)
+
+            no_interior_faces = 0
+            no_boundary_faces = 0
+            no_mpi_faces      = 0
+
+            aux_array = 0
+            do fID = 1, mesh % no_of_faces
+               aux_array(mesh % faces(fID) % faceType) = aux_array(mesh % faces(fID) % faceType) + 1
+            end do
+
+            no_interior_faces = aux_array(HMESH_INTERIOR)
+            no_mpi_faces      = aux_array(HMESH_MPI)
+            no_boundary_faces = aux_array(HMESH_BOUNDARY)
+
+            safedeallocate(mesh % faces_interior)
+            safedeallocate(mesh % faces_mpi)
+            safedeallocate(mesh % faces_boundary)
+
+            allocate(mesh % faces_interior(no_interior_faces))
+            allocate(mesh % faces_mpi     (no_mpi_faces     ))
+            allocate(mesh % faces_boundary(no_boundary_faces))
+
+            no_interior_faces = 0
+            no_boundary_faces = 0
+            no_mpi_faces      = 0
+
+            do fID = 1, mesh % no_of_faces
+               select case (mesh % faces(fID) % faceType)
+               case(HMESH_INTERIOR)
+                  no_interior_faces = no_interior_faces + 1
+                  mesh % faces_interior(no_interior_faces) = fID
+
+               case(HMESH_MPI)
+                  no_mpi_faces = no_mpi_faces + 1
+                  mesh % faces_mpi(no_mpi_faces) = fID
+
+               case(HMESH_BOUNDARY)
+                  no_boundary_faces = no_boundary_faces + 1
+                  mesh % faces_boundary(no_boundary_faces) = fID
+
+               end select
+            end do
+
+            no_sequential_elems = 0
+            no_mpi_elems = 0
+
+            do eID = 1, mesh % no_of_elements
+               if (mesh % elements(eID) % hasSharedFaces) then
+                  no_mpi_elems = no_mpi_elems + 1 
+               else
+                  no_sequential_elems = no_sequential_elems + 1 
+               end if
+            end do
+
+            safedeallocate(mesh % elements_sequential)
+            safedeallocate(mesh % elements_mpi)
+            allocate(mesh % elements_sequential(no_sequential_elems))
+            allocate(mesh % elements_mpi(no_mpi_elems))
             
+            no_sequential_elems = 0
+            no_mpi_elems = 0
+
+            do eID = 1, mesh % no_of_elements
+               if (mesh % elements(eID) % hasSharedFaces) then
+                  no_mpi_elems = no_mpi_elems + 1 
+                  mesh % elements_mpi(no_mpi_elems) = eID
+               else
+                  no_sequential_elems = no_sequential_elems + 1 
+                  mesh % elements_sequential(no_sequential_elems) = eID
+               end if
+            end do
+
+         end if 
+
+         if (.not. present(rotateEntireMesh)) then
+
             call ConstructSlidingMortars(mesh, nodes, SM % numSlidingInterfaceElements, &
             SM % mortarNeighborElems, SM % slidingMortarElems, SM % slidingMortarConnectivity, offsetParams, scaleParams, isConforming )
 
          end if
          
-         call PrintMortarConnectivity(mesh)
          SM  % active     = .true.
-         mesh % sliding = .true.
          mesh % slidingflux = .false.
 
    end associate
@@ -586,7 +655,7 @@ subroutine BuildSlidingMortarConnectivity(mesh, rad, nelm, center, new_nFaces)
                   select case (j)
 
                   case (1)
-                     SM % face_nodes(i,:)      = (/1,2,5,6/)   !!!
+                     SM % face_nodes(i,:)      = (/1,2,5,6/)  
                      SM % face_othernodes(i,:) = (/3,4,7,8/)
 
                   case (2)
@@ -625,7 +694,7 @@ subroutine BuildSlidingMortarConnectivity(mesh, rad, nelm, center, new_nFaces)
                   
                         if (SM % slidingMortarConnectivity(i,2) == 0) then
                   
-                           do nodeIdxB = 1, 8    !!!!!!!!
+                           do nodeIdxB = 1, 8   
                   
                               if (SM % slidingMortarConnectivity(i,2) == 0) then
 
@@ -763,7 +832,7 @@ subroutine BuildSlidingMortarConnectivity(mesh, rad, nelm, center, new_nFaces)
                   select case (j)
 
                      case (1)
-                        SM % face_nodes(i,:)      = (/1,2,5,6/)   !!! 
+                        SM % face_nodes(i,:)      = (/1,2,5,6/)   
                         SM % face_othernodes(i,:) = (/3,4,7,8/)
 
                      case (2)
@@ -1101,11 +1170,9 @@ subroutine BuildSlidingMortarConnectivity(mesh, rad, nelm, center, new_nFaces)
             open(unit=10, file="neighborConnectivity.txt", action="write")
 
             do i = 1, size(SM % slidingMortarElems)
-               !do j=1,9
-               !do k=1,6
+
                write(10,*) (SM % neighborConnectivity(i,:,:))
-               !end do
-               !end do
+
             end do
 
             close(10)
@@ -1318,26 +1385,26 @@ subroutine RotateSlidingRegion(mesh, theta, omega, numElementsPerLayer, n, m, ne
    case(1)  ! X-axis
       ROT=0.0_RP
       ROT(1,1)=1.0_RP 
-      ROT(2,2)=COS(theta)
-      ROT(2,3)=-SIN(theta)
-      ROT(3,2)=SIN(theta)
-      ROT(3,3)=COS(theta)
+      ROT(2,2)=COS(mesh % SlidingMesh % theta)
+      ROT(2,3)=-SIN(mesh % SlidingMesh % theta)
+      ROT(3,2)=SIN(mesh % SlidingMesh % theta)
+      ROT(3,3)=COS(mesh % SlidingMesh % theta)
 
    case(2)  ! Z-axis
       ROT=0.0_RP
-      ROT(1,1)=COS(theta)
-      ROT(2,2)=COS(theta)
+      ROT(1,1)=COS(mesh % SlidingMesh % theta)
+      ROT(2,2)=COS(mesh % SlidingMesh % theta)
       ROT(3,3)=1.0_RP 
-      ROT(1,2)=-SIN(theta)
-      ROT(2,1)=SIN(theta)
+      ROT(1,2)=-SIN(mesh % SlidingMesh % theta)
+      ROT(2,1)=SIN(mesh % SlidingMesh % theta)
 
    case(3)  ! Y-axis (solver convention)
       ROT=0.0_RP
-      ROT(1,1)=COS(-theta)
+      ROT(1,1)=COS(-mesh % SlidingMesh % theta)
       ROT(2,2)=1.0_RP
-      ROT(3,3)=COS(-theta) 
-      ROT(1,3)=SIN(-theta)
-      ROT(3,1)=-SIN(-theta)
+      ROT(3,3)=COS(-mesh % SlidingMesh % theta) 
+      ROT(1,3)=SIN(-mesh % SlidingMesh % theta)
+      ROT(3,1)=-SIN(-mesh % SlidingMesh % theta)
 
    end select
 
@@ -1457,7 +1524,7 @@ subroutine RotateSlidingRegion(mesh, theta, omega, numElementsPerLayer, n, m, ne
          if (mesh % elements(slidingMortarElems(i)) % nodeIDs(j) .LE. originalNodeCount) then
 
             if (mesh % elements(slidingMortarElems(i)) % nodeIDs(j) == 0) then
-               write(*,*) 'node ', j, 'of element', i, '=0 wtf'
+               write(*,*) 'node ', j, 'of element', i, '=0'
             end if
 
             nodeCoord = mesh % nodes(mesh % elements(slidingMortarElems(i)) % nodeIDs(j)) % X
@@ -1594,7 +1661,7 @@ subroutine RotateSlidingRegion(mesh, theta, omega, numElementsPerLayer, n, m, ne
 end subroutine RotateSlidingRegion
 
 
-subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, center, offsetParams, scaleParams, originalNodeCount, th, totalNodeCount, theta)
+subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, center, offsetParams, scaleParams, originalNodeCount, totalNodeCount, theta)
 
    IMPLICIT NONE
 
@@ -1606,7 +1673,6 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, cente
    real(kind=RP), intent(inout)  :: offsetParams(4)
    real(kind=RP), intent(inout)  :: scaleParams(4)
    integer, intent(inout)        :: originalNodeCount
-   real(kind=RP), intent(inout)  :: th
 
    integer, intent(in)           :: totalNodeCount
    real(kind=RP), intent(inout)  :: theta
@@ -1638,12 +1704,6 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, cente
    ! =========================
 
    rotationAxis = 3
-   th = theta
-
-
-   !mesh % SlidingMesh%omega = mesh % SlidingMesh%omega + 4.0_RP * DATAN(1.0_RP) / 20.0_RP
-   !mesh % SlidingMesh%omega = mesh % SlidingMesh%omega + theta 
-   !theta=mesh % SlidingMesh%omega
 
    n  = 3
    m  = 1
@@ -1691,7 +1751,7 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, cente
    !call RotateSlidingRegion(theta, mesh % SlidingMesh%omega, numElementsPerLayer, n, m, new_nNodes, new_nodes, &
    !mesh % SlidingMesh%slidingMortarElems, mesh % SlidingMesh%pureSlidingElems, mesh % SlidingMesh%neighborConnectivity, offsetParams, scaleParams, &
    !mesh % SlidingMesh%face_nodes, mesh % SlidingMesh%face_othernodes, numBFacePoints, originalNodeCount, rotationAxis)
-   
+
    call RotateSlidingRegion(mesh, theta, mesh % SlidingMesh%omega, numElementsPerLayer, n, m, new_nNodes, new_nodes, &
    mesh % SlidingMesh%slidingMortarElems, mesh % SlidingMesh%pureSlidingElems, mesh % SlidingMesh%neighborConnectivity, offsetParams, scaleParams, &
    mesh % SlidingMesh%face_nodes, mesh % SlidingMesh%face_othernodes, mesh % SlidingMesh%numBFacePoints, originalNodeCount, rotationAxis)
@@ -1743,25 +1803,23 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, cente
 
       if (allocated(mesh%mortar_faces)) then
 
-      do l = 1, SIZE(mesh%mortar_faces)
+         do l = 1, SIZE(mesh%mortar_faces)
 
-         !call mesh % faces(l) % Destruct
+            mesh % mortar_faces(l) % ID             = -1
+            mesh % mortar_faces(l) % FaceType       = HMESH_NONE
+            mesh % mortar_faces(l) % rotation       = 0
+            mesh % mortar_faces(l) % NelLeft        = -1
+            mesh % mortar_faces(l) % NelRight       = -1
+            mesh % mortar_faces(l) % NfLeft         = -1
+            mesh % mortar_faces(l) % NfRight        = -1
+            mesh % mortar_faces(l) % Nf             = -1
+            mesh % mortar_faces(l) % nodeIDs        = -1
+            mesh % mortar_faces(l) % elementIDs     = -1
+            mesh % mortar_faces(l) % elementSide    = -1
+            mesh % mortar_faces(l) % projectionType = -1
+            mesh % mortar_faces(l) % boundaryName   = ""
 
-         mesh % mortar_faces(l) % ID             = -1
-         mesh % mortar_faces(l) % FaceType       = HMESH_NONE
-         mesh % mortar_faces(l) % rotation       = 0
-         mesh % mortar_faces(l) % NelLeft        = -1
-         mesh % mortar_faces(l) % NelRight       = -1
-         mesh % mortar_faces(l) % NfLeft         = -1
-         mesh % mortar_faces(l) % NfRight        = -1
-         mesh % mortar_faces(l) % Nf             = -1
-         mesh % mortar_faces(l) % nodeIDs        = -1
-         mesh % mortar_faces(l) % elementIDs     = -1
-         mesh % mortar_faces(l) % elementSide    = -1
-         mesh % mortar_faces(l) % projectionType = -1
-         mesh % mortar_faces(l) % boundaryName   = ""
-
-      end do
+         end do
 
    end if
 
@@ -1819,7 +1877,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
 
    ! Reset temporary sliding structures
    if (mesh % SlidingMesh % active) then
-      !call Tset % destruct
       call TsetM % destruct
    end if
    
@@ -1875,9 +1932,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
            nodeIDs   = mortarFaceNodeIDs, &
            elementID = masterElementID, &
            side      = masterFaceNumber)
-      
-      !mesh%mortar_faces(mortarIndex)=mesh % faces(masterFaceID)
-      !mesh%mortar_faces(mortarIndex)%ID=mortarIndex
       
            mesh % mortar_faces(mortarIndex) % Mortarpos = 0
            mesh % mortar_faces(mortarIndex) % FaceType  = HMESH_INTERIOR
@@ -1973,9 +2027,7 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
           nodeIDs = mortarFaceNodeIDs, &
           elementID = masterElementID,       &
           side = masterFaceNumber)
-       ! mesh%mortar_faces(mortarIndex)=mesh % faces(masterFaceID)
-   
-       ! mesh%mortar_faces(mortarIndex)%ID=mortarIndex
+
           mesh%mortar_faces(mortarIndex)%Mortarpos=1
           mesh % mortar_faces(mortarIndex) % FaceType       = HMESH_INTERIOR
    
@@ -2024,7 +2076,7 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
    
        mesh % elements(slidingMortarElems(i))% MortarFaces(1)=3 
        mesh % elements(mortarNeighborElems(i))% MortarFaces(2)=3                                                        
-       !i=i+1
+
    end do
    
    
@@ -2071,22 +2123,7 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
        end associate
    
    end do 
-   write(*,*) 'offset:',offsetParams
-   write(*,*) 'scale:',scaleParams
-   !write(*,*) 'TsetM(2,2,1,1)%T', TsetM(2,2,1,1)%T
-   !write(*,*) 'TsetM(2,2,2,1)%T', TsetM(2,2,2,1)%T
-   !write(*,*) 'TsetM(2,2,3,1)%T', TsetM(2,2,3,1)%T
-   !write(*,*) 'TsetM(2,2,4,1)%T', TsetM(2,2,4,1)%T
-
-   !write(*,*) 'TsetM(2,2,1,1)%T', TsetM(2,2,1,2)%T
-   !write(*,*) 'TsetM(2,2,2,1)%T', TsetM(2,2,2,2)%T
-   !write(*,*) 'TsetM(2,2,3,1)%T', TsetM(2,2,3,2)%T
-   !write(*,*) 'TsetM(2,2,4,1)%T', TsetM(2,2,4,2)%T
-  ! do i=1, size(mesh % mortar_faces)
-     ! write(*,*) 'mortars',i
-  !    write(*,*) 'mortars elemebts',mesh % mortar_faces(i) % elementIDs
-  !    write(*,*) 'mortar fIDs',mesh % mortar_faces(i) % Mortar 
-   !end do 
+   !call PrintMortarConnectivity(mesh)
 end subroutine ConstructSlidingMortars
 
 subroutine GetSlidingTopologyState(omega, nElements, sectorID, isConforming, localAngle)
@@ -2119,7 +2156,8 @@ subroutine GetSlidingTopologyState(omega, nElements, sectorID, isConforming, loc
 
    ! Check if configuration is conforming
    isConforming = AlmostEqual(remainder, 0.0_RP)
-
+   !if (isConforming) write(*,*) 'its conforming'
+   !if (.not.isConforming) write(*,*) 'its not conforming'
 end subroutine GetSlidingTopologyState
 
 subroutine UpdateSlidingMortarsConnectivity(mesh, sectorID)

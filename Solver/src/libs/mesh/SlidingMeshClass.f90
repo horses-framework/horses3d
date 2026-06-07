@@ -4,7 +4,10 @@ MODULE SlidingMeshClass
       use SMConstants
       USE MeshTypes
       USE NodeClass
+      use FileReaders               , only: ReadControlFile 
+      use FileReadingUtilities      , only: getFileName
       use ElementConnectivityDefinitions
+      use FTValueDictionaryClass
 
       IMPLICIT NONE
 
@@ -14,6 +17,7 @@ MODULE SlidingMeshClass
 !
     type SlidingMesh
       logical                                :: active = .false.
+      logical                                :: isConfigured = .false.
       integer,                   allocatable :: mortarNeighborElems(:)!associated non-sliding neighbors across the interface (require mortars)
       integer,                   allocatable :: slidingMortarElems(:)!sliding elements at the interface (require mortars)
       integer,                   allocatable :: pureSlidingElems(:)!sliding elements fully inside the region (no mortar)
@@ -48,6 +52,8 @@ MODULE SlidingMeshClass
       integer                                :: numSlidingElements
       integer                                :: numSlidingInterfaceElements 
       integer                                :: currentSectorID
+      real(KIND=RP)                          :: center(2)
+      real(KIND=RP)                          :: radius 
       real(KIND=RP)                          :: theta        ! rotation angle
       real(KIND=RP)                          :: omega
       real(KIND=RP)                          :: localAngle
@@ -56,6 +62,8 @@ MODULE SlidingMeshClass
 
     contains
 
+        procedure :: read_info                              => SlidingMesh_read_info
+        procedure :: GetInfo                                => SlidingMesh_GetInfo
         procedure :: Initialize                         => SlidingMesh_Initialize
         procedure :: Destruct                           => SlidingMesh_Destruct
       
@@ -64,6 +72,73 @@ MODULE SlidingMeshClass
 !     ========
       CONTAINS
 !     ========
+
+!  -------------------------------------------------
+!  SlidingMesh info
+!  -------------------------------------------------   
+subroutine SlidingMesh_read_info( self, controlVariables )
+    use FileReadingUtilities
+    implicit none
+        
+    class(SlidingMesh), intent(inout) :: self
+    class(FTValueDictionary)       :: controlVariables
+     
+    call self % GetInfo( controlVariables )
+     
+end subroutine SlidingMesh_read_info
+
+subroutine SlidingMesh_GetInfo( self, controlVariables )
+    use FileReadingUtilities
+    use ParamfileRegions
+    implicit none
+        
+    class(SlidingMesh), intent(inout) :: self
+    class(FTValueDictionary)       :: controlVariables
+    
+    character(len=LINE_LENGTH) :: in_label, paramFile
+    real(kind=RP),allocatable :: centerx
+    real(kind=RP),allocatable :: centery
+    real(kind=RP),allocatable :: radius
+    real(kind=RP),allocatable :: angle 
+    integer :: i
+
+!     **********
+!     Read block
+!     **********
+
+    write(in_label , '(A)') "#define slidingmesh"
+    call get_command_argument(1, paramFile) 
+
+    call readValueInRegion( trim( paramFile ), "centerx", centerx, in_label, "#end" )
+    call readValueInRegion( trim( paramFile ), "centery", centery, in_label, "#end" )
+    call readValueInRegion( trim( paramFile ), "radius", radius, in_label, "#end" )
+    call readValueInRegion( trim( paramFile ), "angle", angle, in_label, "#end" )   
+
+    i=0 
+
+    if (allocated(centerx)) then 
+        self % center(1) = centerx
+        i=i+1
+    end if 
+    if (allocated(centery)) then 
+        self % center(2) = centery
+        i=i+1
+    end if 
+    if (allocated(radius)) then 
+        self % radius = radius 
+        i=i+1
+    end if 
+    if (allocated(angle)) then 
+        self % theta = angle 
+        i=i+1
+    end if 
+
+    if (i==4) then 
+        self % isConfigured = .true.
+    else if (i .NE. 0) then
+        write(*,*) 'Error, missing SlidingMesh Argument : Need centerX, centerY, radius and angle'
+    end if 
+end subroutine SlidingMesh_GetInfo
 
 subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingElements, numBFacePoints)
     use Physics
@@ -122,7 +197,6 @@ subroutine SlidingMesh_Destruct(self)
    ! ---------------------------------------------------------------------
    ! Deallocate sliding mesh connectivity and mortar storage
    ! ---------------------------------------------------------------------
-
    if (allocated(self % mortarNeighborElems)) then
        deallocate(self % mortarNeighborElems)
    end if

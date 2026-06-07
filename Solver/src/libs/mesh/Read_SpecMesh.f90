@@ -96,7 +96,6 @@ MODULE Read_SpecMesh
          integer, allocatable       :: rotmortars(:)
          integer :: nelm, inter 
          logical                    :: ConformingMesh
-         logical                    :: Sliding
          integer :: nbface, nintface, nmaster, nslave , nslc 
          real(kind=RP), allocatable :: o(:)
          real(kind=RP), allocatable :: s(:)
@@ -106,16 +105,12 @@ MODULE Read_SpecMesh
          real(kind=RP) :: rad
    
          integer :: new_nFaces
-
+         integer, allocatable :: m(:,:)
 !
 !        ********************************
 !        Check if a mesh partition exists
 !        ********************************
 !
-         Sliding=.true.
-         Sliding=.true.
-
-         
          if ( MPI_Process % doMPIAction ) then
             if ( mpi_partition % Constructed ) then
                write(*,*) 'line 123'
@@ -170,11 +165,9 @@ MODULE Read_SpecMesh
 !        ---------------
 !
          allocate( self % elements(numberOfelements) )
-         !if (.NOT.Sliding) then 
-            allocate( self % nodes(numberOfNodes) )
-         !else 
-         !   allocate( self % nodes(numberOfNodes+80) )
-         !end if 
+
+         allocate( self % nodes(numberOfNodes) )
+
 
          allocate ( self % Nx(numberOfelements) , self % Ny(numberOfelements) , self % Nz(numberOfelements) )
          self % Nx = Nx
@@ -291,15 +284,11 @@ MODULE Read_SpecMesh
 !        ---------------------------
 !
          numberOfFaces        = (6*numberOfElements + numberOfBoundaryFaces)/2
-         !if (.NOT.sliding) then 
-            self % numberOfFaces = numberOfFaces
-            allocate( self % faces(self % numberOfFaces) )
-            CALL ConstructFaces( self, success )
-         !else 
-         !   self % numberOfFaces = numberOfFaces+40
-         !   allocate( self % faces(self % numberOfFaces) )
-         !   CALL ConstructFaces( self, success )
-         !end if 
+
+         self % numberOfFaces = numberOfFaces
+         allocate( self % faces(self % numberOfFaces) )
+         CALL ConstructFaces( self, success )
+
 !
 !        -------------------------
 !        Build the different zones
@@ -311,7 +300,7 @@ MODULE Read_SpecMesh
 !        Construct periodic faces
 !        ---------------------------
 !
-         if (.not.Sliding) then 
+
 
          CALL ConstructPeriodicFaces( self, periodRelative )
 !
@@ -320,7 +309,7 @@ MODULE Read_SpecMesh
 !        ---------------------------
 !
          CALL DeletePeriodicMinusFaces( self )
-         end if 
+
 !
 !        ---------------------------
 !        Assign faces ID to elements
@@ -381,15 +370,8 @@ MODULE Read_SpecMesh
 
          call self % ExportBoundaryMesh (trim(fileName))
 
-         if (Sliding) then 
- 
-             center(1)=0.0_RP
-             center(2)=0.0_RP
-             rad=1.01_RP
-             !write(*,*) "calling sliding in specmeshfile"
-             call AdvanceSlidingMesh(self, rad, center, numBFacePoints, nodes, .FALSE.)
- 
-          end if 
+         self % numBFacePoints=numBFacePoints 
+
       END SUBROUTINE ConstructMesh_FromSpecMeshFile_
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
