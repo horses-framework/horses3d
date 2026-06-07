@@ -246,7 +246,7 @@ MODULE HexMeshClass
      
             call self% SlidingMesh% Destruct
             call self % mortar_faces % Destruct
-            DEALLOCATE( self % mortar_faces )
+            safedeallocate( self % mortar_faces )
    
          end if
       END SUBROUTINE HexMesh_Destruct
