@@ -43,7 +43,7 @@ program horses2plt
    case (MESH_2_PLT)
       write(STD_OUT,'(/,/)')
       call Section_Header("Mesh conversion")
-      call Mesh2Plt(meshName)
+      call Mesh2Plt(meshName, mode)
 
    case (SOLUTION_2_PLT)
       do iSol = 1, no_of_solutions
