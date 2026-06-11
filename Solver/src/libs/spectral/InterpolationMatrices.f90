@@ -40,7 +40,7 @@ module InterpolationMatrices
  contains
 !========
 
-   subroutine InterpolationMatrix_Construct(this, Norigin, Ndest, offset, scale, inout)
+   subroutine InterpolationMatrix_Construct(this, Norigin, Ndest, offset_, scale_)
 !
 !     ****************************************************************
 !        This subroutine computes the interpolation matrix
@@ -51,9 +51,8 @@ module InterpolationMatrices
       class(InterpolationMatrix_t), intent(inout) :: this
       integer                     , intent(in)    :: Norigin !<  Origin polynomial order
       integer                     , intent(in)    :: Ndest   !<  Destination polynomial order
-      real(kind=RP)      ,optional, intent(in)    :: offset 
-      real(kind=RP)      ,optional, intent(in)    :: scale
-      integer            ,optional, intent(in)    :: inout
+      real(kind=RP)      ,optional, intent(in)    :: offset_ ! Offset for h-mortars or sliding meshes
+      real(kind=RP)      ,optional, intent(in)    :: scale_  ! Scale for h-mortars or sliding meshes
 !
 !     ---------------
 !     Local variables
@@ -63,12 +62,27 @@ module InterpolationMatrices
       real(kind=RP), allocatable    :: Ttemp(:,:)
       type(NodalStorage_t), pointer :: spAo
       type(NodalStorage_t), pointer :: spAd
+      real(kind=RP)                 :: offset, scale
 
 !
 !     Evaluate if it's necessary to construct the matrix
 !     **************************************************
 
       if ( this % Constructed ) return
+
+      !
+      ! Check if offset and scale are present (used for h-mortars and sliding mortars)
+      !
+      if (present(offset_)) then
+         offset = offset_
+      else
+         offset = 0.0_rp
+      end if
+      if (present(scale_)) then
+         scale = scale_
+      else
+         scale = 1.0_rp
+      end if
 
 !
 !     Matrix construction
@@ -84,50 +98,26 @@ module InterpolationMatrices
 !
 !     Construct the forward interpolation matrix
 !     ------------------------------------------
-      if (.not.present (offset)) then 
-         if (Norigin < Ndest) then
-   !
-   !        Prolongation matrix
-   !        -------------------
-               call PolynomialInterpolationMatrix(Norigin, Ndest, spAo % x, spAo % wb, spAd % x, this % T)
-            
-         else
-   !
-   !        Restriction (backwards) matrix
-   !        ------------------------------
-            allocate( Ttemp(0:Norigin, 0:Ndest) )
+      if (Norigin < Ndest) then
+!
+!        Prolongation matrix
+!        -------------------
+            call PolynomialInterpolationMatrix(Norigin, Ndest, spAo % x, spAo % wb, offset + scale * spAd % x, this % T)
+         
+      else
+!
+!        Restriction (backwards) matrix
+!        ------------------------------
+         allocate( Ttemp(0:Norigin, 0:Ndest) )
 
-            call PolynomialInterpolationMatrix(Ndest, Norigin, spAd % x, spAd % wb, spAo % x, Ttemp)
+         call PolynomialInterpolationMatrix(Ndest, Norigin, spAd % x, spAd % wb, offset + scale * spAo % x, Ttemp)
 
-            this % T = transpose(Ttemp)
+         this % T = transpose(Ttemp)
 
-            do j = 0, Norigin ; do i = 0, Ndest
-               this % T(i,j) = this % T(i,j) * spAo % w(j) / spAd % w(i)
-            end do            ; end do
-         end if
-      end if 
-      if (present (offset)) then 
-         if (inout==1) then
-   !
-   !        Prolongation matrix
-   !        -------------------         
-               call PolynomialInterpolationMatrix(Norigin, Ndest, spAo % x, spAo % wb, offset + scale *spAd % x, this % T)
-
-         else
-   !
-   !        Restriction (backwards) matrix
-   !        ------------------------------
-            allocate( Ttemp(0:Norigin, 0:Ndest) )
-               !call PolynomialInterpolationMatrix(Ndest, Norigin, offset + 0.5_RP * spAd % x, spAd % wb, spAo % x, Ttemp)
-               call PolynomialInterpolationMatrix(Ndest, Norigin, spAd % x, spAd % wb, offset + scale * spAo % x, Ttemp)
-            this % T = transpose(Ttemp)
-
-            do j = 0, Norigin ; do i = 0, Ndest
-               this % T(i,j) = this % T(i,j) * spAo % w(j) / spAd % w(i)
-            end do            ; end do
-         end if
-        ! this % T = transpose(this % T)
-      end if 
+         do j = 0, Norigin ; do i = 0, Ndest
+            this % T(i,j) = this % T(i,j) * spAo % w(j) / spAd % w(i)
+         end do            ; end do
+      end if
 !
 !     Set constructed flag
 !     ********************
