@@ -8,6 +8,7 @@ ordered_subpage: explicit-solvers.md
 ordered-subpage: a-nonlinear-p-multigrid-FAS.md
 ordered-subpage: a-p-adaptation-methods.md
 ordered-subpage: b-immersed-boundary-method.md
+ordered-subpage: sliding-mesh.md
 ordered-subpage: monitors.md
 ordered-subpage: s-advanced-user-setup.md
 ordered-subpage: s-postprocessing.md
