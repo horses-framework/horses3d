@@ -1198,7 +1198,7 @@ module SpatialDiscretization
      if (f % IsMortar==2 .and. present(fma)) then 
       Sidearray = (/1,0/)
       call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
-      fma=f, flux_M1=flux)
+      fma=f, MortarFlux=flux)
       Sidearray = (/0,2/)
       call f % ProjectFluxToElements(NCONS, flux, Sidearray)
      end if 

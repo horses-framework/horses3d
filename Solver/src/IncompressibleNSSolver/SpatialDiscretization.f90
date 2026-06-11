@@ -830,7 +830,7 @@ module SpatialDiscretization
        end if 
        if (f % IsMortar==2 .and. present(fma)) then 
          call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), &
-         fma=f, flux_M1=flux)
+         fma=f, MortarFlux=flux)
          call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
       end if 
  !end if 

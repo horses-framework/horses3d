@@ -1228,7 +1228,7 @@ module SpatialDiscretization
       end if 
       if (f % IsMortar==2 .and. present(fma)) then 
 
-         call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), fma=f, flux_M1=fluxL)
+         call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), fma=f, MortarFlux=fluxL)
          call f % ProjectFluxToElements(NCONS, fluxR, (/2,0/))
       end if 
       END SUBROUTINE computeElementInterfaceFlux_MU
@@ -1857,7 +1857,7 @@ module SpatialDiscretization
          call f % ProjectFluxToElements(NCOMP, flux, (/1,2/))
       end if 
       if (f % IsMortar==2 .and. present(fma)) then 
-         call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), fma=f, flux_M1=flux)
+         call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), fma=f, MortarFlux=flux)
          call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
         end if 
       end subroutine Laplacian_computeElementInterfaceFlux
