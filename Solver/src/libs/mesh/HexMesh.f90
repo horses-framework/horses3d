@@ -607,7 +607,7 @@ SUBROUTINE ConstructFaces( self, success, numberOfElements, HorsesMortars, globa
                change_pos=.FALSE.
                call GetSmallFacesRotation(self % faces(mID), small, self % nodes, rotations,change_pos)
                do l=1,4 
-                  if (rotations(l) .NE.) self%faces(self % faces(mID)% Mortar(l))% rotation=rotations(l)
+                  if (rotations(l) .NE. 0) self%faces(self % faces(mID)% Mortar(l))% rotation=rotations(l)
                end do 
                if (change_pos) then 
                   self % faces (self % faces(mID)%Mortar(1))%Mortarpos=1
