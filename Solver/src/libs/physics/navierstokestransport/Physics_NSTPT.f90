@@ -75,7 +75,11 @@
          F(IRHOV, IX ) = Q(IRHOU) * v
          F(IRHOW, IX ) = Q(IRHOU) * w
          F(IRHOE, IX ) = ( Q(IRHOE) + p ) * u
-         F(IC   , IX ) = transportVelocity(IX) * Q(IC)
+         if (transportVelocityType == transportVelocityConstant) then
+            F(IC   , IX ) = transportVelocity(IX) * Q(IC)
+         elseif (transportVelocityType == transportVelocityNS) then
+            F(IC   , IX ) = u * Q(IC)
+         end if
 !
 !        Y-Flux
 !        ------
@@ -84,7 +88,11 @@
          F(IRHOV ,IY ) = Q(IRHOV) * v + p
          F(IRHOW ,IY ) = Q(IRHOV) * w
          F(IRHOE ,IY ) = ( Q(IRHOE) + p ) * v
-         F(IC   , IY ) = transportVelocity(IY) * Q(IC)
+         if (transportVelocityType == transportVelocityConstant) then
+            F(IC   , IY ) = transportVelocity(IY) * Q(IC)
+         elseif (transportVelocityType == transportVelocityNS) then
+            F(IC   , IY ) = v * Q(IC)
+         end if
 !
 !        Z-Flux
 !        ------
@@ -93,7 +101,11 @@
          F(IRHOV,IZ) = F(IRHOW,IY)
          F(IRHOW,IZ) = Q(IRHOW) * w + P
          F(IRHOE,IZ) = ( Q(IRHOE) + p ) * w
-         F(IC   ,IZ) = transportVelocity(IZ) * Q(IC)
+         if (transportVelocityType == transportVelocityConstant) then
+            F(IC   , IZ ) = transportVelocity(IZ) * Q(IC)
+         elseif (transportVelocityType == transportVelocityNS) then
+            F(IC   , IZ ) = w * Q(IC)
+         end if
       
          end associate
 

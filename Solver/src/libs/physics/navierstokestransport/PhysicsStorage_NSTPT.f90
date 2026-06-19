@@ -20,6 +20,16 @@
 
          CHARACTER(LEN=KEYWORD_LENGTH), DIMENSION(2) :: physics_NSKeywords = [MACH_NUMBER_KEY, FLOW_EQUATIONS_KEY]
 
+         ! TRANSPORT
+         CHARACTER(LEN = KEYWORD_LENGTH), PARAMETER :: transportVelocityTypeKey = "transport velocity type"
+         CHARACTER(LEN = KEYWORD_LENGTH), PARAMETER :: transportVelocityTypeNSKey = "ns"
+         CHARACTER(LEN = KEYWORD_LENGTH), PARAMETER :: transportVelocityTypeConstantKey = "constant"
+         CHARACTER(LEN = KEYWORD_LENGTH), PARAMETER :: transportVelocityKey = "transport velocity"
+         CHARACTER(LEN = KEYWORD_LENGTH), PARAMETER :: transportDTypeKey = "transport diffusion-dispersion coefficient type"
+         CHARACTER(LEN = KEYWORD_LENGTH), PARAMETER :: transportDTypeTensorKey = "tensor"
+         CHARACTER(LEN = KEYWORD_LENGTH), PARAMETER :: transportDTypeConstantKey = "constant"
+         CHARACTER(LEN = KEYWORD_LENGTH), PARAMETER :: transportDKey = "transport diffusion-dispersion coefficient"
+
          !PARTICLES
          CHARACTER(LEN=KEYWORD_LENGTH), PARAMETER :: particlesKey             = "lagrangian particles"
          CHARACTER(LEN=KEYWORD_LENGTH), PARAMETER :: numberOfParticlesKey     = "number of particles"
@@ -68,8 +78,11 @@
      public    grad_vars, SetGradientVariables
 
      public    transportVelocity, transportD
+     public    transportVelocityType, transportVelocityConstant, transportVelocityNS
      real(kind=RP), protected :: transportVelocity(NDIM)
      real(kind=RP), protected :: transportD(NDIM,NDIM)
+     integer :: transportVelocityType
+     integer, parameter :: transportVelocityConstant = 1, transportVelocityNS = 2
 !
 !    ----------------------------
 !    Either NavierStokes or Euler
@@ -341,6 +354,7 @@
          array = getRealArrayFromString( controlVariables % StringValueForKey(GRAVITY_DIRECTION_KEY,&
                                                                              KEYWORD_LENGTH))
          dimensionless_ % gravity_dir = array(1:3)
+         deallocate(array)
 
          if ( norm2(dimensionless_ % gravity_dir) < epsilon(1.0_RP)*10.0_RP ) then
 !
@@ -441,14 +455,53 @@
       call setRefValues( refValues_ )
 
 
-
-      transportVelocity(IX) = 0.1_rp
-      transportVelocity(IY) = 0.0_rp
-      transportVelocity(IZ) = 0.0_rp
-      transportD = 0.0_rp
-      transportD(IZ,:) = 0.0_rp
-      transportD(:,IZ) = 0.0_rp
-
+      !
+      ! Read transport parameters
+      !
+      ! Read velocity
+      keyword = controlVariables % stringValueForKey(trim(transportVelocityTypeKey), requestedLength = KEYWORD_LENGTH)
+      call ToLower(keyword)
+      if (trim(keyword) .eq. trim(transportVelocityTypeNSKey)) then
+         transportVelocityType = transportVelocityNS
+      elseif (trim(keyword) .eq. trim(transportVelocityTypeConstantKey)) then
+         transportVelocity = GetRealArrayFromString( controlVariables % StringValueForKey(transportVelocityKey,requestedLength = LINE_LENGTH))
+         transportVelocityType = transportVelocityConstant
+      else
+         print *, "Unknown value for keyword '", trim(transportVelocityTypeKey), "'"
+         print *, "Input value: ", trim(keyword)
+         print *, "Possible values are: "
+         print *, " * ", transportVelocityTypeNSKey
+         print *, " * ", transportVelocityTypeConstantKey
+         error stop
+      end if
+      ! Read diffusion-dispersion coefficient
+      transportD = -33.0_rp
+      keyword = controlVariables % stringValueForKey(trim(transportDTypeKey), requestedLength = KEYWORD_LENGTH)
+      call ToLower(keyword)
+      if (trim(keyword) .eq. trim(transportDTypeConstantKey)) then
+         transportD = controlVariables % DoublePrecisionValueForKey(transportDKey)
+      elseif (trim(keyword) .eq. trim(transportDTypeTensorKey)) then
+         allocate(array(1:9))
+         array = GetRealArrayFromString( controlVariables % StringValueForKey(transportDKey,requestedLength = LINE_LENGTH))
+         transportD(IX,IX) = array(1)
+         transportD(IX,IY) = array(2)
+         transportD(IX,IZ) = array(3)
+         transportD(IY,IX) = array(4)
+         transportD(IY,IY) = array(5)
+         transportD(IY,IZ) = array(6)
+         transportD(IZ,IX) = array(7)
+         transportD(IZ,IY) = array(8)
+         transportD(IZ,IZ) = array(9)
+         deallocate(array)
+      else
+         print *, "Unknown value for keyword '", trim(transportDTypeKey), "'"
+         print *, "Input value: ", trim(keyword)
+         print *, "Possible values are: "
+         print *, " * ", transportDTypeTensorKey
+         print *, " * ", transportDTypeConstantKey
+         error stop
+      end if
+      
       END SUBROUTINE ConstructPhysicsStorage_NSTPT
 !
 !     ///////////////////////////////////////////////////////
@@ -516,6 +569,24 @@
                                                    dimensionless % gravity_dir(1), ", ", &
                                                    dimensionless % gravity_dir(2), ", ", &
                                                    dimensionless % gravity_dir(3), "]"
+
+         write(STD_OUT,'(/)')
+         call SubSection_Header("Transport data")
+         if (transportVelocityType == transportVelocityNS) then
+            write(STD_OUT,'(30X,A,A38)') "->" , "Transport velocity type: Navier-Stokes"
+         elseif (transportVelocityType == transportVelocityConstant) then
+            write(STD_OUT,'(30X,A,A33)') "->" , "Transport velocity type: Constant"
+            write(STD_OUT,'(30X,A,A27,A,F4.1,A,F4.1,A,F4.1,A)') "->" , "Transport velocity: ","[", &
+                                                   transportVelocity(1), ", ", &
+                                                   transportVelocity(2), ", ", &
+                                                   transportVelocity(3), "]"
+         end if
+
+         write(STD_OUT,'(30X,A,A43)') "->" , "Transport diffusion-dispersion coefficient:"
+         write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD(IX,IX), ", ", transportD(IX,IY), ", ", transportD(IX,IZ)
+         write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD(IY,IX), ", ", transportD(IY,IY), ", ", transportD(IY,IZ)
+         write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD(IZ,IX), ", ", transportD(IZ,IY), ", ", transportD(IZ,IZ)
+                                                   
 
       END SUBROUTINE DescribePhysicsStorage_NSTPT
 !
