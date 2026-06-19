@@ -552,6 +552,8 @@ module Storage
                   NVARS = 5
               case ("nssa")
                   NVARS = 6
+               case ("nstpt")
+                  NVARS = 6
               case ("ins")
                   NVARS = 5
               case ("ch")

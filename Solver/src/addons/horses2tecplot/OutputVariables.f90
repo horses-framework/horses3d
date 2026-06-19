@@ -19,6 +19,7 @@ module OutputVariables
    use PhysicsStorage
    use Headers
    use Storage, only: NVARS, hasMPIranks
+   use PhysicsStorage_NSTPT, only: IC
    use PhysicsStorage_NSSA, only: IRHOTHETA
    use PhysicsStorage_iNS, only: INSRHO, INSRHOU, INSRHOV, INSRHOW, INSP
    use PhysicsStorage_MU, only: IMC, IMSQRHOU, IMSQRHOV, IMSQRHOW, IMP
@@ -927,6 +928,10 @@ module OutputVariables
 
                case(C_V)
                   select case (trim(flowEq))
+                  case ("nstpt")
+                     do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
+                        output(var,i,j,k) = Q(IC,i,j,k)
+                     end do         ; end do         ; end do
                   case ("ch")
                      do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
                         output(var,i,j,k) = Q(size(Q,1),i,j,k)
@@ -1076,6 +1081,8 @@ module OutputVariables
               case ("ns")
                   output = (/RHO_V, RHOU_V, RHOV_V, RHOW_V, RHOE_V/)
               case ("nssa")
+                  output = (/RHO_V, RHOU_V, RHOV_V, RHOW_V, RHOE_V, C_V/)
+              case ("nstpt")
                   output = (/RHO_V, RHOU_V, RHOV_V, RHOW_V, RHOE_V, C_V/)
               case ("ins")
                   output = (/RHO_V, RHOU_V, RHOV_V, RHOW_V, P_V/)
