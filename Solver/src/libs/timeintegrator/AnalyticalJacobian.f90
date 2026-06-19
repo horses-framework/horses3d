@@ -29,7 +29,7 @@ module AnalyticalJacobian
    use Utilities                       , only: dot_product
    use ConnectivityClass               , only: Connectivity
    use FTValueDictionaryClass
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS)) && (!(TRANSPORT))
    use RiemannSolvers_NS               , only: RiemannSolver_dFdQ, RiemannSolver
    use HyperbolicDiscretizations       , only: HyperbolicDiscretization
    use VariableConversion              , only: NSGradientVariables_STATE
@@ -133,7 +133,7 @@ contains
       real(kind=RP)  , optional, intent(in)        :: eps_in            ! Not needed here...
       logical        , optional, intent(in)        :: BlockDiagonalized !<? Construct only the block diagonal?
       integer        , optional, intent(in)        :: mode
-#if defined(NAVIERSTOKES) 
+#if defined(NAVIERSTOKES) && (!(TRANSPORT))
       !--------------------------------------------
       integer :: nnz
       integer :: nelem, ierr
@@ -272,7 +272,7 @@ contains
 
    ! call Matrix % Visualize('Jacobian.txt')
    end subroutine AnJacobian_Compute
-#if defined(NAVIERSTOKES) 
+#if defined(NAVIERSTOKES) && (!(TRANSPORT))
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !

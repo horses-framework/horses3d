@@ -46,26 +46,30 @@
 !////////////////////////////////////////////////////////////////////////
 !
 !    ******
-     MODULE PhysicsStorage_NS
+     MODULE PhysicsStorage_NSTPT
 !    ******
 !
      USE SMConstants
-     use FluidData_NS
+     use FluidData_NSTPT
      use FileReadingUtilities, only: getRealArrayFromString
 
      IMPLICIT NONE
 
      private
      public    flowIsNavierStokes, NCONS, NGRAD
-     public    IRHO, IRHOU, IRHOV, IRHOW, IRHOE
+     public    IRHO, IRHOU, IRHOV, IRHOW, IRHOE, IC
      public    NPRIM, IPIRHO, IPU, IPV, IPW, IPP, IPT, IPA2
      public    TemperatureReNormalization_Sutherland, S_div_TRef_Sutherland
      public    computeGradients
 
-     public    ConstructPhysicsStorage_NS, DestructPhysicsStorage_NS, DescribePhysicsStorage_NS
+     public    ConstructPhysicsStorage_NSTPT, DestructPhysicsStorage_NSTPT, DescribePhysicsStorage_NSTPT
      public    CheckPhysicsNSInputIntegrity
      public    GRADVARS_STATE, GRADVARS_ENTROPY, GRADVARS_ENERGY
      public    grad_vars, SetGradientVariables
+
+     public    transportVelocity, transportD
+     real(kind=RP), protected :: transportVelocity(NDIM)
+     real(kind=RP), protected :: transportD(NDIM,NDIM)
 !
 !    ----------------------------
 !    Either NavierStokes or Euler
@@ -78,13 +82,13 @@
 !!   The sizes of the NS system
 !    --------------------------
 !
-     INTEGER, PARAMETER :: NCONS = 5, NGRAD = 5
+     INTEGER, PARAMETER :: NCONS = 6, NGRAD = 6
 !
 !    -------------------------------------------
 !!   The positions of the conservative variables
 !    -------------------------------------------
 !
-     INTEGER, PARAMETER       :: IRHO = 1 , IRHOU = 2 , IRHOV = 3 , IRHOW = 4 , IRHOE = 5
+     INTEGER, PARAMETER       :: IRHO = 1 , IRHOU = 2 , IRHOV = 3 , IRHOW = 4 , IRHOE = 5 , IC = 6
 !
 !    ----------------------------------------
 !!   The positions of the primitive variables
@@ -142,7 +146,7 @@
 !!    variables.
 !     --------------------------------------------------
 !
-      SUBROUTINE ConstructPhysicsStorage_NS( controlVariables, Lref, timeref, success )
+      SUBROUTINE ConstructPhysicsStorage_NSTPT( controlVariables, Lref, timeref, success )
       USE FTValueDictionaryClass
       USE Physics_NSKeywordsModule
       use mainKeywordsModule, only: saveLambVectorKey
@@ -436,7 +440,16 @@
       call setDimensionless( dimensionless_ )
       call setRefValues( refValues_ )
 
-      END SUBROUTINE ConstructPhysicsStorage_NS
+
+
+      transportVelocity(IX) = 0.1_rp
+      transportVelocity(IY) = 0.0_rp
+      transportVelocity(IZ) = 0.0_rp
+      transportD = 0.0_rp
+      transportD(IZ,:) = 0.0_rp
+      transportD(:,IZ) = 0.0_rp
+
+      END SUBROUTINE ConstructPhysicsStorage_NSTPT
 !
 !     ///////////////////////////////////////////////////////
 !
@@ -444,9 +457,9 @@
 !!    Destructor: Does nothing for this storage
 !     -------------------------------------------------
 !
-      SUBROUTINE DestructPhysicsStorage_NS
+      SUBROUTINE DestructPhysicsStorage_NSTPT
 
-      END SUBROUTINE DestructPhysicsStorage_NS
+      END SUBROUTINE DestructPhysicsStorage_NSTPT
 !
 !     //////////////////////////////////////////////////////
 !
@@ -454,7 +467,7 @@
 !!    Descriptor: Shows the gathered data
 !     -----------------------------------------
 !
-      SUBROUTINE DescribePhysicsStorage_NS()
+      SUBROUTINE DescribePhysicsStorage_NSTPT()
          USE Headers
          use MPI_Process_Info
          IMPLICIT NONE
@@ -504,7 +517,7 @@
                                                    dimensionless % gravity_dir(2), ", ", &
                                                    dimensionless % gravity_dir(3), "]"
 
-      END SUBROUTINE DescribePhysicsStorage_NS
+      END SUBROUTINE DescribePhysicsStorage_NSTPT
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -555,5 +568,5 @@
 
 !
 !    **********
-     END MODULE PhysicsStorage_NS
+     END MODULE PhysicsStorage_NSTPT
 !    **********

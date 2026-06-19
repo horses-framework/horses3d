@@ -279,10 +279,12 @@ module StatisticsMonitor
       subroutine StatisticsMonitor_UpdateValues(self, mesh)
          use PhysicsStorage
          use MappedGeometryClass, only: vCross, ComputeVorticity
-#if (defined(NAVIERSTOKES) && !(defined(SPALARTALMARAS)) )
+#if (defined(NAVIERSTOKES) && !(defined(SPALARTALMARAS)) && !(defined(TRANSPORT)))
          use VariableConversion_NS, only: getVelocityGradients_STATE, Pressure
 #elif (defined(NAVIERSTOKES) && (defined(SPALARTALMARAS)) )
          use VariableConversion_NSSA, only: getVelocityGradients_STATE, Pressure
+#elif (defined(NAVIERSTOKES) && (defined(TRANSPORT)))
+         use VariableConversion_NSTPT, only: getVelocityGradients_STATE, Pressure
 #elif defined(INCNS)
          use VariableConversion_iNS, only: getVelocityGradients
 #elif defined(MULTIPHASE)

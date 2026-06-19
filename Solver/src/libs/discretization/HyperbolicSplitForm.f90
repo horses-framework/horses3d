@@ -5,8 +5,10 @@ module HyperbolicSplitForm
    use SMConstants
 #if defined(SPALARTALMARAS)
    use RiemannSolvers_NSSA
-#elif defined(NAVIERSTOKES)
+#elif defined(NAVIERSTOKES) && (!(TRANSPORT))
    use RiemannSolvers_NS
+#elif defined(NAVIERSTOKES) && (TRANSPORT)
+   use RiemannSolvers_NSTPT
 #elif defined(INCNS)
    use RiemannSolvers_iNS
 #endif

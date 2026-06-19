@@ -18,13 +18,13 @@
 !
 #include "Includes.h"
 !  **************
-   module Physics_NS
+   module Physics_NSTPT
 !  **************
 !
       use SMConstants
-      use PhysicsStorage_NS
-      use VariableConversion_NS
-      use FluidData_NS
+      use PhysicsStorage_NSTPT
+      use VariableConversion_NSTPT
+      use FluidData_NSTPT
       use Utilities, only: outer_product
       implicit none
 
@@ -75,6 +75,7 @@
          F(IRHOV, IX ) = Q(IRHOU) * v
          F(IRHOW, IX ) = Q(IRHOU) * w
          F(IRHOE, IX ) = ( Q(IRHOE) + p ) * u
+         F(IC   , IX ) = transportVelocity(IX) * Q(IC)
 !
 !        Y-Flux
 !        ------
@@ -83,6 +84,7 @@
          F(IRHOV ,IY ) = Q(IRHOV) * v + p
          F(IRHOW ,IY ) = Q(IRHOV) * w
          F(IRHOE ,IY ) = ( Q(IRHOE) + p ) * v
+         F(IC   , IY ) = transportVelocity(IY) * Q(IC)
 !
 !        Z-Flux
 !        ------
@@ -91,6 +93,7 @@
          F(IRHOV,IZ) = F(IRHOW,IY)
          F(IRHOW,IZ) = Q(IRHOW) * w + P
          F(IRHOE,IZ) = ( Q(IRHOE) + p ) * w
+         F(IC   ,IZ) = transportVelocity(IZ) * Q(IC)
       
          end associate
 
@@ -121,7 +124,7 @@
          real(kind=RP)  :: p     ! Pressure
          real(kind=RP)  :: H     ! Total enthalpy
          !-------------------------------------------------
-         
+
          associate( gammaMinus1 => thermodynamics % gammaMinus1, & 
                     gamma => thermodynamics % gamma )
          
@@ -287,18 +290,22 @@
          F(IRHOV,IX) = mu  * ( U_x(IY) + U_y(IX) ) 
          F(IRHOW,IX) = mu  * ( U_x(IZ) + U_z(IX) ) 
          F(IRHOE,IX) = F(IRHOU,IX) * u + F(IRHOV,IX) * v + F(IRHOW,IX) * w + kappa  * nablaT(IX) 
+         F(IC,IX)  = transportD(IX,IX) * Q_x(IC) + transportD(IX,IY) * Q_y(IC) + transportD(IX,IZ) * Q_z(IC)
 
          F(IRHO,IY) = 0.0_RP
          F(IRHOU,IY) = F(IRHOV,IX) 
          F(IRHOV,IY) = mu  * (2.0_RP * U_y(IY) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOW,IY) = mu  * ( U_y(IZ) + U_z(IY) ) 
          F(IRHOE,IY) = F(IRHOU,IY) * u + F(IRHOV,IY) * v + F(IRHOW,IY) * w + kappa  * nablaT(IY)
+         F(IC,IY)  = transportD(IY,IX) * Q_x(IC) + transportD(IY,IY) * Q_y(IC) + transportD(IY,IZ) * Q_z(IC)
 
          F(IRHO,IZ) = 0.0_RP
          F(IRHOU,IZ) = F(IRHOW,IX) 
          F(IRHOV,IZ) = F(IRHOW,IY) 
          F(IRHOW,IZ) = mu  * ( 2.0_RP * U_z(IZ) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOE,IZ) = F(IRHOU,IZ) * u + F(IRHOV,IZ) * v + F(IRHOW,IZ) * w + kappa  * nablaT(IZ)
+         F(IC,IZ)  = transportD(IZ,IX) * Q_x(IC) + transportD(IZ,IY) * Q_y(IC) + transportD(IZ,IZ) * Q_z(IC)
+
 
          ! with Pr = constant, dmudx = dkappadx
       end subroutine ViscousFlux_STATE
@@ -343,18 +350,21 @@
          F(IRHOV,IX) = mu  * ( U_x(IY) + U_y(IX) ) 
          F(IRHOW,IX) = mu  * ( U_x(IZ) + U_z(IX) ) 
          F(IRHOE,IX) = F(IRHOU,IX) * u(IX) + F(IRHOV,IX) * u(IY) + F(IRHOW,IX) * u(IZ) + kappa  * nablaT(IX) 
+         F(IC,IX)  = 0.0_RP
 
          F(IRHO,IY) = 0.0_RP
          F(IRHOU,IY) = F(IRHOV,IX) 
          F(IRHOV,IY) = mu  * (2.0_RP * U_y(IY) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOW,IY) = mu  * ( U_y(IZ) + U_z(IY) ) 
          F(IRHOE,IY) = F(IRHOU,IY) * u(IX) + F(IRHOV,IY) * u(IY) + F(IRHOW,IY) * u(IZ) + kappa  * nablaT(IY)
+         F(IC,IY) = 0.0_RP
 
          F(IRHO,IZ) = 0.0_RP
          F(IRHOU,IZ) = F(IRHOW,IX) 
          F(IRHOV,IZ) = F(IRHOW,IY) 
          F(IRHOW,IZ) = mu  * ( 2.0_RP * U_z(IZ) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOE,IZ) = F(IRHOU,IZ) * u(IX) + F(IRHOV,IZ) * u(IY) + F(IRHOW,IZ) * u(IZ) + kappa  * nablaT(IZ)
+         F(IC,IZ) = 0.0_RP
 
       end subroutine ViscousFlux_ENTROPY
 
@@ -398,18 +408,21 @@
          F(IRHOV,IX) = mu  * ( U_x(IY) + U_y(IX) ) 
          F(IRHOW,IX) = mu  * ( U_x(IZ) + U_z(IX) ) 
          F(IRHOE,IX) = F(IRHOU,IX) * u(IX) + F(IRHOV,IX) * u(IY) + F(IRHOW,IX) * u(IZ) + kappa  * nablaT(IX) 
+         F(IC,IX)  = 0.0_RP
 
          F(IRHO,IY) = 0.0_RP
          F(IRHOU,IY) = F(IRHOV,IX) 
          F(IRHOV,IY) = mu  * (2.0_RP * U_y(IY) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOW,IY) = mu  * ( U_y(IZ) + U_z(IY) ) 
          F(IRHOE,IY) = F(IRHOU,IY) * u(IX) + F(IRHOV,IY) * u(IY) + F(IRHOW,IY) * u(IZ) + kappa  * nablaT(IY)
+         F(IC,IY) = 0.0_RP
 
          F(IRHO,IZ) = 0.0_RP
          F(IRHOU,IZ) = F(IRHOW,IX) 
          F(IRHOV,IZ) = F(IRHOW,IY) 
          F(IRHOW,IZ) = mu  * ( 2.0_RP * U_z(IZ) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOE,IZ) = F(IRHOU,IZ) * u(IX) + F(IRHOV,IZ) * u(IY) + F(IRHOW,IZ) * u(IZ) + kappa  * nablaT(IZ)
+         F(IC,IZ) = 0.0_RP
 
       end subroutine ViscousFlux_ENERGY
 
@@ -642,75 +655,75 @@
 !        ----------------------------------------
          
          ! G_{11}
-         df_dgradq(:,1,1,1) = (/ 0._RP , -f4_3*u ,      -v ,      -w , -(f4_3*u2 + v2 + w2 + gamma_Pr*(E - Vel2)) /)
-         df_dgradq(:,2,1,1) = (/ 0._RP ,  f4_3   ,   0._RP ,   0._RP , u * (  f4_3 - gamma_Pr)                           /)
-         df_dgradq(:,3,1,1) = (/ 0._RP ,   0._RP ,   1._RP ,   0._RP , v * (1.0_RP - gamma_Pr)                           /)
-         df_dgradq(:,4,1,1) = (/ 0._RP ,   0._RP ,   0._RP ,   1._RP , w * (1.0_RP - gamma_Pr)                           /)
-         df_dgradq(:,5,1,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,               gamma_Pr                            /)
+         df_dgradq(IRHO:IRHOE,1,1,1) = (/ 0._RP , -f4_3*u ,      -v ,      -w , -(f4_3*u2 + v2 + w2 + gamma_Pr*(E - Vel2)) /)
+         df_dgradq(IRHO:IRHOE,2,1,1) = (/ 0._RP ,  f4_3   ,   0._RP ,   0._RP , u * (  f4_3 - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,3,1,1) = (/ 0._RP ,   0._RP ,   1._RP ,   0._RP , v * (1.0_RP - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,4,1,1) = (/ 0._RP ,   0._RP ,   0._RP ,   1._RP , w * (1.0_RP - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,5,1,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,               gamma_Pr                            /)
          
          ! G_{12}
-         df_dgradq(:,1,2,1) = (/ 0._RP ,  f2_3*v ,      -u ,   0._RP , -lambda*u*v /)
-         df_dgradq(:,2,2,1) = (/ 0._RP ,   0._RP ,   1._RP ,   0._RP ,       v   /)
-         df_dgradq(:,3,2,1) = (/ 0._RP , -f2_3   ,   0._RP ,   0._RP , -f2_3*u   /)
-         df_dgradq(:,4,2,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
-         df_dgradq(:,5,2,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,1,2,1) = (/ 0._RP ,  f2_3*v ,      -u ,   0._RP , -lambda*u*v /)
+         df_dgradq(IRHO:IRHOE,2,2,1) = (/ 0._RP ,   0._RP ,   1._RP ,   0._RP ,       v   /)
+         df_dgradq(IRHO:IRHOE,3,2,1) = (/ 0._RP , -f2_3   ,   0._RP ,   0._RP , -f2_3*u   /)
+         df_dgradq(IRHO:IRHOE,4,2,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,5,2,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
          
          ! G_{13}
-         df_dgradq(:,1,3,1) = (/ 0._RP ,  f2_3*w ,   0._RP ,      -u , -lambda*u*w /)
-         df_dgradq(:,2,3,1) = (/ 0._RP ,   0._RP ,   0._RP ,   1._RP ,       w   /)
-         df_dgradq(:,3,3,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
-         df_dgradq(:,4,3,1) = (/ 0._RP , -f2_3   ,   0._RP ,   0._RP , -f2_3*u   /)
-         df_dgradq(:,5,3,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,1,3,1) = (/ 0._RP ,  f2_3*w ,   0._RP ,      -u , -lambda*u*w /)
+         df_dgradq(IRHO:IRHOE,2,3,1) = (/ 0._RP ,   0._RP ,   0._RP ,   1._RP ,       w   /)
+         df_dgradq(IRHO:IRHOE,3,3,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,4,3,1) = (/ 0._RP , -f2_3   ,   0._RP ,   0._RP , -f2_3*u   /)
+         df_dgradq(IRHO:IRHOE,5,3,1) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
          
 !
 !        Flux in the y direction: g = G_{2:} · ∇q
 !        ----------------------------------------
          
          ! G_{21}
-         df_dgradq(:,1,1,2) = (/ 0._RP ,      -v ,  f2_3*u ,   0._RP , -lambda*u*v /)
-         df_dgradq(:,2,1,2) = (/ 0._RP ,   0._RP , -f2_3   ,   0._RP , -f2_3*v   /)
-         df_dgradq(:,3,1,2) = (/ 0._RP ,   1._RP ,   0._RP ,   0._RP ,       u   /)
-         df_dgradq(:,4,1,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
-         df_dgradq(:,5,1,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,1,1,2) = (/ 0._RP ,      -v ,  f2_3*u ,   0._RP , -lambda*u*v /)
+         df_dgradq(IRHO:IRHOE,2,1,2) = (/ 0._RP ,   0._RP , -f2_3   ,   0._RP , -f2_3*v   /)
+         df_dgradq(IRHO:IRHOE,3,1,2) = (/ 0._RP ,   1._RP ,   0._RP ,   0._RP ,       u   /)
+         df_dgradq(IRHO:IRHOE,4,1,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,5,1,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
          
          ! G_{22}
-         df_dgradq(:,1,2,2) = (/ 0._RP ,      -u , -f4_3*v ,      -w , -(u2 + f4_3*v2 + w2 + gamma_Pr*(E - Vel2)) /)
-         df_dgradq(:,2,2,2) = (/ 0._RP ,   1._RP ,   0._RP ,   0._RP , u * (1.0_RP - gamma_Pr)                           /)
-         df_dgradq(:,3,2,2) = (/ 0._RP ,   0._RP ,  f4_3   ,   0._RP , v * (  f4_3 - gamma_Pr)                           /)
-         df_dgradq(:,4,2,2) = (/ 0._RP ,   0._RP ,   0._RP ,   1._RP , w * (1.0_RP - gamma_Pr)                           /)
-         df_dgradq(:,5,2,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,               gamma_Pr                            /)
+         df_dgradq(IRHO:IRHOE,1,2,2) = (/ 0._RP ,      -u , -f4_3*v ,      -w , -(u2 + f4_3*v2 + w2 + gamma_Pr*(E - Vel2)) /)
+         df_dgradq(IRHO:IRHOE,2,2,2) = (/ 0._RP ,   1._RP ,   0._RP ,   0._RP , u * (1.0_RP - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,3,2,2) = (/ 0._RP ,   0._RP ,  f4_3   ,   0._RP , v * (  f4_3 - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,4,2,2) = (/ 0._RP ,   0._RP ,   0._RP ,   1._RP , w * (1.0_RP - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,5,2,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,               gamma_Pr                            /)
          
          ! G_{23}
-         df_dgradq(:,1,3,2) = (/ 0._RP ,   0._RP ,  f2_3*w ,      -v , -lambda*v*w /)
-         df_dgradq(:,2,3,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
-         df_dgradq(:,3,3,2) = (/ 0._RP ,   0._RP ,   0._RP ,   1._RP ,       w   /)
-         df_dgradq(:,4,3,2) = (/ 0._RP ,   0._RP , -f2_3   ,   0._RP , -f2_3*v   /)
-         df_dgradq(:,5,3,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,1,3,2) = (/ 0._RP ,   0._RP ,  f2_3*w ,      -v , -lambda*v*w /)
+         df_dgradq(IRHO:IRHOE,2,3,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,3,3,2) = (/ 0._RP ,   0._RP ,   0._RP ,   1._RP ,       w   /)
+         df_dgradq(IRHO:IRHOE,4,3,2) = (/ 0._RP ,   0._RP , -f2_3   ,   0._RP , -f2_3*v   /)
+         df_dgradq(IRHO:IRHOE,5,3,2) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
          
 !
 !        Flux in the z direction: h = G_{3:} · ∇q
 !        ----------------------------------------
          
          ! G_{31}
-         df_dgradq(:,1,1,3) = (/ 0._RP ,      -w ,   0._RP ,  f2_3*u , -lambda*u*w /)
-         df_dgradq(:,2,1,3) = (/ 0._RP ,   0._RP ,   0._RP , -f2_3   , -f2_3*w   /)
-         df_dgradq(:,3,1,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
-         df_dgradq(:,4,1,3) = (/ 0._RP ,   1._RP ,   0._RP ,   0._RP ,       u   /)
-         df_dgradq(:,5,1,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,1,1,3) = (/ 0._RP ,      -w ,   0._RP ,  f2_3*u , -lambda*u*w /)
+         df_dgradq(IRHO:IRHOE,2,1,3) = (/ 0._RP ,   0._RP ,   0._RP , -f2_3   , -f2_3*w   /)
+         df_dgradq(IRHO:IRHOE,3,1,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,4,1,3) = (/ 0._RP ,   1._RP ,   0._RP ,   0._RP ,       u   /)
+         df_dgradq(IRHO:IRHOE,5,1,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
          
          ! G_{32}
-         df_dgradq(:,1,2,3) = (/ 0._RP ,   0._RP ,      -w ,  f2_3*v , -lambda*v*w /)
-         df_dgradq(:,2,2,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
-         df_dgradq(:,3,2,3) = (/ 0._RP ,   0._RP ,   0._RP , -f2_3   , -f2_3*w   /)
-         df_dgradq(:,4,2,3) = (/ 0._RP ,   0._RP ,   1._RP ,   0._RP ,       v   /)
-         df_dgradq(:,5,2,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,1,2,3) = (/ 0._RP ,   0._RP ,      -w ,  f2_3*v , -lambda*v*w /)
+         df_dgradq(IRHO:IRHOE,2,2,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
+         df_dgradq(IRHO:IRHOE,3,2,3) = (/ 0._RP ,   0._RP ,   0._RP , -f2_3   , -f2_3*w   /)
+         df_dgradq(IRHO:IRHOE,4,2,3) = (/ 0._RP ,   0._RP ,   1._RP ,   0._RP ,       v   /)
+         df_dgradq(IRHO:IRHOE,5,2,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,   0._RP   /)
          
          ! G_{33}
-         df_dgradq(:,1,3,3) = (/ 0._RP ,      -u ,      -v , -f4_3*w , -(u2 + v2 + f4_3*w2 + gamma_Pr*(E - Vel2)) /)
-         df_dgradq(:,2,3,3) = (/ 0._RP ,   1._RP ,   0._RP ,   0._RP , u * (1.0_RP - gamma_Pr)                           /)
-         df_dgradq(:,3,3,3) = (/ 0._RP ,   0._RP ,   1._RP ,   0._RP , v * (1.0_RP - gamma_Pr)                           /)
-         df_dgradq(:,4,3,3) = (/ 0._RP ,   0._RP ,   0._RP ,  f4_3   , w * (  f4_3 - gamma_Pr)                           /)
-         df_dgradq(:,5,3,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,               gamma_Pr                            /)
+         df_dgradq(IRHO:IRHOE,1,3,3) = (/ 0._RP ,      -u ,      -v , -f4_3*w , -(u2 + v2 + f4_3*w2 + gamma_Pr*(E - Vel2)) /)
+         df_dgradq(IRHO:IRHOE,2,3,3) = (/ 0._RP ,   1._RP ,   0._RP ,   0._RP , u * (1.0_RP - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,3,3,3) = (/ 0._RP ,   0._RP ,   1._RP ,   0._RP , v * (1.0_RP - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,4,3,3) = (/ 0._RP ,   0._RP ,   0._RP ,  f4_3   , w * (  f4_3 - gamma_Pr)                           /)
+         df_dgradq(IRHO:IRHOE,5,3,3) = (/ 0._RP ,   0._RP ,   0._RP ,   0._RP ,               gamma_Pr                            /)
          
 !
 !        Scale with mu/(rho*Re) .or. kappa/(rho*Re)
@@ -744,43 +757,43 @@
 !        ----------------
          
          ! A_1
-         df_dq(:,1,1) = (/ 0._RP , & 
+         df_dq(IRHO:IRHOE,1,1) = (/ 0._RP , & 
                            2._RP * lambda * (rho_DivV - V_gradRho) + 2._RP * ( u * Q_x(IRHO) - Q(IRHO) * U_x(IX) ), &
                            u * Q_y(IRHO) + v * Q_x(IRHO) - Q(IRHO) * ( U_y(IX) + U_x(IY)) , &
                            u * Q_z(IRHO) + w * Q_x(IRHO) - Q(IRHO) * ( U_z(IX) + U_x(IZ)) , &
                            (1._RP - gamma_Pr) * ( Vel2*Q_x(IRHO) - vv_x ) + lambda * u * (4._RP*rho_DivV + V_gradRho) &
                                 - 2 * Q(IRHO) * V_gradU + gamma_Pr * ( E * Q_x(IRHO) - Q(IRHO) * gradE(1) ) /)
          
-         df_dq(:,2,1) = (/ 0._RP , -4._RP*lambda*Q_x(IRHO) , -Q_y(IRHO) , -Q_z(IRHO) , -u * (lambda - gamma_Pr) * Q_x(IRHO) + Q(IRHO) * ( 2._RP - gamma_Pr) * U_x(IX) - V_gradRho - 2._RP * lambda * rho_DivV /)
-         df_dq(:,3,1) = (/ 0._RP ,  2._RP*lambda*Q_y(IRHO) , -Q_x(IRHO) , 0._RP       , (1._RP - gamma_Pr) * (Q(IRHO) * U_x(IY) - v * Q_x(IRHO)) + Q(IRHO) * U_y(IX) + 2._RP * lambda * u * Q_y(IRHO) /)
-         df_dq(:,4,1) = (/ 0._RP ,  2._RP*lambda*Q_z(IRHO) , 0._RP       , -Q_x(IRHO) , (1._RP - gamma_Pr) * (Q(IRHO) * U_x(IZ) - w * Q_x(IRHO)) + Q(IRHO) * U_z(IX) + 2._RP * lambda * u * Q_z(IRHO) /)
-         df_dq(:,5,1) = (/ 0._RP , 0._RP                    , 0._RP       , 0._RP       , -gamma_Pr * Q_x(IRHO) /)
+         df_dq(IRHO:IRHOE,2,1) = (/ 0._RP , -4._RP*lambda*Q_x(IRHO) , -Q_y(IRHO) , -Q_z(IRHO) , -u * (lambda - gamma_Pr) * Q_x(IRHO) + Q(IRHO) * ( 2._RP - gamma_Pr) * U_x(IX) - V_gradRho - 2._RP * lambda * rho_DivV /)
+         df_dq(IRHO:IRHOE,3,1) = (/ 0._RP ,  2._RP*lambda*Q_y(IRHO) , -Q_x(IRHO) , 0._RP       , (1._RP - gamma_Pr) * (Q(IRHO) * U_x(IY) - v * Q_x(IRHO)) + Q(IRHO) * U_y(IX) + 2._RP * lambda * u * Q_y(IRHO) /)
+         df_dq(IRHO:IRHOE,4,1) = (/ 0._RP ,  2._RP*lambda*Q_z(IRHO) , 0._RP       , -Q_x(IRHO) , (1._RP - gamma_Pr) * (Q(IRHO) * U_x(IZ) - w * Q_x(IRHO)) + Q(IRHO) * U_z(IX) + 2._RP * lambda * u * Q_z(IRHO) /)
+         df_dq(IRHO:IRHOE,5,1) = (/ 0._RP , 0._RP                    , 0._RP       , 0._RP       , -gamma_Pr * Q_x(IRHO) /)
          
          ! A_2
-         df_dq(:,1,2) = (/ 0._RP , & 
+         df_dq(IRHO:IRHOE,1,2) = (/ 0._RP , & 
                            v * Q_x(IRHO) + u * Q_y(IRHO) - Q(IRHO) * ( U_x(IY) + U_y(IX)) , &
                            2._RP * lambda * (rho_DivV - V_gradRho) + 2._RP * ( v * Q_y(IRHO) - Q(IRHO) * U_y(IY) ), &
                            v * Q_z(IRHO) + w * Q_y(IRHO) - Q(IRHO) * ( U_z(IY) + U_y(IZ)) , &
                            (1._RP - gamma_Pr) * ( Vel2*Q_y(IRHO) - vv_y ) + lambda * v * (4._RP*rho_DivV + V_gradRho) &
                                 - 2 * Q(IRHO) * V_gradV + gamma_Pr * ( E * Q_y(IRHO) - Q(IRHO) * gradE(2) ) /)
          
-         df_dq(:,2,2) = (/ 0._RP , -Q_y(IRHO) ,  2._RP*lambda*Q_x(IRHO) , 0._RP       , (1._RP - gamma_Pr) * (Q(IRHO) * U_y(IX) - u * Q_y(IRHO)) + Q(IRHO) * U_x(IY) + 2._RP * lambda * v * Q_x(IRHO) /)
-         df_dq(:,3,2) = (/ 0._RP , -Q_x(IRHO) , -4._RP*lambda*Q_y(IRHO) , -Q_z(IRHO) , -v * (lambda - gamma_Pr) * Q_y(IRHO) + Q(IRHO) * ( 2._RP - gamma_Pr) * U_y(IY) - V_gradRho - 2._RP * lambda * rho_DivV /)
-         df_dq(:,4,2) = (/ 0._RP , 0._RP       ,  2._RP*lambda*Q_z(IRHO) , -Q_y(IRHO) , (1._RP - gamma_Pr) * (Q(IRHO) * U_y(IZ) - w * Q_y(IRHO)) + Q(IRHO) * U_z(IY) + 2._RP * lambda * v * Q_z(IRHO) /)
-         df_dq(:,5,2) = (/ 0._RP , 0._RP       , 0._RP                    , 0._RP       , -gamma_Pr * Q_y(IRHO) /)
+         df_dq(IRHO:IRHOE,2,2) = (/ 0._RP , -Q_y(IRHO) ,  2._RP*lambda*Q_x(IRHO) , 0._RP       , (1._RP - gamma_Pr) * (Q(IRHO) * U_y(IX) - u * Q_y(IRHO)) + Q(IRHO) * U_x(IY) + 2._RP * lambda * v * Q_x(IRHO) /)
+         df_dq(IRHO:IRHOE,3,2) = (/ 0._RP , -Q_x(IRHO) , -4._RP*lambda*Q_y(IRHO) , -Q_z(IRHO) , -v * (lambda - gamma_Pr) * Q_y(IRHO) + Q(IRHO) * ( 2._RP - gamma_Pr) * U_y(IY) - V_gradRho - 2._RP * lambda * rho_DivV /)
+         df_dq(IRHO:IRHOE,4,2) = (/ 0._RP , 0._RP       ,  2._RP*lambda*Q_z(IRHO) , -Q_y(IRHO) , (1._RP - gamma_Pr) * (Q(IRHO) * U_y(IZ) - w * Q_y(IRHO)) + Q(IRHO) * U_z(IY) + 2._RP * lambda * v * Q_z(IRHO) /)
+         df_dq(IRHO:IRHOE,5,2) = (/ 0._RP , 0._RP       , 0._RP                    , 0._RP       , -gamma_Pr * Q_y(IRHO) /)
          
          ! A_3
-         df_dq(:,1,3) = (/ 0._RP , & 
+         df_dq(IRHO:IRHOE,1,3) = (/ 0._RP , & 
                            w * Q_x(IRHO) + u * Q_z(IRHO) - Q(IRHO) * ( U_x(IZ) + U_z(IX)) , &
                            w * Q_y(IRHO) + v * Q_z(IRHO) - Q(IRHO) * ( U_y(IZ) + U_z(IY)) , &
                            2._RP * lambda * (rho_DivV - V_gradRho) + 2._RP * ( w * Q_z(IRHO) - Q(IRHO) * U_z(IZ) ), &
                            (1._RP - gamma_Pr) * ( Vel2*Q_z(IRHO) - vv_z ) + lambda * w * (4._RP*rho_DivV + V_gradRho) &
                                 - 2 * Q(IRHO) * V_gradW + gamma_Pr * ( E * Q_z(IRHO) - Q(IRHO) * gradE(3) ) /)
          
-         df_dq(:,2,3) = (/ 0._RP , -Q_z(IRHO) , 0._RP       ,  2._RP*lambda*Q_x(IRHO) , (1._RP - gamma_Pr) * (Q(IRHO) * U_z(IX) - u * Q_z(IRHO)) + Q(IRHO) * U_x(IZ) + 2._RP * lambda * w * Q_x(IRHO) /)
-         df_dq(:,3,3) = (/ 0._RP , 0._RP       , -Q_z(IRHO) ,  2._RP*lambda*Q_y(IRHO) , (1._RP - gamma_Pr) * (Q(IRHO) * U_z(IY) - v * Q_z(IRHO)) + Q(IRHO) * U_y(IZ) + 2._RP * lambda * w * Q_y(IRHO) /)
-         df_dq(:,4,3) = (/ 0._RP , -Q_x(IRHO) , -Q_y(IRHO) , -4._RP*lambda*Q_z(IRHO) , -w * (lambda - gamma_Pr) * Q_z(IRHO) + Q(IRHO) * ( 2._RP - gamma_Pr) * U_z(IZ) - V_gradRho - 2._RP * lambda * rho_DivV /)
-         df_dq(:,5,3) = (/ 0._RP , 0._RP       , 0._RP       , 0._RP                    , -gamma_Pr * Q_z(IRHO) /)
+         df_dq(IRHO:IRHOE,2,3) = (/ 0._RP , -Q_z(IRHO) , 0._RP       ,  2._RP*lambda*Q_x(IRHO) , (1._RP - gamma_Pr) * (Q(IRHO) * U_z(IX) - u * Q_z(IRHO)) + Q(IRHO) * U_x(IZ) + 2._RP * lambda * w * Q_x(IRHO) /)
+         df_dq(IRHO:IRHOE,3,3) = (/ 0._RP , 0._RP       , -Q_z(IRHO) ,  2._RP*lambda*Q_y(IRHO) , (1._RP - gamma_Pr) * (Q(IRHO) * U_z(IY) - v * Q_z(IRHO)) + Q(IRHO) * U_y(IZ) + 2._RP * lambda * w * Q_y(IRHO) /)
+         df_dq(IRHO:IRHOE,4,3) = (/ 0._RP , -Q_x(IRHO) , -Q_y(IRHO) , -4._RP*lambda*Q_z(IRHO) , -w * (lambda - gamma_Pr) * Q_z(IRHO) + Q(IRHO) * ( 2._RP - gamma_Pr) * U_z(IZ) - V_gradRho - 2._RP * lambda * rho_DivV /)
+         df_dq(IRHO:IRHOE,5,3) = (/ 0._RP , 0._RP       , 0._RP       , 0._RP                    , -gamma_Pr * Q_z(IRHO) /)
          
 !
 !        Scale with mu/(rho² Re) .or. kappa/(rho² Re)
@@ -913,7 +926,7 @@
          u_tau = sqrt(abs(tau_w) / Q(IRHO)) * sign(1.0_RP, tau_w)
 
       End Subroutine getFrictionVelocity
-   END Module Physics_NS
+   END Module Physics_NSTPT
 !@mark -
 !
 ! /////////////////////////////////////////////////////////////////////
@@ -927,9 +940,9 @@
       SUBROUTINE ComputeEigenvaluesForState( Q, eigen )
       
       USE SMConstants
-      USE PhysicsStorage_NS
-      USE VariableConversion_NS, ONLY:Pressure
-      use FluidData_NS,          only: Thermodynamics
+      USE PhysicsStorage_NSTPT
+      USE VariableConversion_NSTPT, ONLY:Pressure
+      use FluidData_NSTPT,          only: Thermodynamics
       IMPLICIT NONE
 !
 !     ---------

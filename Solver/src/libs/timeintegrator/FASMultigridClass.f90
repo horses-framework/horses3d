@@ -34,7 +34,7 @@ module FASMultigridClass
    use MPI_Utilities          , only: infNorm, L2Norm! , MPI_SumAll
    use mkl_spblas
    use IBMClass
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS)) && (!(TRANSPORT))
    use ManufacturedSolutionsNS
 #elif defined(SPALARTALMARAS)
    use ManufacturedSolutionsNSSA
@@ -513,7 +513,7 @@ module FASMultigridClass
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
    recursive subroutine RecursiveConstructor(Solver, N1x, N1y, N1z, lvl, controlVariables)
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS)) && (!(TRANSPORT))
    use ManufacturedSolutionsNS
 #elif defined(SPALARTALMARAS)
    use ManufacturedSolutionsNSSA
@@ -592,7 +592,7 @@ module FASMultigridClass
 !        (only for lower meshes)
 !     --------------------------------------------------------------
 !
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS)) && (!(TRANSPORT))
       if (ManSol) then
          DO iEl = 1, nelem
 

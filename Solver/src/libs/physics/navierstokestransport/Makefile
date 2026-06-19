@@ -11,12 +11,12 @@ MOD_FLAG?=-J
 
 
 
-LIBOBJS = ./build/FluidData_NS.o \
-		  ./build/PhysicsStorage_NS.o \
-		  ./build/VariableConversion_NS.o \
+LIBOBJS = ./build/FluidData_NSTPT.o \
+		  ./build/PhysicsStorage_NSTPT.o \
+		  ./build/VariableConversion_NSTPT.o \
 		  ./build/ArtificialViscosity.o \
-		  ./build/Physics_NS.o \
-		  ./build/RiemannSolvers_NS.o \
+		  ./build/Physics_NSTPT.o \
+		  ./build/RiemannSolvers_NSTPT.o \
 		  ./build/ManufacturedSolutions.o 
 
 LIB = physicsnstpt

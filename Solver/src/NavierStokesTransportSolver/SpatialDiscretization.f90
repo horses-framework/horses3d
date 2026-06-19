@@ -1709,7 +1709,7 @@ module SpatialDiscretization
 !
       subroutine computeElementInterfaceFlux(f)
          use FaceClass
-         use RiemannSolvers_NS
+         use RiemannSolvers_NSTPT
          implicit none
          type(Face)   , intent(inout) :: f
          integer       :: i, j
@@ -1777,6 +1777,8 @@ module SpatialDiscretization
 !
                call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
                                   QRight = f % storage(2) % Q(:,i,j), &
+                                  transportVelocityLeft = transportVelocity, &
+                                  transportVelocityRight = transportVelocity, &
                                   nHat   = f % geom % normal(:,i,j), &
                                   t1     = f % geom % t1(:,i,j), &
                                   t2     = f % geom % t2(:,i,j), &
@@ -1800,7 +1802,7 @@ module SpatialDiscretization
 
       subroutine computeMPIFaceFlux(f)
          use FaceClass
-         use RiemannSolvers_NS
+         use RiemannSolvers_NSTPT
          implicit none
          type(Face)   , intent(inout) :: f
          integer       :: i, j
@@ -1870,6 +1872,8 @@ module SpatialDiscretization
 !
                call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
                                   QRight = f % storage(2) % Q(:,i,j), &
+                                  transportVelocityLeft = transportVelocity, &
+                                  transportVelocityRight = transportVelocity, &
                                   nHat   = f % geom % normal(:,i,j), &
                                   t1     = f % geom % t1(:,i,j), &
                                   t2     = f % geom % t2(:,i,j), &
@@ -1896,7 +1900,7 @@ module SpatialDiscretization
       SUBROUTINE computeBoundaryFlux(f, time, mesh)
       USE ElementClass
       use FaceClass
-      USE RiemannSolvers_NS
+      USE RiemannSolvers_NSTPT
       use WallFunctionBC
       use WallFunctionConnectivity
       IMPLICIT NONE
@@ -2014,6 +2018,8 @@ module SpatialDiscretization
             call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
                                QRight = f % storage(2) % Q(:,i,j), &
                                nHat   = f % geom % normal(:,i,j), &
+                               transportVelocityLeft = transportVelocity, &
+                               transportVelocityRight = transportVelocity, &
                                t1     = f % geom % t1(:,i,j), &
                                t2     = f % geom % t2(:,i,j), &
                                flux   = inv_flux)

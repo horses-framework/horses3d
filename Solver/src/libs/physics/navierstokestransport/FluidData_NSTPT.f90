@@ -1,5 +1,5 @@
 #include "Includes.h"
-module FluidData_NS
+module FluidData_NSTPT
    use SMConstants
    implicit none
 
@@ -191,4 +191,4 @@ module FluidData_NS
 
       end subroutine getThermalConductivity3D
 
-end module FluidData_NS
+end module FluidData_NSTPT

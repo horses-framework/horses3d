@@ -11,8 +11,10 @@ module PhysicsStorage
 #endif
 #if defined(SPALARTALMARAS)
    use PhysicsStorage_NSSA
-#elif defined(NAVIERSTOKES)
+#elif defined(NAVIERSTOKES) && !defined(TRANSPORT)
    use PhysicsStorage_NS
+#elif defined(NAVIERSTOKES) && defined(TRANSPORT)
+   use PhysicsStorage_NSTPT
 #elif defined(INCNS)
    use PhysicsStorage_iNS
 #elif defined(MULTIPHASE)
@@ -81,8 +83,10 @@ module PhysicsStorage
 !
 !        Construct NSE physics
 !        ---------------------
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS)) && (!(TRANSPORT))
          call ConstructPhysicsStorage_NS( controlVariables, Lref, timeRef_NS, success )
+#elif defined(NAVIERSTOKES) && (TRANSPORT)
+         call ConstructPhysicsStorage_NSTPT( controlVariables, Lref, timeRef_NS, success )
 #elif defined(SPALARTALMARAS)
          call ConstructPhysicsStorage_NSSA( controlVariables, Lref, timeRef_NS, success )
 #elif defined(INCNS)
@@ -114,8 +118,10 @@ module PhysicsStorage
 !        ****************
 !
          call DescribePhysicsStorage_Common
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS)) && (!(TRANSPORT))
          call DescribePhysicsStorage_NS()
+#elif defined(NAVIERSTOKES) && (TRANSPORT)
+         call DescribePhysicsStorage_NSTPT()
 #elif defined(SPALARTALMARAS)
          call DescribePhysicsStorage_NSSA()
 #elif defined(INCNS)

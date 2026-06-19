@@ -1,7 +1,9 @@
 #include "Includes.h"
 module VariableConversion
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS)) && (!(TRANSPORT))
    use VariableConversion_NS
+#elif defined(NAVIERSTOKES) && (TRANSPORT)
+   use VariableConversion_NSTPT
 #elif defined(SPALARTALMARAS)
    USE VariableConversion_NSSA
 #elif defined(INCNS)

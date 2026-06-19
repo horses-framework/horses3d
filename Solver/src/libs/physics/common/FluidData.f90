@@ -1,8 +1,10 @@
 module FluidData
 #if defined(SPALARTALMARAS)
    use FluidData_NSSA
-#elif defined(NAVIERSTOKES)
+#elif defined(NAVIERSTOKES) && (!(TRANSPORT))
    use FluidData_NS
+#elif defined(NAVIERSTOKES) && (TRANSPORT)
+   use FluidData_NSTPT
 #elif defined(INCNS)
    use FluidData_iNS
 #elif defined(MULTIPHASE)

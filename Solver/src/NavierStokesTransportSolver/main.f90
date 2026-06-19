@@ -13,7 +13,7 @@
       use SpatialDiscretization
       use pAdaptationClass          , only: GetMeshPolynomialOrders
       use NodalStorageClass
-      use ManufacturedSolutionsNS
+      use ManufacturedSolutionsNSTPT
       use FluidData
       use FileReaders               , only: ReadControlFile
       use FileReadingUtilities      , only: getFileName

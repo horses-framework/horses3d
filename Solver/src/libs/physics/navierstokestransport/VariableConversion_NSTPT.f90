@@ -1,8 +1,8 @@
 #include "Includes.h"
-module VariableConversion_NS
+module VariableConversion_NSTPT
    use SMConstants
-   use PhysicsStorage_NS
-   use FluidData_NS
+   use PhysicsStorage_NSTPT
+   use FluidData_NSTPT
    implicit none
 
    private
@@ -28,7 +28,7 @@ module VariableConversion_NS
     abstract interface
       pure subroutine getVelocityGradients_f(Q,Q_x,Q_y,Q_z,U_x,U_y,U_z)
          use SMConstants
-         use PhysicsStorage_NS
+         use PhysicsStorage_NSTPT
          implicit none
          real(kind=RP), intent(in)  :: Q(NCONS)
          real(kind=RP), intent(in)  :: Q_x(NGRAD), Q_y(NGRAD), Q_z(NGRAD)
@@ -129,7 +129,8 @@ module VariableConversion_NS
                  -Q(IRHOU) * sRho, &
                  -Q(IRHOV) * sRho, &
                  -Q(IRHOW) * sRho, &
-                 1._RP]
+                 1._RP, &
+                 0.0_RP] !AJRTODO
          
          dTdQ = dTdQ * thermodynamics % gammaMinus1 * dimensionless % gammaM2 * sRho
          
@@ -617,4 +618,4 @@ module VariableConversion_NS
          end select
 
       end subroutine set_getVelocityGradients
-end module VariableConversion_NS
+end module VariableConversion_NSTPT

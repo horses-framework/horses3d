@@ -3590,10 +3590,12 @@ slavecoord:             DO l = 1, 4
          use SolutionFile
          use MPI_Process_Info
          use MappedGeometryClass, only: vCross, ComputeVorticity
-#if (defined(NAVIERSTOKES) && !(defined(SPALARTALMARAS)) )
+#if (defined(NAVIERSTOKES) && !(defined(SPALARTALMARAS)) && !(defined(TRANSPORT)))
          use VariableConversion_NS, only: getVelocityGradients_STATE, Pressure
 #elif (defined(NAVIERSTOKES) && (defined(SPALARTALMARAS)) )
          use VariableConversion_NSSA, only: getVelocityGradients_STATE, Pressure
+#elif (defined(NAVIERSTOKES) && (defined(TRANSPORT)))
+         use VariableConversion_NSTPT, only: getVelocityGradients_STATE, Pressure
 #elif defined(INCNS)
          use VariableConversion_iNS, only: getVelocityGradients
 #elif defined(MULTIPHASE)
@@ -3700,10 +3702,12 @@ slavecoord:             DO l = 1, 4
          use SolutionFile
          use MPI_Process_Info
          use MappedGeometryClass, only: vCross, ComputeVorticity
-#if (defined(NAVIERSTOKES) && !(defined(SPALARTALMARAS)) )
+#if (defined(NAVIERSTOKES) && !(defined(SPALARTALMARAS)) && !(defined(TRANSPORT)))
          use VariableConversion_NS, only: getVelocityGradients_STATE, Pressure
 #elif (defined(NAVIERSTOKES) && (defined(SPALARTALMARAS)) )
          use VariableConversion_NSSA, only: getVelocityGradients_STATE, Pressure
+#elif (defined(NAVIERSTOKES) && (defined(TRANSPORT)))
+         use VariableConversion_NSTPT, only: getVelocityGradients_STATE, Pressure
 #elif defined(INCNS)
          use VariableConversion_iNS, only: getVelocityGradients
 #elif defined(MULTIPHASE)

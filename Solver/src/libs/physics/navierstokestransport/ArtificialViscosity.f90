@@ -1,9 +1,9 @@
 #include "Includes.h"
 module ArtificialViscosity
    use SMConstants
-   use PhysicsStorage_NS
-   use VariableConversion_NS, only: Pressure, getVelocityGradients
-   use FluidData_NS, only: thermodynamics
+   use PhysicsStorage_NSTPT
+   use VariableConversion_NSTPT, only: Pressure, getVelocityGradients
+   use FluidData_NSTPT, only: thermodynamics
 
 
    private

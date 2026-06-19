@@ -9,8 +9,10 @@ module LESModels
    use PhysicsStorage
    use FluidData
 !   use VariableConversion        , only: getVelocityGradients
-#if defined (NAVIERSTOKES) 
+#if defined (NAVIERSTOKES) && (!(TRANSPORT))
    use VariableConversion_NS     , only: getVelocityGradients
+#elif defined (NAVIERSTOKES) && ((TRANSPORT))
+   use VariableConversion_NSTPT  , only: getVelocityGradients
 #elif defined (INCNS) 
    use VariableConversion_iNS     , only: getVelocityGradients 
 #elif defined (MULTIPHASE) 

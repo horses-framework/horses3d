@@ -17,8 +17,11 @@ Module DGSEMClass
    USE PhysicsStorage
    use FileReadingUtilities      , only: getFileName
    use MPI_Process_Info          , only: MPI_Process
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS)) && (!(TRANSPORT))
    use ManufacturedSolutionsNS
+   use FWHGeneralClass
+#elif defined(NAVIERSTOKES) && (TRANSPORT)
+   use ManufacturedSolutionsNSTPT
    use FWHGeneralClass
 #elif defined(SPALARTALMARAS)
    use ManufacturedSolutionsNSSA
@@ -794,7 +797,7 @@ Module DGSEMClass
 !$omp parallel shared(maxResidual, R1, R2, R3, R4, R5, R6, c, mesh) default(private)
 !$omp do reduction(max:R1,R2,R3,R4,R5, R6, c) schedule(runtime)
       DO id = 1, SIZE( mesh % elements )
-#if defined FLOW && !(SPALARTALMARAS)
+#if defined FLOW && !(SPALARTALMARAS) && !(TRANSPORT)
          localR1 = maxval(abs(mesh % elements(id) % storage % QDot(1,:,:,:)))
          localR2 = maxval(abs(mesh % elements(id) % storage % QDot(2,:,:,:)))
          localR3 = maxval(abs(mesh % elements(id) % storage % QDot(3,:,:,:)))
@@ -813,7 +816,7 @@ Module DGSEMClass
          localc    = maxval(abs(mesh % elements(id) % storage % cDot(:,:,:,:)))
 #endif
 
-#if defined FLOW && !(SPALARTALMARAS)
+#if defined FLOW && !(SPALARTALMARAS) && !(TRANSPORT)
          R1 = max(R1,localR1)
          R2 = max(R2,localR2)
          R3 = max(R3,localR3)
@@ -835,8 +838,10 @@ Module DGSEMClass
 !$omp end do
 !$omp end parallel
 
-#if defined FLOW && (!(SPALARTALMARAS))
+#if defined FLOW && (!(SPALARTALMARAS)) && (!(TRANSPORT))
       maxResidual(1:NCONS) = [R1, R2, R3, R4, R5]
+#elif defined(FLOW) && (TRANSPORT)
+      maxResidual(1:NCONS) = [R1, R2, R3, R4, R5, R6]
 #elif defined(SPALARTALMARAS)
       maxResidual(1:NCONS) = [R1, R2, R3, R4, R5, R6]
 #endif

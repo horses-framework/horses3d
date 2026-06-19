@@ -6,11 +6,11 @@
 !
 !
 !////////////////////////////////////////////////////////////////////////////////////////
-MODULE ManufacturedSolutionsNS
+MODULE ManufacturedSolutionsNSTPT
    USE SMConstants
-   USE PhysicsStorage_NS
-   USE Physics_NS
-   use FluidData_NS
+   USE PhysicsStorage_NSTPT
+   USE Physics_NSTPT
+   use FluidData_NSTPT
    IMPLICIT NONE
 
    private
@@ -3248,4 +3248,4 @@ MODULE ManufacturedSolutionsNS
    
    END SUBROUTINE ManufacturedSolutionSourceEuler
 
-END MODULE ManufacturedSolutionsNS
+END MODULE ManufacturedSolutionsNSTPT
