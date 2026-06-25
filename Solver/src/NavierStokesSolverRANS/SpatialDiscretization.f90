@@ -33,11 +33,11 @@ module SpatialDiscretization
 
 
       abstract interface
-      SUBROUTINE computeElementInterfaceFluxF(f, fma )
+      SUBROUTINE computeElementInterfaceFluxF(f, masterFace )
             use FaceClass
             IMPLICIT NONE
             TYPE(Face)   , INTENT(inout) :: f
-            type(Face), optional, intent(inout) :: fma
+            type(Face), optional, intent(inout) :: masterFace
          end subroutine computeElementInterfaceFluxF
 
          SUBROUTINE computeMPIFaceFluxF(f)
@@ -479,7 +479,7 @@ module SpatialDiscretization
                end associate
                do m=1,4
                   if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                     call computeElementInterfaceFlux(fma=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                     call computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                   end if 
                end do 
          elseif (mesh % faces(fID) % IsMortar==0) then 
@@ -555,7 +555,7 @@ module SpatialDiscretization
                   end associate
                   do m=1,4
                      if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                        call computeElementInterfaceFlux(fma=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                        call computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
                end if 
@@ -1093,12 +1093,12 @@ module SpatialDiscretization
 !
 !/////////////////////////////////////////////////////////////////////////////////////////////
 !
-      SUBROUTINE computeElementInterfaceFlux_NSSA(f, fma)
+      SUBROUTINE computeElementInterfaceFlux_NSSA(f, masterFace)
          use FaceClass
          use RiemannSolvers_NSSA
          IMPLICIT NONE
          TYPE(Face)   , INTENT(inout) :: f
-        type(Face), optional, intent(inout) :: fma 
+        type(Face), optional, intent(inout) :: masterFace 
 
          integer       :: i, j
          real(kind=RP) :: inv_flux(1:NCONS,0:f % Nf(1),0:f % Nf(2))
@@ -1195,10 +1195,10 @@ module SpatialDiscretization
          Sidearray = (/1,2/)
          call f % ProjectFluxToElements(NCONS, flux, Sidearray)
          end if 
-     if (f % IsMortar==2 .and. present(fma)) then 
+     if (f % IsMortar==2 .and. present(masterFace)) then 
       Sidearray = (/1,0/)
-      call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
-      fma=f, MortarFlux=flux)
+      call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
+      slaveFace=f, MortarFlux=flux)
       Sidearray = (/0,2/)
       call f % ProjectFluxToElements(NCONS, flux, Sidearray)
      end if 

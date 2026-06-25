@@ -437,7 +437,7 @@ stop
                   end associate
                   do m=1,4
                      if (f%Mortar(m) .ne. 0) then 
-                        CALL computeElementInterfaceFlux(fma=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                        CALL computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do  
                elseif (f % IsMortar==0) then
@@ -503,7 +503,7 @@ stop
                      end associate
                      do m=1,4
                         if (mesh % faces(fID)%Mortar(m) .ne. 0) then
-                           CALL computeElementInterfaceFlux(fma=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                           CALL computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                         end if 
                      end do 
                   end if 
@@ -723,13 +723,13 @@ stop
 ! 
 !///////////////////////////////////////////////////////////////////////////////////////////// 
 ! 
-      subroutine computeElementInterfaceFlux(f, fma)
+      subroutine computeElementInterfaceFlux(f, masterFace)
          use FaceClass
          use Physics
          use PhysicsStorage
          IMPLICIT NONE
          TYPE(Face)   , INTENT(inout) :: f   
-         type(Face), optional, intent(inout) :: fma   
+         type(Face), optional, intent(inout) :: masterFace    
 
          integer       :: i, j
          real(kind=RP) :: flux(1:NCOMP,0:f % Nf(1),0:f % Nf(2))
@@ -774,9 +774,9 @@ stop
       if (f % IsMortar==0) then 
          call f % ProjectFluxToElements(NCOMP, flux, (/1,2/))
       end if 
-      if (f % IsMortar==2 .and. present(fma)) then 
-         call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), &
-            fma=f, MortarFlux=flux)
+      if (f % IsMortar==2 .and. present(masterFace)) then 
+         call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), &
+            slaveFace=f, MortarFlux=flux)
          call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
       end if 
       !end if 

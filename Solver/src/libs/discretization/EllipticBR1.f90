@@ -328,7 +328,7 @@ module EllipticBR1
                   end associate
                   do m=1,4
                      if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                     call BR1_ComputeElementInterfaceAverage(self=self, fma=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                     call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
                      f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
@@ -357,7 +357,7 @@ module EllipticBR1
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % mortar_faces)
             fID = mesh % mortar_faces(iFace)%ID
-            call BR1_ComputeElementInterfaceAverage(self=self, fma=mesh % faces (mesh % mortar_faces(fID)%Mortar(1)),fmb=mesh % faces (mesh % mortar_faces(fID)%Mortar(2)),&
+            call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces (mesh % mortar_faces(fID)%Mortar(1)),masterFace2=mesh % faces (mesh % mortar_faces(fID)%Mortar(2)),&
              nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, f=mesh % mortar_faces(fID), sliding=.true.)
          end do 
 !$omp end do        
@@ -692,7 +692,7 @@ module EllipticBR1
 
       end subroutine BR1_GradientFaceLoop
 !
-      subroutine BR1_ComputeElementInterfaceAverage(self, f, nEqn, nGradEqn, GetGradients,fma, fmb, sliding)
+      subroutine BR1_ComputeElementInterfaceAverage(self, f, nEqn, nGradEqn, GetGradients,masterFace1, masterFace2, sliding)
          use Physics  
          use ElementClass
          use FaceClass
@@ -706,8 +706,8 @@ module EllipticBR1
          type(Face)                       :: f
          integer,    intent(in)           :: nEqn, nGradEqn
          procedure(GetGradientValues_f)   :: GetGradients
-         type(Face), optional             :: fma
-         type(Face), optional             :: fmb
+         type(Face), optional             :: masterFace1
+         type(Face), optional             :: masterFace2
          logical, optional                :: sliding 
 !
 !        ---------------
@@ -753,17 +753,17 @@ module EllipticBR1
             Sidearray = (/1,2/)
             call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
             end if 
-            if (f % IsMortar==2 .and. present(fma)) then 
+            if (f % IsMortar==2 .and. present(masterFace1)) then 
                Sidearray = (/1,0/)
-               call fma % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, fma=f, Hflux=uStar_n,whichElements=Sidearray,factor=1) 
+               call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1) 
                Sidearray = (/0,2/)
                call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
             end if 
          else 
             Sidearray = (/1,0/)
-            call fma % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, fma=f, Hflux=uStar_n,whichElements=Sidearray,factor=1, sliding=sliding) 
+            call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1, sliding=sliding) 
             Sidearray = (/2,0/)
-            call fmb % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, fma=f, Hflux=uStar_n,whichElements=Sidearray,factor=1,sliding=sliding) 
+            call masterFace2 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1,sliding=sliding) 
          end if 
          
       end subroutine BR1_ComputeElementInterfaceAverage   

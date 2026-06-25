@@ -231,7 +231,7 @@ module EllipticBR2
                   end associate
                   do m=1,4
                      if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                        call BR2_GradientInterfaceSolution(fma=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                        call BR2_GradientInterfaceSolution(masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
                         f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
@@ -253,7 +253,7 @@ module EllipticBR2
                   end associate
                   do m=1,4
                      if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                        call BR2_GradientInterfaceSolution(fma=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                        call BR2_GradientInterfaceSolution(masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
                         f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
@@ -324,7 +324,7 @@ module EllipticBR2
                end associate
                do m=1, 4
                   if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                  call BR2_GradientInterfaceSolution(fma=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                  call BR2_GradientInterfaceSolution(masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
                   f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                   end if 
                end do
@@ -528,7 +528,7 @@ module EllipticBR2
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
-      subroutine BR2_GradientInterfaceSolution(f, nEqn, nGradEqn, GetGradients, fma)
+      subroutine BR2_GradientInterfaceSolution(f, nEqn, nGradEqn, GetGradients, masterFace1)
 !
 !        ************************************************
 !           The BR2 is written in strong form, since it
@@ -555,7 +555,7 @@ module EllipticBR2
          type(Face)                       :: f
          integer, intent(in)              :: nEqn, nGradEqn
          procedure(GetGradientValues_f)   :: GetGradients
-         type(Face), optional             :: fma
+         type(Face), optional             :: masterFace1 
 !
 !        ---------------
 !        Local variables
@@ -580,8 +580,8 @@ module EllipticBR2
          
                call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/1,2/),1)
             end if 
-            if (f % IsMortar==2 .and. present(fma)) then 
-                 call fma % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, fma=f, HFlux=HFlux,whichElements=(/1,0/),factor=1) 
+            if (f % IsMortar==2 .and. present(masterFace1)) then 
+                 call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, HFlux=HFlux,whichElements=(/1,0/),factor=1) 
 
                  call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/0,2/),1)
             end if 
@@ -624,7 +624,7 @@ module EllipticBR2
          call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/thisSide, HMESH_NONE/),1)
          
          if (f % IsMortar==2) then 
-            !write(*,*) 'this side', thisSide
+
             call f% Interpolatesmall2biggrad(nGradEqn, HFlux)
             
          end if 

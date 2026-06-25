@@ -27,26 +27,26 @@ module SpatialDiscretization
       public   Initialize_SpaceAndTimeMethods, Finalize_SpaceAndTimeMethods
 
       abstract interface
-      SUBROUTINE computeElementInterfaceFluxF(f, fma)
-            use FaceClass
-            IMPLICIT NONE
-            TYPE(Face)   , INTENT(inout) :: f   
-            type(Face), optional, intent(inout) :: fma 
-         end subroutine computeElementInterfaceFluxF
+      SUBROUTINE computeElementInterfaceFluxF(f, masterFace)
+         use FaceClass
+         IMPLICIT NONE
+         TYPE(Face)   , INTENT(inout) :: f   
+         type(Face), optional, intent(inout) :: masterFace 
+      end subroutine computeElementInterfaceFluxF
 
-         SUBROUTINE computeMPIFaceFluxF(f)
-            use FaceClass
-            IMPLICIT NONE
-            TYPE(Face)   , INTENT(inout) :: f   
-         end subroutine computeMPIFaceFluxF
+      SUBROUTINE computeMPIFaceFluxF(f)
+         use FaceClass
+         IMPLICIT NONE
+         TYPE(Face)   , INTENT(inout) :: f   
+      end subroutine computeMPIFaceFluxF
 
-         SUBROUTINE computeBoundaryFluxF(f, time)
-            use SMConstants
-            use FaceClass,  only: Face
-            IMPLICIT NONE
-            type(Face),    intent(inout) :: f
-            REAL(KIND=RP)                :: time
-         end subroutine computeBoundaryFluxF
+      SUBROUTINE computeBoundaryFluxF(f, time)
+         use SMConstants
+         use FaceClass,  only: Face
+         IMPLICIT NONE
+         type(Face),    intent(inout) :: f
+         REAL(KIND=RP)                :: time
+      end subroutine computeBoundaryFluxF
       end interface
       
       character(len=LINE_LENGTH), parameter  :: viscousDiscretizationKey = "viscous discretization"
@@ -363,7 +363,7 @@ module SpatialDiscretization
                end associate
                do m=1,4
                   if (f%Mortar(m) .ne. 0) then 
-            CALL computeElementInterfaceFlux_iNS(fma=f, f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
+            CALL computeElementInterfaceFlux_iNS(masterFace=f, f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
                   end if 
                end do 
             elseif  (f % IsMortar==0) then
@@ -420,7 +420,7 @@ module SpatialDiscretization
                      end associate
                      do m=1,4
                         if (f%Mortar(m) .ne. 0) then 
-                           CALL computeElementInterfaceFlux_iNS(fma=f, f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                           CALL computeElementInterfaceFlux_iNS(masterFace=f, f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                         end if 
                      end do 
                   end if  
@@ -753,12 +753,12 @@ module SpatialDiscretization
 ! 
 !///////////////////////////////////////////////////////////////////////////////////////////// 
 ! 
-      SUBROUTINE computeElementInterfaceFlux_iNS(f, fma)
+      SUBROUTINE computeElementInterfaceFlux_iNS(f, masterFace)
          use FaceClass
          use RiemannSolvers_iNS
          IMPLICIT NONE
          TYPE(Face)   , INTENT(inout) :: f  
-         type(Face), optional, intent(inout) :: fma 
+         type(Face), optional, intent(inout) :: masterFace 
 
          integer       :: i, j
          real(kind=RP) :: inv_flux(1:NCONS,0:f % Nf(1),0:f % Nf(2))
@@ -828,9 +828,9 @@ module SpatialDiscretization
       if (f % IsMortar==0) then 
             call f % ProjectFluxToElements(NCONS, flux, (/1,2/))
        end if 
-       if (f % IsMortar==2 .and. present(fma)) then 
-         call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), &
-         fma=f, MortarFlux=flux)
+       if (f % IsMortar==2 .and. present(masterFace)) then 
+         call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), &
+         slaveFace=f, MortarFlux=flux)
          call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
       end if 
  !end if 

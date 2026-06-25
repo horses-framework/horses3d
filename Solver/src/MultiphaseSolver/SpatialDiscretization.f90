@@ -29,11 +29,11 @@ module SpatialDiscretization
       public   Initialize_SpaceAndTimeMethods, Finalize_SpaceAndTimeMethods
 
       abstract interface
-      SUBROUTINE computeElementInterfaceFluxF(f, fma)
+      SUBROUTINE computeElementInterfaceFluxF(f, masterFace)
             use FaceClass
             IMPLICIT NONE
             TYPE(Face)   , INTENT(inout) :: f   
-            type(Face), optional, intent(inout) :: fma
+            type(Face), optional, intent(inout) :: masterFace
          end subroutine computeElementInterfaceFluxF
 
          SUBROUTINE computeMPIFaceFluxF(f)
@@ -807,7 +807,7 @@ module SpatialDiscretization
                   end associate
                   do m=1,4
                      if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                        CALL computeElementInterfaceFlux_MU(fma=mesh% faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
+                        CALL computeElementInterfaceFlux_MU(masterFace=mesh% faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
                      end if
                   end do 
                elseif (mesh % faces(fID) % IsMortar==0) then
@@ -899,7 +899,7 @@ module SpatialDiscretization
                      end associate
                      do m=1,4
                         if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                           CALL computeElementInterfaceFlux_MU(fma=mesh% faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
+                           CALL computeElementInterfaceFlux_MU(masterFace=mesh% faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
                         end if 
                      end do 
                   end if 
@@ -1126,12 +1126,12 @@ module SpatialDiscretization
 ! 
 !///////////////////////////////////////////////////////////////////////////////////////////// 
 ! 
-      SUBROUTINE computeElementInterfaceFlux_MU(f, fma)
+      SUBROUTINE computeElementInterfaceFlux_MU(f, masterFace)
          use FaceClass
          use RiemannSolvers_MU
          IMPLICIT NONE
          TYPE(Face)   , INTENT(inout) :: f   
-         type(Face), optional, intent(inout) :: fma 
+         type(Face), optional, intent(inout) :: masterFace 
 
          integer       :: i, j
          real(kind=RP) :: inv_fluxL(1:NCONS,0:f % Nf(1),0:f % Nf(2))
@@ -1226,9 +1226,9 @@ module SpatialDiscretization
          call f % ProjectFluxToElements(NCONS, fluxL, (/1, HMESH_NONE/))
          call f % ProjectFluxToElements(NCONS, fluxR, (/2, HMESH_NONE/)) 
       end if 
-      if (f % IsMortar==2 .and. present(fma)) then 
+      if (f % IsMortar==2 .and. present(masterFace)) then 
 
-         call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), fma=f, MortarFlux=fluxL)
+         call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), slaveFace=f, MortarFlux=fluxL)
          call f % ProjectFluxToElements(NCONS, fluxR, (/2,0/))
       end if 
       END SUBROUTINE computeElementInterfaceFlux_MU
@@ -1510,7 +1510,7 @@ module SpatialDiscretization
                   end associate
                   do m=1,4
                      if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                        CALL Laplacian_computeElementInterfaceFlux(fma=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)) ) 
+                        CALL Laplacian_computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)) ) 
                      end if 
                   end do 
                elseif (mesh % faces(fID) % IsMortar==0) then
@@ -1583,7 +1583,7 @@ module SpatialDiscretization
                      end associate
                      do m=1,4
                         if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                           CALL Laplacian_computeElementInterfaceFlux(fma=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)) ) 
+                           CALL Laplacian_computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)) ) 
                         end if 
                      end do 
                   end if
@@ -1804,13 +1804,13 @@ module SpatialDiscretization
 ! 
 !///////////////////////////////////////////////////////////////////////////////////////////// 
 ! 
-      subroutine Laplacian_computeElementInterfaceFlux(f, fma)
+      subroutine Laplacian_computeElementInterfaceFlux(f, masterFace)
          use FaceClass
          use Physics
          use PhysicsStorage
          IMPLICIT NONE
          TYPE(Face)   , INTENT(inout) :: f  
-         type(Face), optional, intent(inout) :: fma 
+         type(Face), optional, intent(inout) :: masterFace 
 
          integer       :: i, j, m
          real(kind=RP) :: flux(1:NCOMP,0:f % Nf(1),0:f % Nf(2))
@@ -1856,8 +1856,8 @@ module SpatialDiscretization
          if (f % IsMortar==0) then 
          call f % ProjectFluxToElements(NCOMP, flux, (/1,2/))
       end if 
-      if (f % IsMortar==2 .and. present(fma)) then 
-         call fma % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), fma=f, MortarFlux=flux)
+      if (f % IsMortar==2 .and. present(masterFace)) then 
+         call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), slaveFace=f, MortarFlux=flux)
          call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
         end if 
       end subroutine Laplacian_computeElementInterfaceFlux
