@@ -510,7 +510,7 @@
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
-   subroutine Face_AdaptGradientsToFace(self, nEqn, Nelx, Nely, Uxe, Uye, Uze, side, fma, fmb, fmc ,fmd)
+   subroutine Face_AdaptGradientsToFace(self, nEqn, Nelx, Nely, Uxe, Uye, Uze, side)
       use MappedGeometryClass
       implicit none
       class(Face),   intent(inout)  :: self
@@ -520,10 +520,7 @@
       real(kind=RP), intent(in)     :: Uye(nEqn, 0:Nelx, 0:Nely)
       real(kind=RP), intent(in)     :: Uze(nEqn, 0:Nelx, 0:Nely)
       integer,       intent(in)     :: side
-      type(Face), optional, intent(inout)      ::fma
-      type(Face), optional, intent(inout)      ::fmb
-      type(Face), optional, intent(inout)      :: fmc
-      type(Face), optional, intent(inout)      :: fmd 
+
 !
 !     ---------------
 !     Local variables
@@ -655,51 +652,76 @@
       integer,       intent(in)     :: side
       type(Face), intent(inout)      ::fma
       logical,       intent(in), optional       :: sliding
-
-
+!
+!     ---------------
+!     Local variables
+!     ---------------
+!
       integer       :: i, j, l, m, ii, jj 
       real(kind=RP) :: MInt(0:fma%Nf(1),0:fma%Nf(1),1:2)
       real(kind=RP) :: Uxe_rot(nEqn, 0:Nelx, 0:Nely)
       real(kind=RP)     :: Uye_rot(nEqn, 0:Nelx, 0:Nely)
       real(kind=RP)     :: Uze_rot(nEqn, 0:Nelx, 0:Nely)
+
       Uxe_rot=0.0_RP
       Uye_rot=0.0_RP
       Uze_rot=0.0_RP
-         !if(side .ne. 1) then 
-         if ((fma % IsMortar.ne.2) .and. .not.present(sliding) ) then 
-            write(*,*) 'problem mortar slave projection sol to face'
-         end if 
-         if (.not.present(sliding)) then 
-            call GetPMortarMInt(fma, MInt)
-         else 
-            call GetSlidingMInt(fma, MInt)
-         end if 
+
+      if ((fma % IsMortar.ne.2) .and. .not.present(sliding) ) then 
+         write(*,*) 'problem mortar slave projection sol to face'
+      end if 
+      if (.not.present(sliding)) then 
+         call GetPMortarMInt(fma, MInt)
+      else 
+         call GetSlidingMInt(fma, MInt)
+      end if 
+   
+      if (.not.present(sliding)) then 
+         associate(Uxf => fma % storage(1) % U_x, &
+            Uyf => fma % storage(1) % U_y, &
+            Uzf => fma % storage(1) % U_z   )
+            Uxf=0.0_RP
+            Uyf=0.0_RP
+            Uzf=0.0_RP
+            do l = 0, fma % NfLeft(2)  ; do j = 0, fma % Nf(2)   
+               do m = 0, fma % NfLeft(1) ; do i = 0, fma % Nf(1)
+                  Uxf(:,i,j) =  Uxf(:,i,j) +  Mint(i,m,1) * Mint(j,l,2) &
+                                                         * Uxe(:,m,l)
+
+                  Uyf(:,i,j) =  Uyf(:,i,j) +  Mint(i,m,1) * Mint(j,l,2) &
+                                                         * Uye(:,m,l)
+
+                  Uzf(:,i,j) =  Uzf(:,i,j) +  Mint(i,m,1) * Mint(j,l,2) &
+                                                         * Uze(:,m,l)
       
-         if (.not.present(sliding)) then 
-            associate(Uxf => fma % storage(1) % U_x, &
-               Uyf => fma % storage(1) % U_y, &
-               Uzf => fma % storage(1) % U_z   )
-               Uxf=0.0_RP
-               Uyf=0.0_RP
-               Uzf=0.0_RP
-               do l = 0, fma % NfLeft(2)  ; do j = 0, fma % Nf(2)   
-                  do m = 0, fma % NfLeft(1) ; do i = 0, fma % Nf(1)
-                     Uxf(:,i,j) =  Uxf(:,i,j) +  Mint(i,m,1) * Mint(j,l,2) &
-                                                            * Uxe(:,m,l)
-   
-                     Uyf(:,i,j) =  Uyf(:,i,j) +  Mint(i,m,1) * Mint(j,l,2) &
-                                                            * Uye(:,m,l)
-   
-                     Uzf(:,i,j) =  Uzf(:,i,j) +  Mint(i,m,1) * Mint(j,l,2) &
-                                                            * Uze(:,m,l)
-         
-                  end do                 ; end do
-               end do                  ; end do
+               end do                 ; end do
+            end do                  ; end do
 
-         end associate
+      end associate
+      else 
+
+         if (side==1) then 
+         associate(Uxf => fma % storage(side) % U_x, &
+            Uyf => fma % storage(side) % U_y, &
+            Uzf => fma % storage(side) % U_z   )
+            Uxf=0.0_RP
+            Uyf=0.0_RP
+            Uzf=0.0_RP
+            do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
+            ! do j = 0, fma %Nf(2)  ; do l = 0, fma %NfLeft(1)   ; do i = 0, fma %Nf(1)
+               Uxf(:,i,j) = Uxf(:,i,j) + MInt(j,l,side) * Uxe(:,i,l)
+               Uyf(:,i,j) = Uyf(:,i,j) + MInt(j,l,side) * Uye(:,i,l)
+               Uzf(:,i,j) = Uzf(:,i,j) + MInt(j,l,side) * Uze(:,i,l)
+            end do                  ; end do                   ; end do
+         end associate 
          else 
-
-            if (side==1) then 
+            do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
+               ! call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), self % rotation, ii, jj)
+               call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), fma % rotation, ii, jj)
+               Uxe_rot(:,i,j) = Uxe(:,ii,jj) 
+               Uye_rot(:,i,j) = Uye(:,ii,jj) 
+               Uze_rot(:,i,j) = Uze(:,ii,jj) 
+            end do                        ; end do
             associate(Uxf => fma % storage(side) % U_x, &
                Uyf => fma % storage(side) % U_y, &
                Uzf => fma % storage(side) % U_z   )
@@ -707,34 +729,13 @@
                Uyf=0.0_RP
                Uzf=0.0_RP
                do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
-               ! do j = 0, fma %Nf(2)  ; do l = 0, fma %NfLeft(1)   ; do i = 0, fma %Nf(1)
-                  Uxf(:,i,j) = Uxf(:,i,j) + MInt(j,l,side) * Uxe(:,i,l)
-                  Uyf(:,i,j) = Uyf(:,i,j) + MInt(j,l,side) * Uye(:,i,l)
-                  Uzf(:,i,j) = Uzf(:,i,j) + MInt(j,l,side) * Uze(:,i,l)
+                  Uxf(:,i,j) = Uxf(:,i,j) + MInt(j,l,side) * Uxe_rot(:,i,l)
+                  Uyf(:,i,j) = Uyf(:,i,j) + MInt(j,l,side) * Uye_rot(:,i,l)
+                  Uzf(:,i,j) = Uzf(:,i,j) + MInt(j,l,side) * Uze_rot(:,i,l)
                end do                  ; end do                   ; end do
             end associate 
-            else 
-               do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
-                  ! call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), self % rotation, ii, jj)
-                  call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), fma % rotation, ii, jj)
-                  Uxe_rot(:,i,j) = Uxe(:,ii,jj) 
-                  Uye_rot(:,i,j) = Uye(:,ii,jj) 
-                  Uze_rot(:,i,j) = Uze(:,ii,jj) 
-               end do                        ; end do
-               associate(Uxf => fma % storage(side) % U_x, &
-                  Uyf => fma % storage(side) % U_y, &
-                  Uzf => fma % storage(side) % U_z   )
-                  Uxf=0.0_RP
-                  Uyf=0.0_RP
-                  Uzf=0.0_RP
-                  do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
-                     Uxf(:,i,j) = Uxf(:,i,j) + MInt(j,l,side) * Uxe_rot(:,i,l)
-                     Uyf(:,i,j) = Uyf(:,i,j) + MInt(j,l,side) * Uye_rot(:,i,l)
-                     Uzf(:,i,j) = Uzf(:,i,j) + MInt(j,l,side) * Uze_rot(:,i,l)
-                  end do                  ; end do                   ; end do
-               end associate 
-            end if 
          end if 
+      end if 
    end subroutine Face_AdaptGradientsToMortarFace
    
    
@@ -996,58 +997,58 @@
 
    end subroutine Face_ProjectFluxToElements
 
-   subroutine Face_ProjectMortarFluxToElements(self, nEqn, whichElements, fma, MortarFlux, sliding)
+   subroutine Face_ProjectMortarFluxToElements(self, nEqn, whichElements, slaveFace, MortarFlux, sliding)
       use MappedGeometryClass
       use PhysicsStorage
       implicit none
-      class(Face)       :: self
+      class(Face)       :: self !Master mortar face
       integer,       intent(in)  :: nEqn
       integer,       intent(in)  :: whichElements(2)
-      type(Face), intent(inout)      ::fma
-      real(kind=RP), intent(in)  :: MortarFlux(1:nEqn, 0:fma % Nf(1), 0:fma % Nf(2))
+      type(Face), intent(inout)  :: slaveFace !Slave (small) mortar face
+      real(kind=RP), intent(in)  :: MortarFlux(1:nEqn, 0:slaveFace % Nf(1), 0:slaveFace % Nf(2))
       logical, intent(in), optional     :: sliding 
    
       integer           :: i, j, ii, jj, l, m, side, q, p, lm
-      real(kind=RP)     :: Mout(0: fma % NfLeft(1), 0:fma % NfLeft(1), 2)
-      real(kind=RP)     :: fStarAux(nEqn, 0:fma % NfRight(1), 0:fma % NfRight(2))
-      real(kind=RP)     :: fStarAux2(nEqn, 0:fma % NfRight(1), 0:fma % NfRight(2))
+      real(kind=RP)     :: Mout(0: slaveFace % NfLeft(1), 0:slaveFace % NfLeft(1), 2)
+      real(kind=RP)     :: fStarAux(nEqn, 0:slaveFace % NfRight(1), 0:slaveFace % NfRight(2))
+      real(kind=RP)     :: fStarAux2(nEqn, 0:slaveFace % NfRight(1), 0:slaveFace % NfRight(2))
 
       if (.not.present(sliding)) then 
-         call GetPMortarMout(fma, Mout)
+         call GetPMortarMout(slaveFace, Mout)
       else 
-         call GetSlidingMout(fma, Mout)
+         call GetSlidingMout(slaveFace, Mout)
       end if 
 
       if (.not.present(sliding)) then 
-            fStarAux(1:nEqn,:,:) = 0.0_RP 
-            fStarAux2(1:nEqn,:,:) = 0.0_RP 
-            do l = 0, fma % Nf(2)  ; do j = 0, fma % NfLeft(2)   
-               do m = 0, fma % Nf(1) ; do i = 0, fma % NfLeft(1)
-                  fStarAux(1:nEqn,i,j) =  fStarAux(1:nEqn,i,j) +  Mout(i,m,1) * Mout(j,l,2) &
-                                                         * MortarFlux(1:nEqn,m,l)
-      
-               end do                 ; end do
-            end do                  ; end do
+         fStarAux(1:nEqn,:,:) = 0.0_RP 
+         fStarAux2(1:nEqn,:,:) = 0.0_RP 
+         do l = 0, slaveFace % Nf(2)  ; do j = 0, slaveFace % NfLeft(2)   
+            do m = 0, slaveFace % Nf(1) ; do i = 0, slaveFace % NfLeft(1)
+               fStarAux(1:nEqn,i,j) =  fStarAux(1:nEqn,i,j) +  Mout(i,m,1) * Mout(j,l,2) &
+                                                      * MortarFlux(1:nEqn,m,l)
    
-   
-            associate(fStar => self % storage(1) % Fstar)
-               fStar=fStar + fStarAux
-            end associate 
-            associate(fStar => self % storage(2) % Fstar)
-               fStar=fStar + (-fStarAux)
-            end associate 
-            
-         else !sliding mortar
+            end do                 ; end do
+         end do                  ; end do
+
+
+         associate(fStar => self % storage(1) % Fstar)
+            fStar=fStar + fStarAux
+         end associate 
+         associate(fStar => self % storage(2) % Fstar)
+            fStar=fStar + (-fStarAux)
+         end associate 
+         
+      else !sliding mortar
          fStarAux(1:nEqn,:,:) = 0.0_RP 
          if (whichElements(1)==1) then 
             do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
                fStarAux(1:nEqn,i,j)= fStarAux(1:nEqn,i,j) + Mout(j,l,1) * MortarFlux(1:nEqn,i,l)
             end do                  ; end do                   ; end do
             associate(fStar => self % storage(1) % Fstar)
-               fStar=fStar + fma%s(1) * fStarAux
+               fStar=fStar + slaveFace%s(1) * fStarAux
             end associate 
             associate(fStar => self % storage(2) % Fstar)
-               fStar=fStar + fma%s(1) * (-fStarAux)
+               fStar=fStar + slaveFace%s(1) * (-fStarAux)
             end associate 
                
          else 
@@ -1060,10 +1061,10 @@
 
             fStarAux2=0.0_RP
 
-            fStarAux=fma%s(1) * (fStarAux)
+            fStarAux=slaveFace%s(1) * (fStarAux)
             associate(fStar => self % storage(2) % Fstar)
                do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
-                  call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), fma % rotation, ii, jj)
+                  call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), slaveFace % rotation, ii, jj)
                   fStarAux2(1:nEqn,ii,jj) = fStarAux(1:nEqn,i,j) 
                end do                        ; end do
                fStar=fStar+(-fStarAux2)
@@ -1072,7 +1073,7 @@
 
             associate(fStar => self % storage(1) % Fstar)
                do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
-                  call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), fma % rotation, ii, jj)
+                  call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), slaveFace % rotation, ii, jj)
                   fStarAux2(1:nEqn,ii,jj) = fStarAux(1:nEqn,i,j) 
                end do                        ; end do
                fStar=fStar+(-fStarAux2)
@@ -1315,7 +1316,6 @@
          end if 
       
    end subroutine Face_ProjectMortarFluxJacobianToElements
-   
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -1338,9 +1338,6 @@
       integer           :: i, j, ii, jj, l, m, side,p,q,lm
       real(kind=RP)     :: hStarAux(nEqn, NDIM, 0:self % NfRight(1), 0:self % NfRight(2))
       real(kind=RP), allocatable     :: Flux_tmp(:,:,:,:)
-      real(kind=RP), allocatable     :: Flux_master(:,:,:,:,:)
-      real(kind=RP), allocatable     ::small(:,:,:,:,:)
-      real(kind=RP), allocatable     ::Mout( :,:,:)
 
    do side = 1, 2
       select case ( whichElements(side) )
@@ -1426,40 +1423,39 @@
 
    end subroutine Face_ProjectGradientFluxToElements
 
-   subroutine Face_ProjectMortarGradientFluxToElements(self, nEqn, fma, Hflux, whichElements, factor, sliding)  
+   subroutine Face_ProjectMortarGradientFluxToElements(self, nEqn, slaveFace, Hflux, whichElements, factor, sliding)  
          use MappedGeometryClass
          use PhysicsStorage
          implicit none
          class(Face)       :: self
          integer,       intent(in)  :: nEqn
-         type(Face), intent(inout)      ::fma
-         real(kind=RP), intent(in), optional  :: Hflux(nEqn, NDIM, 0:fma % Nf(1), 0:fma % Nf(2))
+         type(Face), intent(inout)  :: slaveFace !Slave mortar face
+         real(kind=RP), intent(in), optional  :: Hflux(nEqn, NDIM, 0:slaveFace % Nf(1), 0:slaveFace % Nf(2))
          integer,       intent(in)  :: whichElements(2)
          integer,       intent(in)  :: factor               ! A factor that relates LEFT and RIGHT fluxes
          logical, optional, intent(in) :: sliding
 
-         real(kind=RP)     :: hStarAux(nEqn, NDIM, 0:fma % NfRight(1), 0:fma % NfRight(2))
-         real(kind=RP)     :: hStarAux2(nEqn, NDIM, 0:fma % NfRight(1), 0:fma % NfRight(2))
-         real(kind=RP)     :: ff(nEqn, NDIM, 0:fma % NfRight(1), 0:fma % NfRight(2))
-         real(kind=RP)     :: Mout(0: fma % NfLeft(1), 0:fma % NfLeft(1), 2)
+         real(kind=RP)     :: hStarAux(nEqn, NDIM, 0:slaveFace % NfRight(1), 0:slaveFace % NfRight(2))
+         real(kind=RP)     :: hStarAux2(nEqn, NDIM, 0:slaveFace % NfRight(1), 0:slaveFace % NfRight(2))
+         real(kind=RP)     :: Mout(0: slaveFace % NfLeft(1), 0:slaveFace % NfLeft(1), 2)
          integer           :: i, j, l, m, ii, jj
       
          if (.not.present(sliding)) then 
-            call GetPMortarMout(fma, Mout)
+            call GetPMortarMout(slaveFace, Mout)
          else 
-            call GetSlidingMout(fma, Mout)
+            call GetSlidingMout(slaveFace, Mout)
          end if 
 
          hStarAux = 0.0_RP 
          if (.not.present(sliding)) then 
-            do l = 0, fma % Nf(2)  ; do j = 0, fma % NfRight(2)   
-                  do m = 0, fma % Nf(1) ; do i = 0, fma % NfRight(1)
+            do l = 0, slaveFace % Nf(2)  ; do j = 0, slaveFace % NfRight(2)   
+                  do m = 0, slaveFace % Nf(1) ; do i = 0, slaveFace % NfRight(1)
                      hStarAux(:,:,i,j) =  hStarAux(:,:,i,j) +  Mout(i,m,1) * Mout(j,l,2) &
                                                             * Hflux(:,:,m,l)
          
                   end do                 ; end do
                end do                  ; end do
-               associate(unStar => self % storage(1) % unStar)
+            associate(unStar => self % storage(1) % unStar)
                   unStar=unStar+hStarAux
             end associate 
 
@@ -1473,13 +1469,9 @@
                hStarAux(:,:,i,j)= hStarAux(:,:,i,j) + Mout(j,l,whichElements(1)) * Hflux(:,:,i,l)
             end do                  ; end do                   ; end do 
 
-            hStarAux=fma%s(1) * (hStarAux)
+            hStarAux=slaveFace%s(1) * (hStarAux)
             associate(unStar => self % storage(1) % unStar)
-            !   do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
-            !      call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), self % rotation, ii, jj)
-            !      hStarAux2(:,:,ii,jj) = hStarAux(:,:,i,j) 
-            !   end do                        ; end do
-               unStar=unStar+factor*(hStarAux)
+
             end associate
                end if
                if (whichElements(1)==2) then 
@@ -1487,10 +1479,10 @@
                   do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
                   hStarAux(:,:,i,j)= hStarAux(:,:,i,j) + Mout(j,l,whichElements(1)) * Hflux(:,:,i,l)
                      end do                  ; end do                   ; end do 
-                     hStarAux=fma%s(1) * (hStarAux)
+                     hStarAux=slaveFace%s(1) * (hStarAux)
                      associate(unStar => self % storage(2) % unStar)
                         do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
-                           call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), fma % rotation, ii, jj)
+                           call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), slaveFace % rotation, ii, jj)
                            hStarAux2(:,:,ii,jj) = hStarAux(:,:,i,j) 
                         end do                        ; end do
                         unStar=unStar+factor*(hStarAux2)
@@ -1967,6 +1959,8 @@
       to % geom = from % geom
       to % storage = from % storage
       to % IsMortar = from % IsMortar
+      to % Mortarpos = from % Mortarpos
+
    end subroutine Face_Assign
 !
 !////////////////////////////////////////////////////////////////////////
