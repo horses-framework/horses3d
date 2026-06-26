@@ -475,11 +475,13 @@
          error stop
       end if
       ! Read diffusion-dispersion coefficient
-      transportD = -33.0_rp
+      transportD = 0.0_rp
       keyword = controlVariables % stringValueForKey(trim(transportDTypeKey), requestedLength = KEYWORD_LENGTH)
       call ToLower(keyword)
       if (trim(keyword) .eq. trim(transportDTypeConstantKey)) then
-         transportD = controlVariables % DoublePrecisionValueForKey(transportDKey)
+         transportD(IX,IX) = controlVariables % DoublePrecisionValueForKey(transportDKey)
+         transportD(IY,IY) = transportD(IX,IX)
+         transportD(IZ,IZ) = transportD(IX,IX)
       elseif (trim(keyword) .eq. trim(transportDTypeTensorKey)) then
          allocate(array(1:9))
          array = GetRealArrayFromString( controlVariables % StringValueForKey(transportDKey,requestedLength = LINE_LENGTH))
