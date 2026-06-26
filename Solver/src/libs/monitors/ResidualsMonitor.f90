@@ -187,6 +187,9 @@ module ResidualsMonitorClass
          write(STD_OUT , '(3X,A10)' , advance = "no") "y-momentum"
          write(STD_OUT , '(3X,A10)' , advance = "no") "z-momentum"
          write(STD_OUT , '(3X,A10)' , advance = "no") "energy"
+#ifdef TRANSPORT
+         write(STD_OUT , '(3X,A10)' , advance = "no") "concentration"
+#endif
 #elif defined(SPALARTALMARAS)
          write(STD_OUT , '(3X,A10)' , advance = "no") "continuity"
          write(STD_OUT , '(3X,A10)' , advance = "no") "x-momentum"

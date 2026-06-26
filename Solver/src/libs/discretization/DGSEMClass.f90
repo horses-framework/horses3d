@@ -797,12 +797,15 @@ Module DGSEMClass
 !$omp parallel shared(maxResidual, R1, R2, R3, R4, R5, R6, c, mesh) default(private)
 !$omp do reduction(max:R1,R2,R3,R4,R5, R6, c) schedule(runtime)
       DO id = 1, SIZE( mesh % elements )
-#if defined FLOW && !(SPALARTALMARAS) && !(TRANSPORT)
+#if defined FLOW && !(SPALARTALMARAS)
          localR1 = maxval(abs(mesh % elements(id) % storage % QDot(1,:,:,:)))
          localR2 = maxval(abs(mesh % elements(id) % storage % QDot(2,:,:,:)))
          localR3 = maxval(abs(mesh % elements(id) % storage % QDot(3,:,:,:)))
          localR4 = maxval(abs(mesh % elements(id) % storage % QDot(4,:,:,:)))
          localR5 = maxval(abs(mesh % elements(id) % storage % QDot(5,:,:,:)))
+#ifdef TRANSPORT
+         localR6 = maxval(abs(mesh % elements(id) % storage % QDot(6,:,:,:)))
+#endif
 #else
          localR1 = maxval(abs(mesh % elements(id) % storage % QDot(1,:,:,:)))
          localR2 = maxval(abs(mesh % elements(id) % storage % QDot(2,:,:,:)))
@@ -816,12 +819,15 @@ Module DGSEMClass
          localc    = maxval(abs(mesh % elements(id) % storage % cDot(:,:,:,:)))
 #endif
 
-#if defined FLOW && !(SPALARTALMARAS) && !(TRANSPORT)
+#if defined FLOW && !(SPALARTALMARAS)
          R1 = max(R1,localR1)
          R2 = max(R2,localR2)
          R3 = max(R3,localR3)
          R4 = max(R4,localR4)
          R5 = max(R5,localR5)
+#ifdef TRANSPORT
+         R6 = max(R6,localR6)
+#endif
 #elif defined(SPALARTALMARAS)
          R1 = max(R1,localR1)
          R2 = max(R2,localR2)
@@ -838,10 +844,12 @@ Module DGSEMClass
 !$omp end do
 !$omp end parallel
 
-#if defined FLOW && (!(SPALARTALMARAS)) && (!(TRANSPORT))
-      maxResidual(1:NCONS) = [R1, R2, R3, R4, R5]
-#elif defined(FLOW) && (TRANSPORT)
+#if defined FLOW && (!(SPALARTALMARAS))
+#ifdef TRANSPORT
       maxResidual(1:NCONS) = [R1, R2, R3, R4, R5, R6]
+#else
+      maxResidual(1:NCONS) = [R1, R2, R3, R4, R5]
+#endif
 #elif defined(SPALARTALMARAS)
       maxResidual(1:NCONS) = [R1, R2, R3, R4, R5, R6]
 #endif
