@@ -606,6 +606,9 @@ module EllipticIP
          real(kind=RP)       :: beta(0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3))
          real(kind=RP)       :: kappa(0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3))
          integer             :: i, j, k
+#ifdef TRANSPORT
+         real(kind=RP)       :: transportD(1:NDIM, 1:NDIM)
+#endif
 
 #if (!defined(CAHNHILLIARD))
 
@@ -650,8 +653,14 @@ module EllipticIP
 
 
          do k = 0, e%Nxyz(3)   ; do j = 0, e%Nxyz(2) ; do i = 0, e%Nxyz(1)
+#ifdef TRANSPORT
+            call e % getTransportDiffusion(i, j, k, transportD)
+            call EllipticFlux( nEqn, nGradEqn, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), &
+                               e % storage % U_y(:,i,j,k) , e % storage % U_z(:,i,j,k), mu(i,j,k), beta(i,j,k), kappa(i,j,k), transportD, cartesianFlux )
+#else
             call EllipticFlux( nEqn, nGradEqn, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), &
                                e % storage % U_y(:,i,j,k) , e % storage % U_z(:,i,j,k), mu(i,j,k), beta(i,j,k), kappa(i,j,k), cartesianFlux )
+#endif
             contravariantFlux(:,i,j,k,IX) =     cartesianFlux(:,IX) * e % geom % jGradXi(IX,i,j,k)  &
                                              +  cartesianFlux(:,IY) * e % geom % jGradXi(IY,i,j,k)  &
                                              +  cartesianFlux(:,IZ) * e % geom % jGradXi(IZ,i,j,k)
@@ -706,6 +715,9 @@ module EllipticIP
 #ifdef MULTIPHASE
 sigma, & 
 #endif
+#ifdef TRANSPORT
+transportDLeft, transportDRight, &
+#endif
 flux )
          use SMConstants
          use PhysicsStorage
@@ -731,6 +743,10 @@ flux )
 #ifdef MULTIPHASE
          real(kind=RP), intent(in)       :: sigma(nEqn)
 #endif
+#ifdef TRANSPORT
+         real(kind=RP), intent(in)     :: transportDLeft(1:NDIM,1:NDIM)
+         real(kind=RP), intent(in)     :: transportDRight(1:NDIM,1:NDIM)
+#endif
          real(kind=RP), intent(out)      :: flux(nEqn)
 !
 !        ---------------
@@ -743,9 +759,13 @@ flux )
          real(kind=RP)     :: flux_vecR(nEqn,NDIM)
          real(kind=RP)     :: delta, mu
          
-
+#if TRANSPORT
+         call EllipticFlux(nEqn, nGradEqn, QLeft , U_xLeft , U_yLeft , U_zLeft, mu_left(1), mu_left(2), mu_left(3), transportDLeft, flux_vecL )
+         call EllipticFlux(nEqn, nGradEqn, QRight , U_xRight , U_yRight , U_zRight, mu_right(1), mu_right(2), mu_right(3), transportDRight, flux_vecR )
+#else
          call EllipticFlux(nEqn, nGradEqn, QLeft , U_xLeft , U_yLeft , U_zLeft, mu_left(1), mu_left(2), mu_left(3), flux_vecL )
          call EllipticFlux(nEqn, nGradEqn, QRight , U_xRight , U_yRight , U_zRight, mu_right(1), mu_right(2), mu_right(3), flux_vecR )
+#endif
 
          flux_vec = 0.5_RP * (flux_vecL + flux_vecR)
 
@@ -784,6 +804,9 @@ flux )
          !--------------------------------------------
          real(kind=RP), DIMENSION(NCONS,NCONS,NDIM,NDIM) :: df_dgradq   ! Cartesian Jacobian tensor
          real(kind=RP), DIMENSION(NCONS,NCONS,NDIM)      :: dfdq_
+#ifdef TRANSPORT
+         real(kind=RP), DIMENSION(1:NDIM,1:NDIM)         :: transportD
+#endif
          real(kind=RP), parameter :: SideSign(2) = (/ 1._RP, -1._RP /)
          real(kind=RP) :: mu, sigma
          integer :: i,j    ! Face coordinate counters
@@ -814,9 +837,12 @@ flux )
                           nHat          => f % geom % normal(:,i,j)                      , &
                           dFStar_dq     => f % storage(side) % dFStar_dqF(:,:,i,j)       , &
                           dF_dGradQ_out => f % storage(side) % dFv_dGradQF(:,:,:,i,j) )
-               
+#ifdef TRANSPORT
+               call f % getTransportDiffusion(i, j, side, transportD)
+               call ViscousJacobian(Q, U_x, U_y, U_z, transportD, df_dgradq, dfdq_)
+#else
                call ViscousJacobian(Q, U_x, U_y, U_z, df_dgradq, dfdq_)
-               
+#endif          
 !               
 !            For the outer surface integral
 !            ******************************

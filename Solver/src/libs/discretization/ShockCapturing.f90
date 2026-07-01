@@ -96,7 +96,11 @@ module ShockCapturing
 !  Interfaces
 !  ----------
    abstract interface
-      pure subroutine Viscous_Int(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, F)
+      pure subroutine Viscous_Int(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, &
+#ifdef TRANSPORT
+transportD, &
+#endif
+F)
          import RP, NDIM
          integer,       intent(in)  :: nEqn
          integer,       intent(in)  :: nGradEqn
@@ -107,6 +111,9 @@ module ShockCapturing
          real(kind=RP), intent(in)  :: mu
          real(kind=RP), intent(in)  :: beta
          real(kind=RP), intent(in)  :: kappa
+#ifdef TRANSPORT
+         real(kind=RP), intent(in)  :: transportD(1:NDIM, 1:NDIM)
+#endif
          real(kind=RP), intent(out) :: F(1:nEqn, 1:NDIM)
       end subroutine Viscous_Int
    end interface
@@ -667,6 +674,9 @@ module ShockCapturing
       real(RP) :: kappa
       real(RP) :: mu(0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3))
       real(RP) :: covariantFlux(1:NCONS, 1:NDIM)
+#ifdef TRANSPORT
+      real(RP) :: transportD(1:NCONS, 1:NDIM)
+#endif
 
 
       if (switch > 0.0_RP) then
@@ -701,12 +711,23 @@ module ShockCapturing
          do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
 
             kappa = dimensionless % mu_to_kappa * mu(i,j,k)
+#ifdef TRANSPORT
+            call e % getTransportDiffusion(i, j, k, transportD)
+            call self % ViscousFlux(NCONS, NGRAD, e % storage % Q(:,i,j,k), &
+                                    e % storage % U_x(:,i,j,k),             &
+                                    e % storage % U_y(:,i,j,k),             &
+                                    e % storage % U_z(:,i,j,k),             &
+                                    mu(i,j,k), 0.0_RP, kappa,               &
+                                    transportD, &
+                                    covariantflux)
+#else
             call self % ViscousFlux(NCONS, NGRAD, e % storage % Q(:,i,j,k), &
                                     e % storage % U_x(:,i,j,k),             &
                                     e % storage % U_y(:,i,j,k),             &
                                     e % storage % U_z(:,i,j,k),             &
                                     mu(i,j,k), 0.0_RP, kappa,               &
                                     covariantflux)
+#endif
 
             SCflux(:,i,j,k,IX) = covariantFlux(:,IX) * e % geom % jGradXi(IX,i,j,k) &
                                + covariantFlux(:,IY) * e % geom % jGradXi(IY,i,j,k) &

@@ -149,6 +149,9 @@ module VolumeIntegrals
          real(kind=RP)           :: free_en, fchem, entr, area, rho , u , v, w, en, thetaeddy
          real(kind=RP)           :: Strain(NDIM,NDIM)
          real(kind=RP)           :: mu
+#ifdef TRANSPORT
+         real(kind=RP)           :: transportD(1:NDIM, 1:NDIM)
+#endif
 
          Nel = e % Nxyz
 
@@ -252,8 +255,14 @@ module VolumeIntegrals
                                         + e % storage % Q(IRHOW,:,:,:)*(M_grad_p(IZ,:,:,:)-grad_Mp(IZ,:,:,:)))*inv_rho
 
             do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
+#ifdef TRANSPORT
+               call e % getTransportDiffusion(i, j, k, transportD)
+               call ViscousFlux_ENERGY(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), e % storage % U_y(:,i,j,k), &
+                                    e % storage % U_z(:,i,j,k), e % storage % mu_ns(1,i,j,k), 0.0_RP, e % storage % mu_ns(2,i,j,k), transportD, ViscFlux)
+#else
                call ViscousFlux_ENERGY(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), e % storage % U_y(:,i,j,k), &
                                     e % storage % U_z(:,i,j,k), e % storage % mu_ns(1,i,j,k), 0.0_RP, e % storage % mu_ns(2,i,j,k), ViscFlux)
+#endif
 
                val = val + wx(i) * wy(j) * wz(k) * (e % geom % jacobian(i,j,k) * ( kinEn(i,j,k) + &
                      sum(ViscFlux(2:4,1)*e % storage % U_x(2:4,i,j,k)+ViscFlux(2:4,2)*e % storage % U_y(2:4,i,j,k)+ViscFlux(2:4,3)*e % storage % U_z(2:4,i,j,k)) &
@@ -341,8 +350,14 @@ module VolumeIntegrals
             case(GRADVARS_STATE)
                do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
                   call NSGradientVariables_ENTROPY(NCONS, NGRAD, e % storage % Q(:,i,j,k), EntropyVars)
+#ifdef TRANSPORT
+                  call e % getTransportDiffusion(i, j, k, transportD)
+                  call ViscousFlux_STATE(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), e % storage % U_y(:,i,j,k), &
+                                    e % storage % U_z(:,i,j,k), e % storage % mu_ns(1,i,j,k), 0.0_RP, e % storage % mu_ns(2,i,j,k), transportD, ViscFlux)
+#else
                   call ViscousFlux_STATE(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), e % storage % U_y(:,i,j,k), &
                                     e % storage % U_z(:,i,j,k), e % storage % mu_ns(1,i,j,k), 0.0_RP, e % storage % mu_ns(2,i,j,k), ViscFlux)
+#endif
                   val = val + wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * (dot_product(e % storage % QDot(:,i,j,k),EntropyVars) + &
                      sum(ViscFlux(:,1)*e % storage % U_x(:,i,j,k)+ViscFlux(:,2)*e % storage % U_y(:,i,j,k)+ViscFlux(:,3)*e % storage % U_z(:,i,j,k)))
                end do            ; end do           ; end do
@@ -350,8 +365,15 @@ module VolumeIntegrals
             case(GRADVARS_ENTROPY)
                do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
                   call NSGradientVariables_ENTROPY(NCONS, NGRAD, e % storage % Q(:,i,j,k), EntropyVars)
+#ifdef TRANSPORT
+                  call e % getTransportDiffusion(i, j, k, transportD)
+                  call ViscousFlux_ENTROPY(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), e % storage % U_y(:,i,j,k), &
+                                    e % storage % U_z(:,i,j,k), e % storage % mu_ns(1,i,j,k), 0.0_RP, e % storage % mu_ns(2,i,j,k), transportD, ViscFlux)
+
+#else                  
                   call ViscousFlux_ENTROPY(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), e % storage % U_y(:,i,j,k), &
                                     e % storage % U_z(:,i,j,k), e % storage % mu_ns(1,i,j,k), 0.0_RP, e % storage % mu_ns(2,i,j,k), ViscFlux)
+#endif
                   val = val + wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * (dot_product(e % storage % QDot(:,i,j,k),EntropyVars) + &
                      sum(ViscFlux(:,1)*e % storage % U_x(:,i,j,k)+ViscFlux(:,2)*e % storage % U_y(:,i,j,k)+ViscFlux(:,3)*e % storage % U_z(:,i,j,k)))
                end do            ; end do           ; end do
@@ -361,8 +383,14 @@ module VolumeIntegrals
             case(GRADVARS_ENERGY)
                do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
                   call NSGradientVariables_ENTROPY(NCONS, NGRAD, e % storage % Q(:,i,j,k), EntropyVars)
+#ifdef TRANSPORT
+                  call e % getTransportDiffusion(i, j, k, transportD)
+                  call ViscousFlux_ENERGY(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), e % storage % U_y(:,i,j,k), &
+                                    e % storage % U_z(:,i,j,k), e % storage % mu_ns(1,i,j,k), 0.0_RP, e % storage % mu_ns(2,i,j,k), transportD, ViscFlux)
+#else
                   call ViscousFlux_ENERGY(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), e % storage % U_y(:,i,j,k), &
                                     e % storage % U_z(:,i,j,k), e % storage % mu_ns(1,i,j,k), 0.0_RP, e % storage % mu_ns(2,i,j,k), ViscFlux)
+#endif
                   val = val + wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * (dot_product(e % storage % QDot(:,i,j,k),EntropyVars) + &
                      sum(ViscFlux(:,1)*e % storage % U_x(:,i,j,k)+ViscFlux(:,2)*e % storage % U_y(:,i,j,k)+ViscFlux(:,3)*e % storage % U_z(:,i,j,k)))
                end do            ; end do           ; end do

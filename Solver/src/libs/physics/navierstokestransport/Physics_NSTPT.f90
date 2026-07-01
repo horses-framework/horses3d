@@ -34,6 +34,7 @@
       public  GuermondPopovFlux_ENTROPY
       public  InviscidJacobian
       public  getStressTensor, ViscousJacobian, getFrictionVelocity
+      ! public  sourceTermDivVelC
 !
 !     ========
       CONTAINS 
@@ -48,12 +49,13 @@
 !
 !//////////////////////////////////////////////////////////////////////////////
 !
-      pure subroutine EulerFlux(Q, F, rho_, Qbase)
+      pure subroutine EulerFlux(Q, F, rho_, Qbase, transportVelocity)
          implicit none
          real(kind=RP), intent(in)   :: Q(1:NCONS)
          real(kind=RP), intent(out)  :: F(1:NCONS , 1:NDIM)
          real(kind=RP), intent(in), optional :: rho_
          real(kind=RP), intent(in), optional :: Qbase(1:NCONS)
+         real(kind=RP), intent(in), optional :: transportVelocity(1:NDIM)
 !
 !        ---------------
 !        Local variables
@@ -67,6 +69,7 @@
          v = Q(IRHOV) / Q(IRHO)
          w = Q(IRHOW) / Q(IRHO)
          p = gammaMinus1 * (Q(IRHOE) - 0.5_RP * ( Q(IRHOU) * u + Q(IRHOV) * v + Q(IRHOW) * w ) )
+
 !
 !        X-Flux
 !        ------         
@@ -75,11 +78,7 @@
          F(IRHOV, IX ) = Q(IRHOU) * v
          F(IRHOW, IX ) = Q(IRHOU) * w
          F(IRHOE, IX ) = ( Q(IRHOE) + p ) * u
-         if (transportVelocityType == transportVelocityConstant) then
-            F(IC   , IX ) = transportVelocity(IX) * Q(IC)
-         elseif (transportVelocityType == transportVelocityNS) then
-            F(IC   , IX ) = u * Q(IC)
-         end if
+         F(IC   , IX ) = transportVelocity(IX) * Q(IC)
 !
 !        Y-Flux
 !        ------
@@ -88,11 +87,7 @@
          F(IRHOV ,IY ) = Q(IRHOV) * v + p
          F(IRHOW ,IY ) = Q(IRHOV) * w
          F(IRHOE ,IY ) = ( Q(IRHOE) + p ) * v
-         if (transportVelocityType == transportVelocityConstant) then
-            F(IC   , IY ) = transportVelocity(IY) * Q(IC)
-         elseif (transportVelocityType == transportVelocityNS) then
-            F(IC   , IY ) = v * Q(IC)
-         end if
+         F(IC   , IY ) = transportVelocity(IY) * Q(IC)
 !
 !        Z-Flux
 !        ------
@@ -101,11 +96,7 @@
          F(IRHOV,IZ) = F(IRHOW,IY)
          F(IRHOW,IZ) = Q(IRHOW) * w + P
          F(IRHOE,IZ) = ( Q(IRHOE) + p ) * w
-         if (transportVelocityType == transportVelocityConstant) then
-            F(IC   , IZ ) = transportVelocity(IZ) * Q(IC)
-         elseif (transportVelocityType == transportVelocityNS) then
-            F(IC   , IZ ) = w * Q(IC)
-         end if
+         F(IC   , IZ ) = transportVelocity(IZ) * Q(IC)
       
          end associate
 
@@ -258,7 +249,7 @@
 !
 !//////////////////////////////////////////////////////////////////////////////////////////
 !
-      pure subroutine ViscousFlux_STATE(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, F)
+      pure subroutine ViscousFlux_STATE(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, transportD, F)
          implicit none
          integer,       intent(in)  :: nEqn
          integer,       intent(in)  :: nGradEqn
@@ -269,6 +260,7 @@
          real(kind=RP), intent(in)  :: mu
          real(kind=RP), intent(in)  :: beta
          real(kind=RP), intent(in)  :: kappa
+         real(kind=RP), intent(in)  :: transportD(1:NDIM, 1:NDIM)
          real(kind=RP), intent(out) :: F(1:nEqn, 1:NDIM)
 !
 !        ---------------
@@ -302,27 +294,27 @@
          F(IRHOV,IX) = mu  * ( U_x(IY) + U_y(IX) ) 
          F(IRHOW,IX) = mu  * ( U_x(IZ) + U_z(IX) ) 
          F(IRHOE,IX) = F(IRHOU,IX) * u + F(IRHOV,IX) * v + F(IRHOW,IX) * w + kappa  * nablaT(IX) 
-         F(IC,IX)  = transportD(IX,IX) * Q_x(IC) + transportD(IX,IY) * Q_y(IC) + transportD(IX,IZ) * Q_z(IC)
+         F(IC,IX)    = transportD(IX,IX) * Q_x(IC) + transportD(IX,IY) * Q_y(IC) + transportD(IX,IZ) * Q_z(IC)
 
          F(IRHO,IY) = 0.0_RP
          F(IRHOU,IY) = F(IRHOV,IX) 
          F(IRHOV,IY) = mu  * (2.0_RP * U_y(IY) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOW,IY) = mu  * ( U_y(IZ) + U_z(IY) ) 
          F(IRHOE,IY) = F(IRHOU,IY) * u + F(IRHOV,IY) * v + F(IRHOW,IY) * w + kappa  * nablaT(IY)
-         F(IC,IY)  = transportD(IY,IX) * Q_x(IC) + transportD(IY,IY) * Q_y(IC) + transportD(IY,IZ) * Q_z(IC)
+         F(IC,IY)    = transportD(IY,IX) * Q_x(IC) + transportD(IY,IY) * Q_y(IC) + transportD(IY,IZ) * Q_z(IC)
 
          F(IRHO,IZ) = 0.0_RP
          F(IRHOU,IZ) = F(IRHOW,IX) 
          F(IRHOV,IZ) = F(IRHOW,IY) 
          F(IRHOW,IZ) = mu  * ( 2.0_RP * U_z(IZ) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOE,IZ) = F(IRHOU,IZ) * u + F(IRHOV,IZ) * v + F(IRHOW,IZ) * w + kappa  * nablaT(IZ)
-         F(IC,IZ)  = transportD(IZ,IX) * Q_x(IC) + transportD(IZ,IY) * Q_y(IC) + transportD(IZ,IZ) * Q_z(IC)
+         F(IC,IZ)    = transportD(IZ,IX) * Q_x(IC) + transportD(IZ,IY) * Q_y(IC) + transportD(IZ,IZ) * Q_z(IC)
 
 
          ! with Pr = constant, dmudx = dkappadx
       end subroutine ViscousFlux_STATE
 
-      pure subroutine ViscousFlux_ENTROPY(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, F)
+      pure subroutine ViscousFlux_ENTROPY(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, transportD, F)
          implicit none
          integer,       intent(in)  :: nEqn
          integer,       intent(in)  :: nGradEqn
@@ -333,6 +325,7 @@
          real(kind=RP), intent(in)  :: mu
          real(kind=RP), intent(in)  :: beta
          real(kind=RP), intent(in)  :: kappa
+         real(kind=RP), intent(in)  :: transportD(1:NDIM, 1:NDIM)
          real(kind=RP), intent(out) :: F(1:nEqn, 1:NDIM)
 !
 !        ---------------
@@ -362,25 +355,25 @@
          F(IRHOV,IX) = mu  * ( U_x(IY) + U_y(IX) ) 
          F(IRHOW,IX) = mu  * ( U_x(IZ) + U_z(IX) ) 
          F(IRHOE,IX) = F(IRHOU,IX) * u(IX) + F(IRHOV,IX) * u(IY) + F(IRHOW,IX) * u(IZ) + kappa  * nablaT(IX) 
-         F(IC,IX)  = 0.0_RP
+         F(IC,IX)    = transportD(IX,IX) * Q_x(IC) + transportD(IX,IY) * Q_y(IC) + transportD(IX,IZ) * Q_z(IC)
 
          F(IRHO,IY) = 0.0_RP
          F(IRHOU,IY) = F(IRHOV,IX) 
          F(IRHOV,IY) = mu  * (2.0_RP * U_y(IY) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOW,IY) = mu  * ( U_y(IZ) + U_z(IY) ) 
          F(IRHOE,IY) = F(IRHOU,IY) * u(IX) + F(IRHOV,IY) * u(IY) + F(IRHOW,IY) * u(IZ) + kappa  * nablaT(IY)
-         F(IC,IY) = 0.0_RP
+         F(IC,IY)    = transportD(IY,IX) * Q_x(IC) + transportD(IY,IY) * Q_y(IC) + transportD(IY,IZ) * Q_z(IC)
 
          F(IRHO,IZ) = 0.0_RP
          F(IRHOU,IZ) = F(IRHOW,IX) 
          F(IRHOV,IZ) = F(IRHOW,IY) 
          F(IRHOW,IZ) = mu  * ( 2.0_RP * U_z(IZ) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOE,IZ) = F(IRHOU,IZ) * u(IX) + F(IRHOV,IZ) * u(IY) + F(IRHOW,IZ) * u(IZ) + kappa  * nablaT(IZ)
-         F(IC,IZ) = 0.0_RP
+         F(IC,IZ)    = transportD(IZ,IX) * Q_x(IC) + transportD(IZ,IY) * Q_y(IC) + transportD(IZ,IZ) * Q_z(IC)
 
       end subroutine ViscousFlux_ENTROPY
 
-      pure subroutine ViscousFlux_ENERGY(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, F)
+      pure subroutine ViscousFlux_ENERGY(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, transportD, F)
          implicit none
          integer,       intent(in)  :: nEqn
          integer,       intent(in)  :: nGradEqn
@@ -391,6 +384,7 @@
          real(kind=RP), intent(in)  :: mu
          real(kind=RP), intent(in)  :: beta
          real(kind=RP), intent(in)  :: kappa
+         real(kind=RP), intent(in)  :: transportD(1:NDIM, 1:NDIM)
          real(kind=RP), intent(out) :: F(1:nEqn, 1:NDIM)
 !
 !        ---------------
@@ -420,25 +414,25 @@
          F(IRHOV,IX) = mu  * ( U_x(IY) + U_y(IX) ) 
          F(IRHOW,IX) = mu  * ( U_x(IZ) + U_z(IX) ) 
          F(IRHOE,IX) = F(IRHOU,IX) * u(IX) + F(IRHOV,IX) * u(IY) + F(IRHOW,IX) * u(IZ) + kappa  * nablaT(IX) 
-         F(IC,IX)  = 0.0_RP
+         F(IC,IX)    = transportD(IX,IX) * Q_x(IC) + transportD(IX,IY) * Q_y(IC) + transportD(IX,IZ) * Q_z(IC)
 
          F(IRHO,IY) = 0.0_RP
          F(IRHOU,IY) = F(IRHOV,IX) 
          F(IRHOV,IY) = mu  * (2.0_RP * U_y(IY) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOW,IY) = mu  * ( U_y(IZ) + U_z(IY) ) 
          F(IRHOE,IY) = F(IRHOU,IY) * u(IX) + F(IRHOV,IY) * u(IY) + F(IRHOW,IY) * u(IZ) + kappa  * nablaT(IY)
-         F(IC,IY) = 0.0_RP
+         F(IC,IY)    = transportD(IY,IX) * Q_x(IC) + transportD(IY,IY) * Q_y(IC) + transportD(IY,IZ) * Q_z(IC)
 
          F(IRHO,IZ) = 0.0_RP
          F(IRHOU,IZ) = F(IRHOW,IX) 
          F(IRHOV,IZ) = F(IRHOW,IY) 
          F(IRHOW,IZ) = mu  * ( 2.0_RP * U_z(IZ) - 2.0_RP / 3.0_RP * divV ) + beta * divV
          F(IRHOE,IZ) = F(IRHOU,IZ) * u(IX) + F(IRHOV,IZ) * u(IY) + F(IRHOW,IZ) * u(IZ) + kappa  * nablaT(IZ)
-         F(IC,IZ) = 0.0_RP
+         F(IC,IZ)    = transportD(IZ,IX) * Q_x(IC) + transportD(IZ,IY) * Q_y(IC) + transportD(IZ,IZ) * Q_z(IC)
 
       end subroutine ViscousFlux_ENERGY
 
-      pure subroutine GuermondPopovFlux_ENTROPY(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, F)
+      pure subroutine GuermondPopovFlux_ENTROPY(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z, mu, beta, kappa, transportD, F)
 !
 !        //////////////////////////////////////////////////////////////////////////////
 !
@@ -511,6 +505,7 @@
          real(kind=RP), intent(in)  :: mu
          real(kind=RP), intent(in)  :: beta
          real(kind=RP), intent(in)  :: kappa
+         real(kind=RP), intent(in)  :: transportD(1:NDIM, 1:NDIM)
          real(kind=RP), intent(out) :: F(1:nEqn, 1:NDIM)
 !
 !        ---------------
@@ -540,28 +535,31 @@
          F(IRHOV,IX) = Q(IRHO)*0.5_RP*(u_x(IY)+u_y(IX))
          F(IRHOW,IX) = Q(IRHO)*0.5_RP*(u_x(IZ)+u_z(IX))
          F(IRHOE,IX) = F(IRHOU,IX)*u(IX) + F(IRHOV,IX)*u(IY) + F(IRHOW,IX)*u(IZ)
+         F(IC,IX)    = transportD(IX,IX) * Q_x(IC) + transportD(IX,IY) * Q_y(IC) + transportD(IX,IZ) * Q_z(IC)
 
          F(IRHO, IY) = 0.0_RP
          F(IRHOU,IY) = F(IRHOV,IX)
          F(IRHOV,IY) = Q(IRHO)*u_y(IY)
          F(IRHOW,IY) = Q(IRHO)*0.5_RP*(u_y(IZ)+u_z(IY))
          F(IRHOE,IY) = F(IRHOU,IY)*u(IX) + F(IRHOV,IY)*u(IY) + F(IRHOW,IY)*u(IZ)
+         F(IC,IY)    = transportD(IY,IX) * Q_x(IC) + transportD(IY,IY) * Q_y(IC) + transportD(IY,IZ) * Q_z(IC)
 
          F(IRHO, IZ) = 0.0_RP
          F(IRHOU,IZ) = F(IRHOW,IX)
          F(IRHOV,IZ) = F(IRHOW,IY)
          F(IRHOW,IZ) = Q(IRHO)*u_z(IZ)
          F(IRHOE,IZ) = F(IRHOU,IZ)*u(IX) + F(IRHOV,IZ)*u(IY) + F(IRHOW,IZ)*u(IZ)
+         F(IC,IZ)    = transportD(IZ,IX) * Q_x(IC) + transportD(IZ,IY) * Q_y(IC) + transportD(IZ,IZ) * Q_z(IC)
 
 !
 !        Add the part related to ∇ρ
-         F(:,IX)     = F(:,IX) + grad_rho(IX)*[1.0_RP,u(IX),u(IY),u(IZ),e]
+         F(:,IX)     = F(:,IX) + grad_rho(IX)*[1.0_RP,u(IX),u(IY),u(IZ),e,0.0_rp]
          F(IRHOE,IX) = F(IRHOE,IX) + Q(IRHO)*p_div_rho*p_div_rho*dimensionless % cv*Q_x(IRHOE)
 
-         F(:,IY)     = F(:,IY) + grad_rho(IY)*[1.0_RP,u(IX),u(IY),u(IZ),e]
+         F(:,IY)     = F(:,IY) + grad_rho(IY)*[1.0_RP,u(IX),u(IY),u(IZ),e,0.0_rp]
          F(IRHOE,IY) = F(IRHOE,IY) + Q(IRHO)*p_div_rho*p_div_rho*dimensionless % cv*Q_y(IRHOE)
 
-         F(:,IZ)     = F(:,IZ) + grad_rho(IZ)*[1.0_RP,u(IX),u(IY),u(IZ),e]
+         F(:,IZ)     = F(:,IZ) + grad_rho(IZ)*[1.0_RP,u(IX),u(IY),u(IZ),e,0.0_rp]
          F(IRHOE,IZ) = F(IRHOE,IZ) + Q(IRHO)*p_div_rho*p_div_rho*dimensionless % cv*Q_z(IRHOE)
 !
 !        Multiply by μ 
@@ -602,13 +600,14 @@
 !
 !     ***** This routine is necessary for computing the analytical Jacobian. *****
 !     ------------------------------------------------------------------------------------------
-      pure subroutine ViscousJacobian(q, Q_x, Q_y, Q_z, df_dgradq, df_dq)
+      pure subroutine ViscousJacobian(q, Q_x, Q_y, Q_z, transportD, df_dgradq, df_dq)
          implicit none
          !-------------------------------------------------
          real(kind=RP), intent(in)  :: q(NCONS)                      !< Conserved variables state
          real(kind=RP), intent(in)  :: Q_x (1:NGRAD)
          real(kind=RP), intent(in)  :: Q_y (1:NGRAD)
          real(kind=RP), intent(in)  :: Q_z (1:NGRAD) ! , intent(in)
+         real(kind=RP), intent(in)  :: transportD (1:NDIM,1:NDIM)
          real(kind=RP), intent(out) :: df_dgradq(NCONS,NCONS,NDIM,NDIM)
          real(kind=RP), intent(out) :: df_dq    (NCONS,NCONS,NDIM)
          !-------------------------------------------------
@@ -818,7 +817,7 @@
 !        --------------------------------------------------
          dMu_dQ    = SutherlandsLawDeriv(Q,T)
          
-         call ViscousFlux_STATE(NCONS, NCONS, Q, Q_x, Q_y, Q_z, dimensionless % mu, 0._RP, dimensionless % kappa, F)
+         call ViscousFlux_STATE(NCONS, NCONS, Q, Q_x, Q_y, Q_z, dimensionless % mu, 0._RP, dimensionless % kappa, transportD, F)
          F = F / sutherLaw
          
          df_dq(:,:,1) = df_dq(:,:,1) + outer_product(F(:,1),dMu_dQ)
@@ -938,6 +937,49 @@
          u_tau = sqrt(abs(tau_w) / Q(IRHO)) * sign(1.0_RP, tau_w)
 
       End Subroutine getFrictionVelocity
+
+!       pure function sourceTermDivVelC(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z) result(source) !AJRTODO: Maybe move to the PhysicsStorage with the rest?
+!          implicit none
+!          integer,       intent(in)  :: nEqn
+!          integer,       intent(in)  :: nGradEqn
+!          real(kind=RP), intent(in)  :: Q   (1:nEqn     )
+!          real(kind=RP), intent(in)  :: Q_x (1:nGradEqn)
+!          real(kind=RP), intent(in)  :: Q_y (1:nGradEqn)
+!          real(kind=RP), intent(in)  :: Q_z (1:nGradEqn)
+! !
+! !        ---------------
+! !        Local variables
+! !        ---------------
+! !
+!          real(kind=RP)                    :: divV
+!          real(kind=RP)                    :: u , v , w
+!          real(kind=RP)                    :: invRho, uDivRho(NDIM), u_x(NDIM), u_y(NDIM), u_z(NDIM)
+
+!          if (transportVelocityType == transportVelocityType_Constant) then
+!             source = 0.0_rp
+!             return
+!          end if
+         
+!          if (transportVelocityType == transportVelocityType_NS) then
+
+!             invRho  = 1.0_RP / Q(IRHO)
+
+!             u = Q(IRHOU) * invRho
+!             v = Q(IRHOV) * invRho
+!             w = Q(IRHOW) * invRho
+            
+!             uDivRho = [u * invRho, v * invRho, w * invRho]
+            
+!             u_x = invRho * Q_x(IRHOU:IRHOW) - uDivRho * Q_x(IRHO)
+!             u_y = invRho * Q_y(IRHOU:IRHOW) - uDivRho * Q_y(IRHO)
+!             u_z = invRho * Q_z(IRHOU:IRHOW) - uDivRho * Q_z(IRHO)
+            
+!             divV = U_x(IX) + U_y(IY) + U_z(IZ)
+
+!             source = divV * Q(IC)
+!          end if
+
+!       end function sourceTermDivVelC
    END Module Physics_NSTPT
 !@mark -
 !

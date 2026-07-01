@@ -105,6 +105,9 @@ module ProbeClass
             case ("w")
             case ("mach")
             case ("k")
+#ifdef TRANSPORT
+            case ("concentration")
+#endif
             case default
                print*, 'Probe variable "',trim(self % variable),'" not implemented.'
                print*, "Options available are:"
@@ -115,6 +118,9 @@ module ProbeClass
                print*, "   * w"
                print*, "   * Mach"
                print*, "   * K"
+#ifdef TRANSPORT
+               print*, "   * concentration"
+#endif
             end select
 #endif
 #ifdef INCNS
@@ -312,6 +318,12 @@ module ProbeClass
                do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
                   var(i,j,k) = 0.5_RP * (POW2(Q(IRHOU,i,j,k)) + POW2(Q(IRHOV,i,j,k)) + POW2(Q(IRHOW,i,j,k)))/Q(IRHO,i,j,k)
                end do         ; end do         ; end do
+#ifdef TRANSPORT
+            case("concentration")
+               do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2)  ; do i = 0, e % Nxyz(1) 
+                  var(i,j,k) = Q(IC,i,j,k)
+               end do            ; end do             ; end do
+#endif
 #endif
 #ifdef INCNS
             case("pressure")

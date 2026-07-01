@@ -32,7 +32,11 @@ module EllipticDiscretizationClass
    end type EllipticDiscretization_t
 
    abstract interface
-      pure subroutine EllipticFlux_f(nEqn, nGradEqn, Q, U_x, U_y, U_z, mu, beta, kappa, F)
+      pure subroutine EllipticFlux_f(nEqn, nGradEqn, Q, U_x, U_y, U_z, mu, beta, kappa, &
+#ifdef TRANSPORT
+transportD, &
+#endif
+F)
          use SMConstants
          use PhysicsStorage
          implicit none
@@ -44,6 +48,9 @@ module EllipticDiscretizationClass
          real(kind=RP), intent(in)  :: mu
          real(kind=RP), intent(in)  :: beta
          real(kind=RP), intent(in)  :: kappa
+#ifdef TRANSPORT
+         real(kind=RP), intent(in)  :: transportD(1:NDIM, 1:NDIM)
+#endif
          real(kind=RP), intent(out) :: F(1:nEqn, 1:NDIM)
       end subroutine EllipticFlux_f
       pure subroutine GetViscosity_f(phi, mu)
@@ -273,19 +280,31 @@ module EllipticDiscretizationClass
          !--------------------------------------------
          real(kind=RP), DIMENSION(NCONS,NCONS,NDIM,NDIM) :: df_dgradq_cart ! Cartesian Jacobian tensor with respect to ∇q
          real(kind=RP), DIMENSION(NCONS,NCONS,NDIM)      :: dfdq_cart      ! Cartesian Jacobian tensor with respect to q
+#ifdef TRANSPORT
+         real(kind=RP), DIMENSION(1:NDIM,1:NDIM)         :: transportD
+#endif
          integer :: i,j,k     ! Coordinate counters
          integer :: i1, i2    ! Index of G_xx
          !--------------------------------------------
          
          do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-            
+#ifdef TRANSPORT
+            call e % getTransportDiffusion(i, j, k, transportD)
+            call ViscousJacobian ( Q   = e % storage % Q  (:,i,j,k), &
+                                   Q_x = e % storage % U_x(:,i,j,k), &
+                                   Q_y = e % storage % U_y(:,i,j,k), &
+                                   Q_z = e % storage % U_z(:,i,j,k), &
+                                   transportD = transportD, &
+                                   df_dgradq = df_dgradq_cart, &
+                                   df_dq     = dfdq_cart)
+#else
             call ViscousJacobian ( Q   = e % storage % Q  (:,i,j,k), &
                                    Q_x = e % storage % U_x(:,i,j,k), &
                                    Q_y = e % storage % U_y(:,i,j,k), &
                                    Q_z = e % storage % U_z(:,i,j,k), &
                                    df_dgradq = df_dgradq_cart, &
                                    df_dq     = dfdq_cart)
-            
+#endif
 !
 !           ***********************************
 !           Jacobian with respect to ∇q: dF/d∇q
@@ -358,6 +377,9 @@ module EllipticDiscretizationClass
 #ifdef MULTIPHASE
 sigma, & 
 #endif
+#ifdef TRANSPORT
+transportDLeft, transportDRight, &
+#endif
 flux )
          use SMConstants
          use SMConstants
@@ -383,6 +405,10 @@ flux )
          real(kind=RP), intent(in)       :: dWall
 #ifdef MULTIPHASE
          real(kind=RP), intent(in)       :: sigma(nEqn)
+#endif
+#ifdef TRANSPORT
+         real(kind=RP), intent(in)     :: transportDLeft(1:NDIM,1:NDIM)
+         real(kind=RP), intent(in)     :: transportDRight(1:NDIM,1:NDIM)
 #endif
          real(kind=RP), intent(out)      :: flux(nEqn)
 !

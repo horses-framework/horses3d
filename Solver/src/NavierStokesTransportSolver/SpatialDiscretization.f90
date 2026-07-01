@@ -393,6 +393,7 @@ module SpatialDiscretization
 !
          integer     :: eID , i, j, k, ierr, fID, iFace, iEl, iP, STLNum, n 
          real(kind=RP)  :: mu_smag, delta, Source(NCONS), TurbulentSource(NCONS), Q_target(NCONS)
+         real(kind=RP)  :: sourcetpt
          real(kind=RP), allocatable :: Source_HO(:,:,:,:)
          integer,       allocatable :: i_(:), j_(:), k_(:)
 !
@@ -638,6 +639,20 @@ module SpatialDiscretization
          end do
 !$omp end do
 !
+!        *********************
+!        Add source term div(u) * c !AJRTODO
+!        *********************
+! !$omp do schedule(runtime) private(i,j,k,sourcetpt)
+!          do eID = 1, mesh % no_of_elements
+!             associate ( e => mesh % elements(eID) )
+!             do k = 0, e % Nxyz(3)   ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
+!                sourcetpt = sourceTermDivVelC(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_X(:,i,j,k), e % storage % U_y(:,i,j,k), e % storage % U_z(:,i,j,k))
+!                e % storage % QDot(IC,i,j,k) = e % storage % QDot(IC,i,j,k) + sourcetpt
+!             end do                  ; end do                ; end do
+!             end associate
+!          end do
+! !$omp end do        
+
 !        *********************
 !        Add IBM source term
 !        *********************
@@ -1710,6 +1725,7 @@ module SpatialDiscretization
       subroutine computeElementInterfaceFlux(f)
          use FaceClass
          use RiemannSolvers_NSTPT
+         use PhysicsStorage_NSTPT
          implicit none
          type(Face)   , intent(inout) :: f
          integer       :: i, j
@@ -1719,6 +1735,11 @@ module SpatialDiscretization
          real(kind=RP) :: flux(1:NCONS,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: mu_left(3), mu_right(3)
          integer       :: Sidearray(2)
+         real(kind=RP) :: transportVelocityLeft(1:NDIM)
+         real(kind=RP) :: transportVelocityRight(1:NDIM)
+         real(kind=RP) :: transportDLeft(1:NDIM,1:NDIM)
+         real(kind=RP) :: transportDRight(1:NDIM,1:NDIM)
+
 !
 !        ---------------------------
 !        Artificial viscosity fluxes
@@ -1746,6 +1767,7 @@ module SpatialDiscretization
                   mu_right(2) = 0.0_RP
                   mu_right(3) = f % storage(2) % mu_NS(2,i,j)
 
+                  call f % getTransportDiffusion(i, j, transportDLeft, transportDRight)
                   call ViscousDiscretization % RiemannSolver(nEqn = NCONS, nGradEqn = NGRAD, &
                                                      EllipticFlux = ViscousFlux, &
                                                      f = f, &
@@ -1760,6 +1782,8 @@ module SpatialDiscretization
                                                      mu_left = mu_left, mu_right = mu_right, &
                                                      nHat = f % geom % normal(:,i,j) , &
                                                      dWall = f % geom % dWall(i,j), &
+                                                     transportDLeft = transportDLeft, &
+                                                     transportDRight = transportDRight, &
                                                      flux  = visc_flux(:,i,j) )
 
                end do
@@ -1775,10 +1799,11 @@ module SpatialDiscretization
 !              Invscid fluxes
 !              --------------
 !
+               call f % getTransportVelocity(i, j, transportVelocityLeft, transportVelocityRight)
                call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
                                   QRight = f % storage(2) % Q(:,i,j), &
-                                  transportVelocityLeft = transportVelocity, &
-                                  transportVelocityRight = transportVelocity, &
+                                  transportVelocityLeft = transportVelocityLeft, &
+                                  transportVelocityRight = transportVelocityRight, &
                                   nHat   = f % geom % normal(:,i,j), &
                                   t1     = f % geom % t1(:,i,j), &
                                   t2     = f % geom % t2(:,i,j), &
@@ -1813,6 +1838,11 @@ module SpatialDiscretization
          real(kind=RP) :: flux(1:NCONS,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: mu_left(3), mu_right(3)
          integer       :: Sidearray(2)
+         real(kind=RP) :: transportVelocityLeft(1:NDIM)
+         real(kind=RP) :: transportVelocityRight(1:NDIM)
+         real(kind=RP) :: transportDLeft(1:NDIM,1:NDIM)
+         real(kind=RP) :: transportDRight(1:NDIM,1:NDIM)
+
 !
 !        ---------------------------
 !        Artificial viscosity fluxes
@@ -1840,6 +1870,7 @@ module SpatialDiscretization
                   mu_right(2) = 0.0_RP
                   mu_right(3) = f % storage(2) % mu_NS(2,i,j)
 
+                  call f % getTransportDiffusion(i, j, transportDLeft, transportDRight)
                   call ViscousDiscretization % RiemannSolver(nEqn = NCONS, nGradEqn = NGRAD, &
                                                      EllipticFlux = ViscousFlux, &
                                                      f = f, &
@@ -1855,6 +1886,8 @@ module SpatialDiscretization
                                                      mu_right = mu_right, &
                                                      nHat = f % geom % normal(:,i,j) , &
                                                      dWall = f % geom % dWall(i,j), &
+                                                     transportDLeft = transportDLeft, &
+                                                     transportDRight = transportDRight, &
                                                      flux  = visc_flux(:,i,j) )
 
                end do
@@ -1870,10 +1903,11 @@ module SpatialDiscretization
 !              Invscid fluxes
 !              --------------
 !
+               call f % getTransportVelocity(i, j, transportVelocityLeft, transportVelocityRight)
                call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
                                   QRight = f % storage(2) % Q(:,i,j), &
-                                  transportVelocityLeft = transportVelocity, &
-                                  transportVelocityRight = transportVelocity, &
+                                  transportVelocityLeft = transportVelocityLeft, &
+                                  transportVelocityRight = transportVelocityRight, &
                                   nHat   = f % geom % normal(:,i,j), &
                                   t1     = f % geom % t1(:,i,j), &
                                   t2     = f % geom % t2(:,i,j), &
@@ -1932,6 +1966,9 @@ module SpatialDiscretization
       real(kind=RP)                   :: wallFunRho(0:f % Nf(1), 0:f % Nf(2))
       real(kind=RP)                   :: wallFunMu(0:f % Nf(1), 0:f % Nf(2))
       real(kind=RP)                   :: wallFunY(0:f % Nf(1), 0:f % Nf(2))
+      real(kind=RP)                   :: transportVelocityLeft(1:NDIM)
+      real(kind=RP)                   :: transportVelocityRight(1:NDIM)
+      real(kind=RP)                   :: transportD(1:NDIM,1:NDIM)
 
       if ( ShockCapturingDriver % isActive ) then
          do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
@@ -1954,6 +1991,7 @@ module SpatialDiscretization
 
       end do               ; end do
 
+
       if ( flowIsNavierStokes ) then
 
           useWallFuncFace = .false.
@@ -1975,11 +2013,12 @@ module SpatialDiscretization
                beta  = 0.0_RP
                kappa = f % storage(1) % mu_ns(2,i,j)
 
+               call f % getTransportDiffusion(i, j, 1, transportD)
                call ViscousFlux(NCONS,NGRAD,f % storage(1) % Q(:,i,j), &
                                             f % storage(1) % U_x(:,i,j), &
                                             f % storage(1) % U_y(:,i,j), &
                                             f % storage(1) % U_z(:,i,j), &
-                                            mu, beta, kappa, fv_3d)
+                                            mu, beta, kappa, transportD, fv_3d)
 
                visc_flux(:,i,j) =   fv_3d(:,IX)*f % geom % normal(IX,i,j) &
                                   + fv_3d(:,IY)*f % geom % normal(IY,i,j) &
@@ -2015,11 +2054,12 @@ module SpatialDiscretization
 !
 !           Hyperbolic part
 !           -------------
+            call f % getTransportVelocity(i, j, transportVelocityLeft, transportVelocityRight)
             call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
                                QRight = f % storage(2) % Q(:,i,j), &
                                nHat   = f % geom % normal(:,i,j), &
-                               transportVelocityLeft = transportVelocity, &
-                               transportVelocityRight = transportVelocity, &
+                               transportVelocityLeft = transportVelocityLeft, &
+                               transportVelocityRight = transportVelocityRight, &
                                t1     = f % geom % t1(:,i,j), &
                                t2     = f % geom % t2(:,i,j), &
                                flux   = inv_flux)

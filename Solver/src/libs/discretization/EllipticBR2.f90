@@ -613,6 +613,9 @@ module EllipticBR2
          real(kind=RP)       :: beta(0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3))
          real(kind=RP)       :: kappa(0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3))
          integer             :: i, j, k
+#ifdef TRANSPORT
+         real(kind=RP)       :: transportD(1:NDIM, 1:NDIM)
+#endif
 
 #if (!defined(CAHNHILLIARD))
 
@@ -656,8 +659,14 @@ module EllipticBR2
 
 
          do k = 0, e%Nxyz(3)   ; do j = 0, e%Nxyz(2) ; do i = 0, e%Nxyz(1)
+#ifdef TRANSPORT
+            call e % getTransportDiffusion(i, j, k, transportD)
+            call EllipticFlux(nEqn, nGradEqn, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), &
+                              e % storage % U_y(:,i,j,k), e % storage % U_z(:,i,j,k), mu(i,j,k), beta(i,j,k), kappa(i,j,k), transportD, cartesianFlux )
+#else
             call EllipticFlux(nEqn, nGradEqn, e % storage % Q(:,i,j,k), e % storage % U_x(:,i,j,k), &
                               e % storage % U_y(:,i,j,k), e % storage % U_z(:,i,j,k), mu(i,j,k), beta(i,j,k), kappa(i,j,k), cartesianFlux )
+#endif
 
             contravariantFlux(:,i,j,k,IX) =     cartesianFlux(:,IX) * e % geom % jGradXi(IX,i,j,k)  &
                                              +  cartesianFlux(:,IY) * e % geom % jGradXi(IY,i,j,k)  &
@@ -681,6 +690,9 @@ module EllipticBR2
                                            mu_left, mu_right, nHat , dWall, &
 #ifdef MULTIPHASE
 sigma, & 
+#endif
+#ifdef TRANSPORT
+transportDLeft, transportDRight, &
 #endif
 flux )
          use SMConstants
@@ -708,6 +720,10 @@ flux )
 #ifdef MULTIPHASE
          real(kind=RP), intent(in)       :: sigma(nEqn)
 #endif
+#ifdef TRANSPORT
+         real(kind=RP), intent(in)     :: transportDLeft(1:NDIM,1:NDIM)
+         real(kind=RP), intent(in)     :: transportDRight(1:NDIM,1:NDIM)
+#endif
          real(kind=RP), intent(out)      :: flux(nEqn)
 !
 !        ---------------
@@ -718,8 +734,13 @@ flux )
          real(kind=RP)     :: flux_vec(nEqn,NDIM), fL(nEqn,NDIM), fR(nEqn,NDIM)
          real(kind=RP)     :: sigma0
 
+#ifdef TRANSPORT
+         call EllipticFlux(nEqn, nGradEqn, QLeft, U_xLeft, U_yLeft, U_zLeft, mu_left(1), mu_left(2), mu_left(3), transportDLeft, fL)
+         call EllipticFlux(nEqn, nGradEqn, QRight, U_xRight, U_yRight, U_zRight, mu_right(1), mu_right(2), mu_right(3), transportDright, fR)
+#else
          call EllipticFlux(nEqn, nGradEqn, QLeft, U_xLeft, U_yLeft, U_zLeft, mu_left(1), mu_left(2), mu_left(3), fL)
          call EllipticFlux(nEqn, nGradEqn, QRight, U_xRight, U_yRight, U_zRight, mu_right(1), mu_right(2), mu_right(3), fR)
+#endif
 
          flux_vec = 0.5_RP * (fL + fR)
 

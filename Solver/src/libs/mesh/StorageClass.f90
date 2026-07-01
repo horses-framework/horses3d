@@ -115,6 +115,10 @@ module StorageClass
 #ifdef MULTIPHASE
       real(kind=RP),           allocatable :: invMa2(:,:,:)        !Storage for the density artificial compressibility factor
 #endif
+#ifdef TRANSPORT
+      real(kind=RP),           allocatable :: transportVelocity(:,:,:,:)      ! Transport velocity (NDIM,i,j,k)
+      real(kind=RP),           allocatable :: transportD(:,:,:,:,:)      ! Transport diffusion tensor (NDIM,NDIM,i,j,k)
+#endif
       contains
          procedure   :: Assign              => ElementStorage_Assign
          generic     :: assignment(=)       => Assign
@@ -206,6 +210,10 @@ module StorageClass
 #endif
 #ifdef MULTIPHASE
       real(kind=RP), dimension(:,:),       allocatable :: invMa2
+#endif
+#ifdef TRANSPORT
+      real(kind=RP),           allocatable :: transportVelocity(:,:,:)      ! Transport velocity (NDIM,i,j). Only allocated if user-defined in ProblemFile
+      real(kind=RP),           allocatable :: transportD(:,:,:,:)      ! Transport diffusion tensor (NDIM,NDIM,i,j). Only allocated if user-defined ProblemFile
 #endif
 !
 !     Inviscid Jacobians
@@ -1047,7 +1055,10 @@ module StorageClass
          to % cDot = from % cDot
          to % G_CH = from % G_CH
 #endif
-
+#ifdef TRANSPORT
+         if (allocated(to % transportVelocity)) to % transportVelocity = from % transportVelocity
+         if (allocated(to % transportD)) to % transportD = from % transportD
+#endif
          call to % PointStorage()
 
       end subroutine ElementStorage_Assign
@@ -1167,6 +1178,10 @@ module StorageClass
 
 #ifdef MULTIPHASE
          safedeallocate(self % invMa2)
+#endif
+#ifdef TRANSPORT
+         safedeallocate(self % transportVelocity)
+         safedeallocate(self % transportD)
 #endif
 
          safedeallocate(self % PrevQ)
@@ -1532,7 +1547,7 @@ module StorageClass
 
 #ifdef MULTIPHASE
          self % invMa2    = 0.0_RP
-#endif 
+#endif
 
          self % constructed = .TRUE.
       end subroutine FaceStorage_Construct
@@ -1633,6 +1648,10 @@ module StorageClass
 
 #ifdef MULTIPHASE
          safedeallocate(self % invMa2 )
+#endif
+#ifdef TRANSPORT
+         safedeallocate(self % transportVelocity)
+         safedeallocate(self % transportD)
 #endif
 
          safedeallocate(self % genericInterfaceFluxMemory)
@@ -1809,6 +1828,10 @@ module StorageClass
 #endif
 #ifdef MULTIPHASE
          to % invMa2 = from % invMa2
+#endif
+#ifdef TRANSPORT
+         if (allocated(to % transportVelocity)) to % transportVelocity = from % transportVelocity
+         if (allocated(to % transportD)) to % transportD = from % transportD
 #endif
          call to % PointStorage
       end subroutine FaceStorage_Assign

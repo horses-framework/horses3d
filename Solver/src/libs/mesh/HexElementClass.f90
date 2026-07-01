@@ -100,6 +100,10 @@
 #if defined(ACOUSTIC)
             procedure   :: ProlongBaseSolutionToFaces  => HexElement_ProlongBaseSolutionToFaces
 #endif
+#ifdef TRANSPORT
+            procedure   :: getTransportVelocity   => HexElement_getTransportVelocity
+            procedure   :: getTransportDiffusion  => HexElement_getTransportDiffusion
+#endif
             generic     :: assignment(=)           => copy
       END TYPE Element
 
@@ -980,6 +984,52 @@
          call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT  , self % faceSide(ETOP   ) )
 
       end subroutine HexElement_ProlongBaseSolutionToFaces
+#endif
+!
+#ifdef TRANSPORT
+      subroutine HexElement_getTransportVelocity(e, i, j, k, transportVelocity)
+         implicit none
+         class(Element), intent(in)  :: e
+         integer, intent(in)  :: i, j, k
+         real(kind=RP), intent(out) :: transportVelocity(1:NDIM)
+
+         ! Local variable
+         real(kind=RP)           :: u , v , w
+
+         associate ( Q => e % storage % Q(:,i,j,k) ) 
+
+         u = Q(IRHOU) / Q(IRHO)
+         v = Q(IRHOV) / Q(IRHO)
+         w = Q(IRHOW) / Q(IRHO)
+
+         if (transportVelocityType == transportVelocityType_Constant) then
+            transportVelocity = transportVelocity_CONSTANT
+         elseif (transportVelocityType == transportVelocityType_NS) then
+            transportVelocity(IX) = u
+            transportVelocity(IY) = v
+            transportVelocity(IZ) = w
+         elseif (transportVelocityType == transportVelocityType_UserDefined) then
+            transportVelocity = e % storage % transportVelocity(:,i,j,k)
+         end if
+
+         end associate
+      end subroutine HexElement_getTransportVelocity
+
+      subroutine HexElement_getTransportDiffusion(e, i, j, k, transportD)
+         implicit none
+         class(Element), intent(in)  :: e
+         integer, intent(in)  :: i, j, k
+         real(kind=RP), intent(out) :: transportD(1:NDIM, 1:NDIM)
+
+         if (transportDiffusionType == transportDiffusionType_Constant) then
+            transportD = transportD_CONSTANT
+         elseif (transportDiffusionType == transportDiffusionType_NS) then
+            transportD = transportD_CONSTANT
+            ! AJRTODO: Should we use something related with mu and mu_t instead?
+         elseif (transportDiffusionType == transportDiffusionType_UserDefined) then
+            transportD = e % storage % transportD(:,:,i,j,k)
+         end if
+      end subroutine HexElement_getTransportDiffusion
 #endif
 !
       END Module ElementClass

@@ -130,7 +130,7 @@ module VariableConversion_NSTPT
                  -Q(IRHOV) * sRho, &
                  -Q(IRHOW) * sRho, &
                  1._RP, &
-                 0.0_RP] !AJRTODO
+                 0.0_RP]
          
          dTdQ = dTdQ * thermodynamics % gammaMinus1 * dimensionless % gammaM2 * sRho
          
@@ -233,6 +233,7 @@ module VariableConversion_NSTPT
          U(IRHOV) = Q(IRHOV)*invP
          U(IRHOW) = Q(IRHOW)*invP
          U(IRHOE) = -Q(IRHO)*invP
+         U(IC)    = Q(IC)
 
 
       end subroutine NSGradientVariables_ENTROPY
@@ -259,6 +260,7 @@ module VariableConversion_NSTPT
          U(IRHOV) = Q(IRHOV)*invRho                     ! y-velocity
          U(IRHOW) = Q(IRHOW)*invRho                     ! z-velocity
          U(IRHOE) = dimensionless % gammaM2 * p*invRho  ! Temperature
+         U(IC)    = Q(IC)                               ! Concentration
 
       end subroutine NSGradientVariables_ENERGY
 !

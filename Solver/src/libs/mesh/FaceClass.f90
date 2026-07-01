@@ -96,9 +96,21 @@
 #if defined(ACOUSTIC)
             procedure   :: AdaptBaseSolutionToFace       => Face_AdaptBaseSolutionToFace
 #endif
+#ifdef TRANSPORT
+            procedure   :: getTransportVelocity       => Face_getTransportVelocity
+            procedure, private :: getTransportDiffusion_LeftRight => Face_getTransportDiffusion_LeftRight
+            procedure, private :: getTransportDiffusion_Side => Face_getTransportDiffusion_Side
+            generic, public   :: getTransportDiffusion       => getTransportDiffusion_LeftRight, getTransportDiffusion_Side
+#endif
             procedure   :: copy           => Face_Assign
             generic     :: assignment(=)  => copy
       end type Face
+
+! #ifdef TRANSPORT
+!       interface Face_getTransportDiffusion
+!          module procedure :: Face_getTransportDiffusion_LeftRight, Face_getTransportDiffusion_Side
+!       end interface Face_getTransportDiffusion
+! #endif
 !
 !     ========
       CONTAINS
@@ -1228,4 +1240,91 @@
          to % geom = from % geom
          to % storage = from % storage
       end subroutine Face_Assign
+!
+#ifdef TRANSPORT
+      subroutine Face_getTransportVelocity(f, i, j, transportVelocityLeft, transportVelocityRight)
+         implicit none
+         class(Face), intent(in)  :: f
+         integer, intent(in)  :: i, j
+         real(kind=RP), intent(out) :: transportVelocityLeft(1:NDIM)
+         real(kind=RP), intent(out) :: transportVelocityRight(1:NDIM)
+
+         ! Local variable
+         real(kind=RP)           :: u , v , w
+
+         ! Left side
+
+         associate ( Q => f % storage(1) % Q(:,i,j) ) 
+
+         u = Q(IRHOU) / Q(IRHO)
+         v = Q(IRHOV) / Q(IRHO)
+         w = Q(IRHOW) / Q(IRHO)
+
+         if (transportVelocityType == transportVelocityType_Constant) then
+            transportVelocityLeft = transportVelocity_CONSTANT
+         elseif (transportVelocityType == transportVelocityType_NS) then
+            transportVelocityLeft(IX) = u
+            transportVelocityLeft(IY) = v
+            transportVelocityLeft(IZ) = w
+         elseif (transportVelocityType == transportVelocityType_UserDefined) then
+            transportVelocityLeft = f % storage(1) % transportVelocity(:,i,j)
+         end if
+
+         end associate
+
+         ! Right side
+
+         associate ( Q => f % storage(2) % Q(:,i,j) ) 
+
+         u = Q(IRHOU) / Q(IRHO)
+         v = Q(IRHOV) / Q(IRHO)
+         w = Q(IRHOW) / Q(IRHO)
+
+         if (transportVelocityType == transportVelocityType_Constant) then
+            transportVelocityRight = transportVelocity_CONSTANT
+         elseif (transportVelocityType == transportVelocityType_NS) then
+            transportVelocityRight(IX) = u
+            transportVelocityRight(IY) = v
+            transportVelocityRight(IZ) = w
+         elseif (transportVelocityType == transportVelocityType_UserDefined) then
+            transportVelocityRight = f % storage(2) % transportVelocity(:,i,j)
+         end if
+
+         end associate
+      end subroutine Face_getTransportVelocity
+
+      subroutine Face_getTransportDiffusion_LeftRight(f, i, j, transportDLeft, transportDRight)
+         implicit none
+         class(Face), intent(in)  :: f
+         integer, intent(in)  :: i, j
+         real(kind=RP), intent(out) :: transportDLeft(1:NDIM,1:NDIM)
+         real(kind=RP), intent(out) :: transportDRight(1:NDIM,1:NDIM)
+
+         ! Left side
+         call f % getTransportDiffusion(i, j, 1, transportDLeft)
+
+         ! Right side
+         call f % getTransportDiffusion(i, j, 2, transportDRight)
+         
+      end subroutine Face_getTransportDiffusion_LeftRight
+
+      subroutine Face_getTransportDiffusion_Side(f, i, j, side, transportD)
+         implicit none
+         class(Face), intent(in)  :: f
+         integer, intent(in)  :: i, j
+         integer, intent(in)  :: side
+         real(kind=RP), intent(out) :: transportD(1:NDIM,1:NDIM)
+
+
+         if (transportDiffusionType == transportDiffusionType_Constant) then
+            transportD = transportD_CONSTANT
+         elseif (transportDiffusionType == transportDiffusionType_NS) then
+            transportD = transportD_CONSTANT
+            ! AJRTODO: Should we use something related with mu and mu_t instead?
+         elseif (transportDiffusionType == transportDiffusionType_UserDefined) then
+            transportD = f % storage(side) % transportD(:,:,i,j)
+         end if
+
+      end subroutine Face_getTransportDiffusion_Side
+#endif
 end Module FaceClass

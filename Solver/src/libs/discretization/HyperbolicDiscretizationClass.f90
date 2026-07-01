@@ -31,7 +31,11 @@ module HyperbolicDiscretizationClass
    end type HyperbolicDiscretization_t
 
    abstract interface
-      pure subroutine HyperbolicFlux0D_f(Q, F, rho_, Qbase)
+      pure subroutine HyperbolicFlux0D_f(Q, F, rho_, Qbase &
+#ifdef TRANSPORT
+      , transportVelocity &
+#endif
+)
          use SMConstants
          use PhysicsStorage
          implicit none
@@ -42,6 +46,9 @@ module HyperbolicDiscretizationClass
          real(kind=RP), intent(in), optional :: Qbase(1:NCONSB)
 #else
          real(kind=RP), intent(in), optional :: Qbase(1:NCONS)
+#endif
+#ifdef TRANSPORT
+         real(kind=RP), intent(in), optional :: transportVelocity(1:NDIM)
 #endif
       end subroutine HyperbolicFlux0D_f
    end interface
@@ -100,6 +107,9 @@ module HyperbolicDiscretizationClass
          integer            :: i, j, k
          real(kind=RP)      :: cartesianFlux(1:NCONS, 1:NDIM)
          logical            :: useBaseFlow
+#ifdef TRANSPORT
+         real(kind=RP)      :: transportVelocity(1:NDIM)
+#endif
 
          if (present(useBaseFlow_)) then
             useBaseFlow = useBaseFlow_
@@ -132,7 +142,12 @@ module HyperbolicDiscretizationClass
          else
 
              do k = 0, e%Nxyz(3)   ; do j = 0, e%Nxyz(2)    ; do i = 0, e%Nxyz(1)
+#ifdef TRANSPORT
+                call e % getTransportVelocity(i, j, k, transportVelocity)
+                call HyperbolicFlux( e % storage % Q(:,i,j,k), cartesianFlux(:,:), rho_ = e % storage % rho(i,j,k), transportVelocity = transportVelocity)
+#else
                 call HyperbolicFlux( e % storage % Q(:,i,j,k), cartesianFlux(:,:), rho_ = e % storage % rho(i,j,k))
+#endif
 
                 contravariantFlux(:,i,j,k,IX) =    cartesianFlux(:,IX) * e % geom % jGradXi(IX,i,j,k)  &
                                                  + cartesianFlux(:,IY) * e % geom % jGradXi(IY,i,j,k)  &
