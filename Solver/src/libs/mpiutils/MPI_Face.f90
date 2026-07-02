@@ -23,6 +23,8 @@ module MPI_Face_Class
       integer                    :: gradQrecv_req
       integer                    :: AviscFluxRecv_req
       integer                    :: QBaseRecv_req
+      integer                    :: transportVRecv_req
+      integer                    :: transportDRecv_req
       integer                    :: sizeQ
       integer                    :: sizeU_xyz
       integer                    :: sizeAviscFlux
@@ -36,6 +38,10 @@ module MPI_Face_Class
       real(kind=RP), allocatable :: AviscFluxRecv(:)
       real(kind=RP), allocatable :: QbaseSend(:)
       real(kind=RP), allocatable :: QbaseRecv(:)
+      real(kind=RP), allocatable :: transportVSend(:)
+      real(kind=RP), allocatable :: transportVRecv(:)
+      real(kind=RP), allocatable :: transportDSend(:)
+      real(kind=RP), allocatable :: transportDRecv(:)
       contains
          procedure   :: Construct        => MPI_Face_Construct
          procedure   :: Destruct         => MPI_Face_Destruct
@@ -54,6 +60,12 @@ module MPI_Face_Class
          procedure   :: SendQbase        => MPI_Face_SendQbase
          procedure   :: RecvQbase        => MPI_Face_RecvQbase
          procedure   :: WaitForSolutionB => MPI_Face_WaitForSolutionB
+         procedure   :: SendTransportV   => MPI_Face_SendTransportV
+         procedure   :: RecvTransportV   => MPI_Face_RecvTransportV
+         procedure   :: WaitForTransportV => MPI_Face_WaitForTransportV
+         procedure   :: SendTransportD   => MPI_Face_SendTransportD
+         procedure   :: RecvTransportD   => MPI_Face_RecvTransportD
+         procedure   :: WaitForTransportD => MPI_Face_WaitForTransportD
    end type MPI_Face_t
 
    type MPI_FacesSet_t
@@ -96,7 +108,7 @@ module MPI_Face_Class
 
       end subroutine ConstructMPIFaces
 
-      subroutine ConstructMPIFacesStorage(facesSet, NCONS, NGRAD, NDOFS, NCONSB_in)
+      subroutine ConstructMPIFacesStorage(facesSet, NCONS, NGRAD, NDOFS, NCONSB_in, transportData)
 !
 !        ***************************************************
 !           Allocates buffers to send and receive.
@@ -109,6 +121,7 @@ module MPI_Face_Class
          integer, intent(in)     :: NCONS, NGRAD
          integer, intent(in)     :: NDOFS(MPI_Process % nProcs)
          integer, intent(in), optional     :: NCONSB_in
+         logical, intent(in), optional     :: transportData
 !
 !        ---------------
 !        Local variables
@@ -147,6 +160,16 @@ module MPI_Face_Class
                allocate( facesSet % faces(domain) % AviscFluxRecv(NCONS * NDOFS(domain)) )
                allocate( facesSet % faces(domain) % QBaseSend(NCONSB * NDOFS(domain)) )
                allocate( facesSet % faces(domain) % QBaseRecv(NCONSB * NDOFS(domain)) )
+               if (transportData) then
+                  safedeallocate(facesSet % faces(domain) % transportVSend)
+                  safedeallocate(facesSet % faces(domain) % transportVRecv)
+                  safedeallocate(facesSet % faces(domain) % transportDSend)
+                  safedeallocate(facesSet % faces(domain) % transportDRecv)
+                  allocate( facesSet % faces(domain) % transportVSend(NDIM * NDOFS(domain)) )
+                  allocate( facesSet % faces(domain) % transportVRecv(NDIM * NDOFS(domain)) )
+                  allocate( facesSet % faces(domain) % transportDSend(NDIM * NDIM * NDOFS(domain)) )
+                  allocate( facesSet % faces(domain) % transportDRecv(NDIM * NDIM * NDOFS(domain)) )
+               end if
             end if
          end do
       end subroutine ConstructMPIFacesStorage
@@ -378,6 +401,89 @@ module MPI_Face_Class
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
+!     ---------------------------------
+!     Subroutine to send the variable transportV
+!     ---------------------------------
+      subroutine MPI_Face_SendTransportV(self, domain, req)
+         implicit none
+         class(MPI_Face_t)      :: self
+         integer, intent(in)    :: domain
+         integer, intent(out)   :: req
+         !-local-variables-----------------------------------------
+         integer  :: ierr
+         !---------------------------------------------------------
+#ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
+         if ( self % no_of_faces .gt. 0 ) then
+            call mpi_isend(self % transportVSend, NDIM * self % nDOFs, MPI_DOUBLE_PRECISION, domain-1, DEFAULT_TAG, &
+                           MPI_COMM_WORLD, req, ierr)
+         end if
+#endif
+      end subroutine MPI_Face_SendTransportV
+!     ------------------------------------
+!     Subroutine to receive the variable transportV
+!     ------------------------------------
+      subroutine MPI_Face_RecvTransportV(self, domain, req)
+         implicit none
+         class(MPI_Face_t)      :: self
+         integer, intent(in)    :: domain
+         integer, intent(out)   :: req
+         !-local-variables-----------------------------------------
+         integer  :: ierr
+         !---------------------------------------------------------
+#ifdef _HAS_MPI_
+        req = MPI_REQUEST_NULL
+        self % transportVRecv_req = MPI_REQUEST_NULL
+         if ( self % no_of_faces .gt. 0 ) then
+            call mpi_irecv(self % transportVRecv, NDIM * self % nDOFs, MPI_DOUBLE_PRECISION, domain-1, MPI_ANY_TAG, &
+                           MPI_COMM_WORLD, req, ierr)
+            self % transportVRecv_req = req
+         end if
+#endif
+      end subroutine MPI_Face_RecvTransportV
+!     ---------------------------------
+!     Subroutine to send the variable transportD
+!     ---------------------------------
+      subroutine MPI_Face_SendTransportD(self, domain, req)
+         implicit none
+         class(MPI_Face_t)      :: self
+         integer, intent(in)    :: domain
+         integer, intent(out)   :: req
+         !-local-variables-----------------------------------------
+         integer  :: ierr
+         !---------------------------------------------------------
+#ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
+         if ( self % no_of_faces .gt. 0 ) then
+            call mpi_isend(self % transportDSend, NDIM * NDIM * self % nDOFs, MPI_DOUBLE_PRECISION, domain-1, DEFAULT_TAG, &
+                           MPI_COMM_WORLD, req, ierr)
+         end if
+#endif
+      end subroutine MPI_Face_SendTransportD
+!     ------------------------------------
+!     Subroutine to receive the variable transportD
+!     ------------------------------------
+      subroutine MPI_Face_RecvTransportD(self, domain, req)
+         implicit none
+         class(MPI_Face_t)      :: self
+         integer, intent(in)    :: domain
+         integer, intent(out)   :: req
+         !-local-variables-----------------------------------------
+         integer  :: ierr
+         !---------------------------------------------------------
+#ifdef _HAS_MPI_
+        req = MPI_REQUEST_NULL
+        self % transportDRecv_req = MPI_REQUEST_NULL
+         if ( self % no_of_faces .gt. 0 ) then
+            call mpi_irecv(self % transportDRecv, NDIM * NDIM * self % nDOFs, MPI_DOUBLE_PRECISION, domain-1, MPI_ANY_TAG, &
+                           MPI_COMM_WORLD, req, ierr)
+            self % transportDRecv_req = req
+         end if
+#endif
+      end subroutine MPI_Face_RecvTransportD
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
 !     -------------------------------------------
 !     Wait until the polynomial order is received
 !     -------------------------------------------
@@ -493,6 +599,54 @@ module MPI_Face_Class
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
+      subroutine MPI_Face_WaitForTransportV(self)
+         implicit none
+         class(MPI_Face_t)    :: self
+#ifdef _HAS_MPI_
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+         integer              :: ierr
+         integer              :: status(MPI_STATUS_SIZE)
+
+!
+!        -----------------------------------
+!        Wait until the solution is received
+!        -----------------------------------
+!
+         call mpi_wait(self % transportVRecv_req, status, ierr)
+#endif
+
+      end subroutine MPI_Face_WaitForTransportV
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+      subroutine MPI_Face_WaitForTransportD(self)
+         implicit none
+         class(MPI_Face_t)    :: self
+#ifdef _HAS_MPI_
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+         integer              :: ierr
+         integer              :: status(MPI_STATUS_SIZE)
+
+!
+!        -----------------------------------
+!        Wait until the solution is received
+!        -----------------------------------
+!
+         call mpi_wait(self % transportDRecv_req, status, ierr)
+#endif
+
+      end subroutine MPI_Face_WaitForTransportD
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
       subroutine DestructMPIFaces(facesSet)
          implicit none
          type(MPI_FacesSet_t)    :: facesSet
@@ -541,6 +695,8 @@ module MPI_Face_Class
          self % gradQrecv_req     = MPI_REQUEST_NULL
          self % AviscFluxRecv_req = MPI_REQUEST_NULL
          self % QBaseRecv_req     = MPI_REQUEST_NULL
+         self % transportVRecv_req = MPI_REQUEST_NULL
+         self % transportDRecv_req = MPI_REQUEST_NULL
 #endif
 
       end subroutine MPI_Face_Construct
@@ -562,12 +718,18 @@ module MPI_Face_Class
          safedeallocate(self % AviscFluxRecv)
          safedeallocate(self % QBaseSend)
          safedeallocate(self % QBaseRecv)
+         safedeallocate(self % transportVSend)
+         safedeallocate(self % transportVRecv)
+         safedeallocate(self % transportDSend)
+         safedeallocate(self % transportDRecv)
 #ifdef _HAS_MPI_
          self % Nrecv_req         = MPI_REQUEST_NULL
          self % Qrecv_req         = MPI_REQUEST_NULL
          self % gradQrecv_req     = MPI_REQUEST_NULL
          self % AviscFluxRecv_req = MPI_REQUEST_NULL
          self % QBaseRecv_req     = MPI_REQUEST_NULL
+         self % transportVRecv_req = MPI_REQUEST_NULL
+         self % transportDRecv_req = MPI_REQUEST_NULL
 #endif
 
       end subroutine MPI_Face_Destruct

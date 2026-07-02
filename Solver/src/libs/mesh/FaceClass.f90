@@ -101,6 +101,8 @@
             procedure, private :: getTransportDiffusion_LeftRight => Face_getTransportDiffusion_LeftRight
             procedure, private :: getTransportDiffusion_Side => Face_getTransportDiffusion_Side
             generic, public   :: getTransportDiffusion       => getTransportDiffusion_LeftRight, getTransportDiffusion_Side
+            procedure   :: AdaptTransportVelocityToFace => Face_AdaptTransportVelocityToFace
+            procedure   :: AdaptTransportDiffusionToFace => Face_AdaptTransportDiffusionToFace
 #endif
             procedure   :: copy           => Face_Assign
             generic     :: assignment(=)  => copy
@@ -1326,5 +1328,167 @@
          end if
 
       end subroutine Face_getTransportDiffusion_Side
+
+      subroutine Face_AdaptTransportVelocityToFace(self, Nelx, Nely, Qe, side)
+         use MappedGeometryClass
+         implicit none
+         class(Face),   intent(inout)              :: self
+         integer,       intent(in)                 :: Nelx, Nely
+         real(kind=RP), intent(in)                 :: Qe(1:NDIM, 0:Nelx, 0:Nely)
+         integer,       intent(in)                 :: side
+   
+         ! ---------------
+         ! Local variables
+         ! ---------------
+         integer       :: i, j, k, l, m, ii, jj
+         real(kind=RP) :: Qe_rot(1:NDIM, 0:self % NfRight(1), 0:self % NfRight(2))
+
+         select case (side)
+         case(1)
+            associate(Qf => self % storage(1) % transportVelocity)
+            select case ( self % projectionType(1) )
+            case (0)
+               Qf = Qe
+
+            case (1)
+               Qf = 0.0_RP
+               do j = 0, self % Nf(2)  ; do l = 0, self % NfLeft(1)   ; do i = 0, self % Nf(1)
+                  Qf(:,i,j) = Qf(:,i,j) + Tset(self % NfLeft(1), self % Nf(1)) % T(i,l) * Qe(:,l,j)
+               end do                  ; end do                   ; end do
+               
+            case (2)
+               Qf = 0.0_RP
+               do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
+                  Qf(:,i,j) = Qf(:,i,j) + Tset(self % NfLeft(2), self % Nf(2)) % T(j,l) * Qe(:,i,l)
+               end do                  ; end do                   ; end do
+      
+            case (3)
+               Qf = 0.0_RP
+               do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   
+                  do m = 0, self % NfLeft(1) ; do i = 0, self % Nf(1)
+                     Qf(:,i,j) = Qf(:,i,j) +   Tset(self % NfLeft(1), self % Nf(1)) % T(i,m) &
+                                             * Tset(self % NfLeft(2), self % Nf(2)) % T(j,l) &
+                                             * Qe(:,m,l)
+                  end do                 ; end do
+               end do                  ; end do
+            end select
+            end associate
+         case(2)
+            associate( Qf => self % storage(2) % transportVelocity )
+            do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
+               call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), self % rotation, ii, jj)
+               Qe_rot(:,i,j) = Qe(:,ii,jj) 
+            end do                        ; end do
+
+            select case ( self % projectionType(2) )
+            case (0)
+               Qf = Qe_rot
+            case (1)
+               Qf = 0.0_RP
+               do j = 0, self % Nf(2)  ; do l = 0, self % NfRight(1)   ; do i = 0, self % Nf(1)
+                  Qf(:,i,j) = Qf(:,i,j) + Tset(self % NfRight(1), self % Nf(1)) % T(i,l) * Qe_rot(:,l,j)
+               end do                  ; end do                   ; end do
+               
+            case (2)
+               Qf = 0.0_RP
+               do l = 0, self % NfRight(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
+                  Qf(:,i,j) = Qf(:,i,j) + Tset(self % NfRight(2), self % Nf(2)) % T(j,l) * Qe_rot(:,i,l)
+               end do                  ; end do                   ; end do
+      
+            case (3)
+               Qf = 0.0_RP
+               do l = 0, self % NfRight(2)  ; do j = 0, self % Nf(2)   
+                  do m = 0, self % NfRight(1) ; do i = 0, self % Nf(1)
+                     Qf(:,i,j) = Qf(:,i,j) +   Tset(self % NfRight(1), self % Nf(1)) % T(i,m) &
+                                             * Tset(self % NfRight(2), self % Nf(2)) % T(j,l) &
+                                             * Qe_rot(:,m,l)
+                  end do                 ; end do
+               end do                  ; end do
+            end select
+            end associate
+         end select
+
+      end subroutine Face_AdaptTransportVelocityToFace
+
+      subroutine Face_AdaptTransportDiffusionToFace(self, Nelx, Nely, Qe, side)
+         use MappedGeometryClass
+         implicit none
+         class(Face),   intent(inout)              :: self
+         integer,       intent(in)                 :: Nelx, Nely
+         real(kind=RP), intent(in)                 :: Qe(1:NDIM, 1:NDIM, 0:Nelx, 0:Nely)
+         integer,       intent(in)                 :: side
+   
+         ! ---------------
+         ! Local variables
+         ! ---------------
+         integer       :: i, j, k, l, m, ii, jj
+         real(kind=RP) :: Qe_rot(1:NDIM, 1:NDIM, 0:self % NfRight(1), 0:self % NfRight(2))
+
+         select case (side)
+         case(1)
+            associate(Qf => self % storage(1) % transportD)
+            select case ( self % projectionType(1) )
+            case (0)
+               Qf = Qe
+
+            case (1)
+               Qf = 0.0_RP
+               do j = 0, self % Nf(2)  ; do l = 0, self % NfLeft(1)   ; do i = 0, self % Nf(1)
+                  Qf(:,:,i,j) = Qf(:,:,i,j) + Tset(self % NfLeft(1), self % Nf(1)) % T(i,l) * Qe(:,:,l,j)
+               end do                  ; end do                   ; end do
+               
+            case (2)
+               Qf = 0.0_RP
+               do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
+                  Qf(:,:,i,j) = Qf(:,:,i,j) + Tset(self % NfLeft(2), self % Nf(2)) % T(j,l) * Qe(:,:,i,l)
+               end do                  ; end do                   ; end do
+      
+            case (3)
+               Qf = 0.0_RP
+               do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   
+                  do m = 0, self % NfLeft(1) ; do i = 0, self % Nf(1)
+                     Qf(:,:,i,j) = Qf(:,:,i,j) +   Tset(self % NfLeft(1), self % Nf(1)) % T(i,m) &
+                                             * Tset(self % NfLeft(2), self % Nf(2)) % T(j,l) &
+                                             * Qe(:,:,m,l)
+                  end do                 ; end do
+               end do                  ; end do
+            end select
+            end associate
+         case(2)
+            associate( Qf => self % storage(2) % transportD )
+            do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
+               call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), self % rotation, ii, jj)
+               Qe_rot(:,:,i,j) = Qe(:,:,ii,jj) 
+            end do                        ; end do
+
+            select case ( self % projectionType(2) )
+            case (0)
+               Qf = Qe_rot
+            case (1)
+               Qf = 0.0_RP
+               do j = 0, self % Nf(2)  ; do l = 0, self % NfRight(1)   ; do i = 0, self % Nf(1)
+                  Qf(:,:,i,j) = Qf(:,:,i,j) + Tset(self % NfRight(1), self % Nf(1)) % T(i,l) * Qe_rot(:,:,l,j)
+               end do                  ; end do                   ; end do
+               
+            case (2)
+               Qf = 0.0_RP
+               do l = 0, self % NfRight(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
+                  Qf(:,:,i,j) = Qf(:,:,i,j) + Tset(self % NfRight(2), self % Nf(2)) % T(j,l) * Qe_rot(:,:,i,l)
+               end do                  ; end do                   ; end do
+      
+            case (3)
+               Qf = 0.0_RP
+               do l = 0, self % NfRight(2)  ; do j = 0, self % Nf(2)   
+                  do m = 0, self % NfRight(1) ; do i = 0, self % Nf(1)
+                     Qf(:,:,i,j) = Qf(:,:,i,j) +   Tset(self % NfRight(1), self % Nf(1)) % T(i,m) &
+                                             * Tset(self % NfRight(2), self % Nf(2)) % T(j,l) &
+                                             * Qe_rot(:,:,m,l)
+                  end do                 ; end do
+               end do                  ; end do
+            end select
+            end associate
+         end select
+
+      end subroutine Face_AdaptTransportDiffusionToFace
 #endif
 end Module FaceClass

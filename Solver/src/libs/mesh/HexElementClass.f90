@@ -102,7 +102,10 @@
 #endif
 #ifdef TRANSPORT
             procedure   :: getTransportVelocity   => HexElement_getTransportVelocity
+            procedure   :: getTransportVelocityDivergence   => HexElement_getTransportVelocityDivergence
             procedure   :: getTransportDiffusion  => HexElement_getTransportDiffusion
+            procedure   :: ProlongTransportVelocityToFaces => HexElement_ProlongTransportVelocityToFaces
+            procedure   :: ProlongTransportDiffusionToFaces => HexElement_ProlongTransportDiffusionToFaces
 #endif
             generic     :: assignment(=)           => copy
       END TYPE Element
@@ -996,24 +999,42 @@
          ! Local variable
          real(kind=RP)           :: u , v , w
 
-         associate ( Q => e % storage % Q(:,i,j,k) ) 
-
-         u = Q(IRHOU) / Q(IRHO)
-         v = Q(IRHOV) / Q(IRHO)
-         w = Q(IRHOW) / Q(IRHO)
-
          if (transportVelocityType == transportVelocityType_Constant) then
             transportVelocity = transportVelocity_CONSTANT
          elseif (transportVelocityType == transportVelocityType_NS) then
-            transportVelocity(IX) = u
-            transportVelocity(IY) = v
-            transportVelocity(IZ) = w
+            associate ( Q => e % storage % Q(:,i,j,k) ) 
+               u = Q(IRHOU) / Q(IRHO)
+               v = Q(IRHOV) / Q(IRHO)
+               w = Q(IRHOW) / Q(IRHO)
+               transportVelocity(IX) = u
+               transportVelocity(IY) = v
+               transportVelocity(IZ) = w
+            end associate
          elseif (transportVelocityType == transportVelocityType_UserDefined) then
             transportVelocity = e % storage % transportVelocity(:,i,j,k)
          end if
 
-         end associate
       end subroutine HexElement_getTransportVelocity
+
+      subroutine HexElement_getTransportVelocityDivergence(e, i, j, k, transportVelocityDiv)
+         implicit none
+         class(Element), intent(in)  :: e
+         integer, intent(in)  :: i, j, k
+         real(kind=RP), intent(out) :: transportVelocityDiv
+
+         ! Local variable
+         real(kind=RP)           :: U_x(NDIM), U_y(NDIM), U_z(NDIM)
+
+         if (transportVelocityType == transportVelocityType_Constant) then
+            transportVelocityDiv = 0.0_rp
+         elseif (transportVelocityType == transportVelocityType_NS) then
+            call getVelocityGradients(e % storage % Q, e % storage % U_x, e % storage % U_y, e % storage % U_z, U_x, U_y, U_z)
+            transportVelocityDiv = U_x(IX) + U_y(IY) + U_z(IZ)
+         elseif (transportVelocityType == transportVelocityType_UserDefined) then
+            transportVelocityDiv = e % storage % transportVelocityDivergence(i,j,k)
+         end if
+
+      end subroutine HexElement_getTransportVelocityDivergence
 
       subroutine HexElement_getTransportDiffusion(e, i, j, k, transportD)
          implicit none
@@ -1030,6 +1051,103 @@
             transportD = e % storage % transportD(:,:,i,j,k)
          end if
       end subroutine HexElement_getTransportDiffusion
+
+      subroutine HexElement_ProlongTransportVelocityToFaces(self, fFR, fBK, fBOT, fR, fT, fL)
+         use FaceClass
+         implicit none
+         class(Element),   intent(in)  :: self
+         class(Face),      intent(inout) :: fFR, fBK, fBOT, fR, fT, fL
+
+         ! ---------------
+         ! Local variables
+         ! ---------------
+
+         integer  :: i, j, k, l, N(3)
+         real(kind=RP), dimension(1:NDIM, 0:self % Nxyz(1), 0:self % Nxyz(3)) :: QFR, QBK
+         real(kind=RP), dimension(1:NDIM, 0:self % Nxyz(1), 0:self % Nxyz(2)) :: QBOT, QT
+         real(kind=RP), dimension(1:NDIM, 0:self % Nxyz(2), 0:self % Nxyz(3)) :: QL, QR
+         type(NodalStorage_t), pointer :: spAxi, spAeta, spAzeta
+
+         N = self % Nxyz
+         spAxi   => NodalStorage(N(1))
+         spAeta  => NodalStorage(N(2))
+         spAzeta => NodalStorage(N(3))
+
+         ! *************************
+         ! Prolong transport velocity
+         ! *************************
+
+         QL   = 0.0_RP     ; QR   = 0.0_RP
+         QFR  = 0.0_RP     ; QBK  = 0.0_RP
+         QBOT = 0.0_RP     ; QT   = 0.0_RP
+
+         do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
+            QL  (:,j,k)= QL  (:,j,k)+ self % storage % transportVelocity(:,i,j,k)* spAxi % v  (i,LEFT  )
+            QR  (:,j,k)= QR  (:,j,k)+ self % storage % transportVelocity(:,i,j,k)* spAxi % v  (i,RIGHT )
+            QFR (:,i,k)= QFR (:,i,k)+ self % storage % transportVelocity(:,i,j,k)* spAeta % v (j,FRONT )
+            QBK (:,i,k)= QBK (:,i,k)+ self % storage % transportVelocity(:,i,j,k)* spAeta % v (j,BACK  )
+            QBOT(:,i,j)= QBOT(:,i,j)+ self % storage % transportVelocity(:,i,j,k)* spAzeta % v(k,BOTTOM)
+            QT  (:,i,j)= QT  (:,i,j)+ self % storage % transportVelocity(:,i,j,k)* spAzeta % v(k,TOP   )
+         end do                   ; end do                   ; end do
+         nullify (spAxi, spAeta, spAzeta)
+
+         call fL   % AdaptTransportVelocityToFace(N(2), N(3), QL  , self % faceSide(ELEFT  ) )
+         call fR   % AdaptTransportVelocityToFace(N(2), N(3), QR  , self % faceSide(ERIGHT ) )
+         call fFR  % AdaptTransportVelocityToFace(N(1), N(3), QFR , self % faceSide(EFRONT ) )
+         call fBK  % AdaptTransportVelocityToFace(N(1), N(3), QBK , self % faceSide(EBACK  ) )
+         call fBOT % AdaptTransportVelocityToFace(N(1), N(2), QBOT, self % faceSide(EBOTTOM) )
+         call fT   % AdaptTransportVelocityToFace(N(1), N(2), QT  , self % faceSide(ETOP   ) )
+
+      end subroutine HexElement_ProlongTransportVelocityToFaces
+
+      subroutine HexElement_ProlongTransportDiffusionToFaces(self, fFR, fBK, fBOT, fR, fT, fL)
+         use FaceClass
+         implicit none
+         class(Element),   intent(in)  :: self
+         class(Face),      intent(inout) :: fFR, fBK, fBOT, fR, fT, fL
+
+         ! ---------------
+         ! Local variables
+         ! ---------------
+
+         integer  :: i, j, k, l, N(3)
+         real(kind=RP), dimension(1:NDIM, 1:NDIM, 0:self % Nxyz(1), 0:self % Nxyz(3)) :: QFR, QBK
+         real(kind=RP), dimension(1:NDIM, 1:NDIM, 0:self % Nxyz(1), 0:self % Nxyz(2)) :: QBOT, QT
+         real(kind=RP), dimension(1:NDIM, 1:NDIM, 0:self % Nxyz(2), 0:self % Nxyz(3)) :: QL, QR
+         type(NodalStorage_t), pointer :: spAxi, spAeta, spAzeta
+
+         N = self % Nxyz
+         spAxi   => NodalStorage(N(1))
+         spAeta  => NodalStorage(N(2))
+         spAzeta => NodalStorage(N(3))
+
+
+         ! *************************
+         ! Prolong transport diffusion tensor
+         ! *************************
+
+         QL   = 0.0_RP     ; QR   = 0.0_RP
+         QFR  = 0.0_RP     ; QBK  = 0.0_RP
+         QBOT = 0.0_RP     ; QT   = 0.0_RP
+
+         do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
+            QL  (:,:,j,k)= QL  (:,:,j,k)+ self % storage % transportD(:,:,i,j,k)* spAxi % v  (i,LEFT  )
+            QR  (:,:,j,k)= QR  (:,:,j,k)+ self % storage % transportD(:,:,i,j,k)* spAxi % v  (i,RIGHT )
+            QFR (:,:,i,k)= QFR (:,:,i,k)+ self % storage % transportD(:,:,i,j,k)* spAeta % v (j,FRONT )
+            QBK (:,:,i,k)= QBK (:,:,i,k)+ self % storage % transportD(:,:,i,j,k)* spAeta % v (j,BACK  )
+            QBOT(:,:,i,j)= QBOT(:,:,i,j)+ self % storage % transportD(:,:,i,j,k)* spAzeta % v(k,BOTTOM)
+            QT  (:,:,i,j)= QT  (:,:,i,j)+ self % storage % transportD(:,:,i,j,k)* spAzeta % v(k,TOP   )
+         end do                   ; end do                   ; end do
+         nullify (spAxi, spAeta, spAzeta)
+         
+         call fL   % AdaptTransportDiffusionToFace(N(2), N(3), QL  , self % faceSide(ELEFT  ) )
+         call fR   % AdaptTransportDiffusionToFace(N(2), N(3), QR  , self % faceSide(ERIGHT ) )
+         call fFR  % AdaptTransportDiffusionToFace(N(1), N(3), QFR , self % faceSide(EFRONT ) )
+         call fBK  % AdaptTransportDiffusionToFace(N(1), N(3), QBK , self % faceSide(EBACK  ) )
+         call fBOT % AdaptTransportDiffusionToFace(N(1), N(2), QBOT, self % faceSide(EBOTTOM) )
+         call fT   % AdaptTransportDiffusionToFace(N(1), N(2), QT  , self % faceSide(ETOP   ) )
+
+      end subroutine HexElement_ProlongTransportDiffusionToFaces
 #endif
 !
       END Module ElementClass

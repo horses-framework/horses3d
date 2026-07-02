@@ -174,6 +174,11 @@ MODULE HexMeshClass
             procedure :: ConvertDensityToPhaseFIeld    => HexMesh_ConvertDensityToPhaseField
             procedure :: ConvertPhaseFieldToDensity    => HexMesh_ConvertPhaseFieldToDensity
 #endif
+#ifdef TRANSPORT
+            procedure :: ProlongTransportDataToFaces   => HexMesh_ProlongTransportDataToFaces
+            procedure :: UpdateMPIFacesTransportData   => HexMesh_UpdateMPIFacesTransportData
+            procedure :: GatherMPIFacesTransportData   => HexMesh_GatherMPIFacesTransportData
+#endif
             procedure :: findElementsInsideCube        => HexMesh_findElementsInsideCube
             procedure :: copy                          => HexMesh_Assign
             generic   :: assignment(=)                 => copy
@@ -2559,6 +2564,8 @@ slavecoord:             DO l = 1, 4
             call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS)
 #elif defined(ACOUSTIC)
             call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS, NCONSB_in=NCONSB)
+#elif defined(TRANSPORT)
+            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS, transportData=(transportVelocityType == transportVelocityType_UserDefined))
 #endif
 
 #endif
@@ -5415,6 +5422,257 @@ slavecoord:             DO l = 1, 4
 !$omp end do
 
       end subroutine HexMesh_ProlongBaseSolutionToFaces
+#endif
+
+#ifdef TRANSPORT
+
+      subroutine HexMesh_ProlongTransportDataToFaces(self, HO_Elements, element_mask, Level)
+         implicit none
+         class(HexMesh),    intent(inout) :: self
+         logical, optional, intent(in)    :: HO_Elements
+         logical, optional, intent(in)    :: element_mask(:)
+		 integer, optional, intent(in)    :: Level
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+         integer  :: fIDs(6)
+         integer  :: eID, i, locLevel, lID
+         logical :: HOElements
+         logical  :: compute_element
+
+         if (present(HO_Elements)) then
+            HOElements = HO_Elements
+         else
+            HOElements = .false.
+         end if
+
+         if (HOElements) then
+!$omp do schedule(runtime) private(eID, fIDs)
+            do i = 1, size(self % HO_Elements)
+               eID = self % HO_Elements(i)
+               compute_element = .true.
+               if (present(element_mask)) compute_element = element_mask(eID)
+
+               if (compute_element) then
+                  fIDs = self % elements(eID) % faceIDs
+                  call self % elements(eID) % ProlongTransportVelocityToFaces(&
+                                                                     self % faces(fIDs(1)),&
+                                                                     self % faces(fIDs(2)),&
+                                                                     self % faces(fIDs(3)),&
+                                                                     self % faces(fIDs(4)),&
+                                                                     self % faces(fIDs(5)),&
+                                                                     self % faces(fIDs(6)) )
+                  call self % elements(eID) % ProlongTransportDiffusionToFaces(&
+                                                                     self % faces(fIDs(1)),&
+                                                                     self % faces(fIDs(2)),&
+                                                                     self % faces(fIDs(3)),&
+                                                                     self % faces(fIDs(4)),&
+                                                                     self % faces(fIDs(5)),&
+                                                                     self % faces(fIDs(6)) )
+               endif
+            end do
+!$omp end do
+         else
+		      ! The following differentiation is needed due to problem on AnisFAS NS
+			   if (present(Level)) then
+				   locLevel = Level
+!$omp do schedule(runtime) private(fIDs, eID)
+               do lID = 1, self % MLRK % MLIter(locLevel,8)
+                  eID = self % MLRK % MLIter_eIDN(lID)
+
+                  compute_element = .true.
+                  if (present(element_mask)) compute_element = element_mask(eID)
+
+                  if (compute_element) then
+                  fIDs = self % elements(eID) % faceIDs
+                  call self % elements(eID) % ProlongTransportVelocityToFaces(&
+                                                                     self % faces(fIDs(1)),&
+                                                                     self % faces(fIDs(2)),&
+                                                                     self % faces(fIDs(3)),&
+                                                                     self % faces(fIDs(4)),&
+                                                                     self % faces(fIDs(5)),&
+                                                                     self % faces(fIDs(6)) )
+                  call self % elements(eID) % ProlongTransportDiffusionToFaces(&
+                                                                     self % faces(fIDs(1)),&
+                                                                     self % faces(fIDs(2)),&
+                                                                     self % faces(fIDs(3)),&
+                                                                     self % faces(fIDs(4)),&
+                                                                     self % faces(fIDs(5)),&
+                                                                     self % faces(fIDs(6)) )
+                  endif
+               end do
+!$omp end do
+			   else
+!$omp do schedule(runtime) private(fIDs)
+               do eID = 1, size(self % elements)
+                                    
+
+                  compute_element = .true.
+                  if (present(element_mask)) compute_element = element_mask(eID)
+
+                  if (compute_element) then
+                  fIDs = self % elements(eID) % faceIDs
+                  call self % elements(eID) % ProlongTransportVelocityToFaces(&
+                                                                     self % faces(fIDs(1)),&
+                                                                     self % faces(fIDs(2)),&
+                                                                     self % faces(fIDs(3)),&
+                                                                     self % faces(fIDs(4)),&
+                                                                     self % faces(fIDs(5)),&
+                                                                     self % faces(fIDs(6)) )
+                  call self % elements(eID) % ProlongTransportDiffusionToFaces(&
+                                                                     self % faces(fIDs(1)),&
+                                                                     self % faces(fIDs(2)),&
+                                                                     self % faces(fIDs(3)),&
+                                                                     self % faces(fIDs(4)),&
+                                                                     self % faces(fIDs(5)),&
+                                                                     self % faces(fIDs(6)) )
+                  endif
+               end do
+!$omp end do
+			   end if 
+         end if
+
+      end subroutine HexMesh_ProlongTransportDataToFaces
+
+      subroutine HexMesh_UpdateMPIFacesTransportData(self)
+         use MPI_Face_Class
+         implicit none
+         !-arguments----------------------------------------------------------
+         class(HexMesh)         :: self
+#ifdef _HAS_MPI_
+         !-local-variables----------------------------------------------------
+		 integer :: k, domain, mpifID, fID, thisSide
+		 integer :: i, j, counterV, counterD, ierr
+		 integer, parameter :: otherSide(2) = (/2,1/)
+		 integer :: nShared, nreqs, idx_send
+		 integer, allocatable :: all_reqsV(:)
+		 integer, allocatable :: all_reqsD(:)
+         !--------------------------------------------------------------------
+
+         if ( .not. MPI_Process % doMPIAction ) return
+		 
+		 nShared = self % MPIfaces % nDomainShared
+		 ! Return when no faces are shared
+		 if (nShared <= 0) return
+
+		associate (MPIfaces => self % MPIfaces)
+		
+		 ! Allocate and initialize combined request array (recv slots first, then send slots)
+		 nreqs = 2 * nShared
+		 allocate(all_reqsV(nreqs))
+		 allocate(all_reqsD(nreqs))
+		 all_reqsV = MPI_REQUEST_NULL
+		 all_reqsD = MPI_REQUEST_NULL
+!
+!        ***************************
+!        Perform the receive request
+!        ***************************
+!		 
+         do k = 1, nShared
+			domain = MPIfaces % listDomain(k)
+			if (MPIfaces % faces(domain) % no_of_faces > 0) then
+				call MPIfaces % faces(domain) % RecvTransportV(domain, all_reqsV(k))
+				call MPIfaces % faces(domain) % RecvTransportD(domain, all_reqsD(k))
+			end if 
+         end do
+!
+!        *************
+!        Send solution
+!        *************
+!
+		 idx_send = nShared + 1
+         do k = 1, nShared
+			domain = MPIfaces % listDomain(k)
+			
+			if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+				idx_send = idx_send + 1
+				cycle
+			end if
+!
+!           ---------------
+!           Gather solution
+!           ---------------
+!
+            counterV = 1
+            counterD = 1
+
+            do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+               fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+               thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+               associate(f => self % faces(fID))
+               do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                  self % MPIfaces % faces(domain) % transportVSend(counterV:counterV+NDIM-1) = f % storage(thisSide) % transportVelocity(:,i,j)
+                  counterV = counterV + NDIM
+                  self % MPIfaces % faces(domain) % transportDSend(counterD:counterD+NDIM*NDIM-1) = f % storage(thisSide) % transportD(:,:,i,j)
+                  counterD = counterD + NDIM*NDIM
+               end do               ; end do
+               end associate
+            end do
+!
+!           -------------
+!           Send solution
+!           -------------
+!  
+            call MPIfaces % faces(domain) % SendTransportV(domain, all_reqsV(idx_send))
+            call MPIfaces % faces(domain) % SendTransportD(domain, all_reqsD(idx_send))
+			idx_send = idx_send + 1
+         end do
+!
+!        ********************************************
+!        Wait for all posted operations (recv + send)
+!        ********************************************
+!
+		 call MPI_Waitall(nreqs, all_reqsV, MPI_STATUSES_IGNORE, ierr)
+		 call MPI_Waitall(nreqs, all_reqsD, MPI_STATUSES_IGNORE, ierr)
+		 
+		 deallocate(all_reqsV)
+		 deallocate(all_reqsD)
+		end associate
+#endif
+      end subroutine HexMesh_UpdateMPIFacesTransportData
+
+      subroutine HexMesh_GatherMPIFacesTransportData(self)
+         implicit none
+         !-arguments----------------------------------------------------------
+         class(HexMesh)    :: self
+#ifdef _HAS_MPI_
+         !-local-variables----------------------------------------------------
+         integer            :: mpifID, fID, thisSide, domain
+         integer            :: i, j, k, counterV, counterD
+         integer, parameter :: otherSide(2) = (/2,1/)
+         !--------------------------------------------------------------------
+
+         if ( .not. MPI_Process % doMPIAction ) return
+
+         ! ***************
+         ! Gather solution
+         ! ***************
+
+         do k = 1, self % MPIfaces % nDomainShared
+			domain = self % MPIfaces % listDomain(k)
+            counterV = 1
+            counterD = 1
+
+			if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle 
+			
+            do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+               fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+               thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+               associate(f => self % faces(fID))
+               do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                  f % storage(otherSide(thisSide)) % transportVelocity(:,i,j) = self % MPIfaces % faces(domain) % transportVRecv(counterV:counterV+NDIM-1)
+                  counterV = counterV + NDIM
+                  f % storage(otherSide(thisSide)) % transportD(:,:,i,j) = self % MPIfaces % faces(domain) % transportDRecv(counterD:counterD+NDIM*NDIM-1)
+                  counterD = counterD + NDIM*NDIM
+               end do               ; end do
+               end associate
+            end do
+         end do
+#endif
+      end subroutine HexMesh_GatherMPIFacesTransportData
+
 #endif
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -507,9 +507,6 @@
       end select
 
       ! Read diffusion-dispersion coefficient
-      ! AJRTODO: implement transportdivergence
-      ! AJRTODO: implement prolongtofaces for transportvelocity and transportD (only when UserDefined. For constant is the same, and for ns it is already accounted for in Q)
-      ! AJRTODO: implement calls to functions above in the right places of the spatial discretization
       if (.not. controlVariables % containsKey(trim(transportDTypeKey))) then
          print *, trim(transportDTypeKey), " is mandatory."
          print *, "Possible values are: "

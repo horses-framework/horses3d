@@ -117,6 +117,7 @@ module StorageClass
 #endif
 #ifdef TRANSPORT
       real(kind=RP),           allocatable :: transportVelocity(:,:,:,:)      ! Transport velocity (NDIM,i,j,k)
+      real(kind=RP),           allocatable :: transportVelocityDivergence(:,:,:)      ! Transport velocity divergence (i,j,k)
       real(kind=RP),           allocatable :: transportD(:,:,:,:,:)      ! Transport diffusion tensor (NDIM,NDIM,i,j,k)
 #endif
       contains
@@ -1057,6 +1058,7 @@ module StorageClass
 #endif
 #ifdef TRANSPORT
          if (allocated(to % transportVelocity)) to % transportVelocity = from % transportVelocity
+         if (allocated(to % transportVelocityDivergence)) to % transportVelocityDivergence = from % transportVelocityDivergence
          if (allocated(to % transportD)) to % transportD = from % transportD
 #endif
          call to % PointStorage()
@@ -1181,6 +1183,7 @@ module StorageClass
 #endif
 #ifdef TRANSPORT
          safedeallocate(self % transportVelocity)
+         safedeallocate(self % transportVelocityDivergence)
          safedeallocate(self % transportD)
 #endif
 

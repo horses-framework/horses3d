@@ -261,8 +261,10 @@ module SpatialDiscretization
 !$omp parallel shared(mesh, time, Level)
 		 if (present(Level)) then
 			call mesh % ProlongSolutionToFaces(NCONS, HO_Elements=HO_Elements, Level=Level)
+         if (transportVelocityType == transportVelocityType_UserDefined) call mesh % ProlongTransportDataToFaces(HO_Elements=HO_Elements, Level=Level)			
 		 else 
 			call mesh % ProlongSolutionToFaces(NCONS, HO_Elements)
+         if (transportVelocityType == transportVelocityType_UserDefined) call mesh % ProlongTransportDataToFaces(HO_Elements)
 		 end if 
 !        ----------------
 !        Update MPI Faces
@@ -271,6 +273,7 @@ module SpatialDiscretization
 #ifdef _HAS_MPI_
 !$omp single
          call mesh % UpdateMPIFacesSolution(NCONS)
+         if (transportVelocityType == transportVelocityType_UserDefined) call mesh % UpdateMPIFacesTransportData()
 !$omp end single
 #endif
 !
@@ -506,6 +509,7 @@ module SpatialDiscretization
             else
                call mesh % GatherMPIFacesSolution(NCONS)
             end if
+            if (transportVelocityType == transportVelocityType_UserDefined) call mesh % GatherMPIFacesTransportData()
 !$omp end single
 !
 !           Compute viscosity at MPI faces
@@ -640,18 +644,19 @@ module SpatialDiscretization
 !$omp end do
 !
 !        *********************
-!        Add source term div(u) * c !AJRTODO
+!        Add source term div(u) * c
 !        *********************
-! !$omp do schedule(runtime) private(i,j,k,sourcetpt)
-!          do eID = 1, mesh % no_of_elements
-!             associate ( e => mesh % elements(eID) )
-!             do k = 0, e % Nxyz(3)   ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-!                sourcetpt = sourceTermDivVelC(NCONS, NGRAD, e % storage % Q(:,i,j,k), e % storage % U_X(:,i,j,k), e % storage % U_y(:,i,j,k), e % storage % U_z(:,i,j,k))
-!                e % storage % QDot(IC,i,j,k) = e % storage % QDot(IC,i,j,k) + sourcetpt
-!             end do                  ; end do                ; end do
-!             end associate
-!          end do
-! !$omp end do        
+!$omp do schedule(runtime) private(i,j,k,sourcetpt)
+         do eID = 1, mesh % no_of_elements
+            associate ( e => mesh % elements(eID) )
+            do k = 0, e % Nxyz(3)   ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
+               call e % getTransportVelocityDivergence(i, j, k, sourcetpt)
+               sourcetpt = sourcetpt * e % storage % Q(IC,i,j,k)
+               e % storage % QDot(IC,i,j,k) = e % storage % QDot(IC,i,j,k) + sourcetpt
+            end do                  ; end do                ; end do
+            end associate
+         end do
+!$omp end do        
 
 !        *********************
 !        Add IBM source term
@@ -852,6 +857,7 @@ module SpatialDiscretization
             else
                call mesh % GatherMPIFacesSolution(NCONS)
             end if
+            call mesh % GatherMPIFacesTransportData()
 !$omp end single
 !
 !           Compute viscosity at MPI faces
@@ -1174,6 +1180,7 @@ module SpatialDiscretization
             else
                call mesh % GatherMPIFacesSolution(NCONS)
             end if
+            call mesh % GatherMPIFacesTransportData()
 !$omp end single
 !
 !           Compute viscosity at MPI faces

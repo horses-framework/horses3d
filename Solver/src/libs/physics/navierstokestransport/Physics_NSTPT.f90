@@ -34,7 +34,6 @@
       public  GuermondPopovFlux_ENTROPY
       public  InviscidJacobian
       public  getStressTensor, ViscousJacobian, getFrictionVelocity
-      ! public  sourceTermDivVelC
 !
 !     ========
       CONTAINS 
@@ -938,48 +937,6 @@
 
       End Subroutine getFrictionVelocity
 
-!       pure function sourceTermDivVelC(nEqn, nGradEqn, Q, Q_x, Q_y, Q_z) result(source) !AJRTODO: Maybe move to the PhysicsStorage with the rest?
-!          implicit none
-!          integer,       intent(in)  :: nEqn
-!          integer,       intent(in)  :: nGradEqn
-!          real(kind=RP), intent(in)  :: Q   (1:nEqn     )
-!          real(kind=RP), intent(in)  :: Q_x (1:nGradEqn)
-!          real(kind=RP), intent(in)  :: Q_y (1:nGradEqn)
-!          real(kind=RP), intent(in)  :: Q_z (1:nGradEqn)
-! !
-! !        ---------------
-! !        Local variables
-! !        ---------------
-! !
-!          real(kind=RP)                    :: divV
-!          real(kind=RP)                    :: u , v , w
-!          real(kind=RP)                    :: invRho, uDivRho(NDIM), u_x(NDIM), u_y(NDIM), u_z(NDIM)
-
-!          if (transportVelocityType == transportVelocityType_Constant) then
-!             source = 0.0_rp
-!             return
-!          end if
-         
-!          if (transportVelocityType == transportVelocityType_NS) then
-
-!             invRho  = 1.0_RP / Q(IRHO)
-
-!             u = Q(IRHOU) * invRho
-!             v = Q(IRHOV) * invRho
-!             w = Q(IRHOW) * invRho
-            
-!             uDivRho = [u * invRho, v * invRho, w * invRho]
-            
-!             u_x = invRho * Q_x(IRHOU:IRHOW) - uDivRho * Q_x(IRHO)
-!             u_y = invRho * Q_y(IRHOU:IRHOW) - uDivRho * Q_y(IRHO)
-!             u_z = invRho * Q_z(IRHOU:IRHOW) - uDivRho * Q_z(IRHO)
-            
-!             divV = U_x(IX) + U_y(IY) + U_z(IZ)
-
-!             source = divV * Q(IC)
-!          end if
-
-!       end function sourceTermDivVelC
    END Module Physics_NSTPT
 !@mark -
 !
