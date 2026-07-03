@@ -1382,7 +1382,7 @@ subroutine RotateSlidingRegion(mesh, theta, omega, numElementsPerLayer, n, m, ne
 
    select case(rotationAxis)
 
-   case(1)  ! X-axis
+   case(rotationAxis_X)  ! X-axis
       ROT=0.0_RP
       ROT(1,1)=1.0_RP 
       ROT(2,2)=COS(mesh % SlidingMesh % theta)
@@ -1390,7 +1390,7 @@ subroutine RotateSlidingRegion(mesh, theta, omega, numElementsPerLayer, n, m, ne
       ROT(3,2)=SIN(mesh % SlidingMesh % theta)
       ROT(3,3)=COS(mesh % SlidingMesh % theta)
 
-   case(2)  ! Z-axis
+   case(rotationAxis_Z)  ! Z-axis
       ROT=0.0_RP
       ROT(1,1)=COS(mesh % SlidingMesh % theta)
       ROT(2,2)=COS(mesh % SlidingMesh % theta)
@@ -1398,7 +1398,7 @@ subroutine RotateSlidingRegion(mesh, theta, omega, numElementsPerLayer, n, m, ne
       ROT(1,2)=-SIN(mesh % SlidingMesh % theta)
       ROT(2,1)=SIN(mesh % SlidingMesh % theta)
 
-   case(3)  ! Y-axis (solver convention)
+   case(rotationAxis_Y)  ! Y-axis (solver convention)
       ROT=0.0_RP
       ROT(1,1)=COS(-mesh % SlidingMesh % theta)
       ROT(2,2)=1.0_RP
@@ -1754,7 +1754,7 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, cente
 
    call RotateSlidingRegion(mesh, theta, mesh % SlidingMesh%omega, numElementsPerLayer, n, m, new_nNodes, new_nodes, &
    mesh % SlidingMesh%slidingMortarElems, mesh % SlidingMesh%pureSlidingElems, mesh % SlidingMesh%neighborConnectivity, offsetParams, scaleParams, &
-   mesh % SlidingMesh%face_nodes, mesh % SlidingMesh%face_othernodes, mesh % SlidingMesh%numBFacePoints, originalNodeCount, rotationAxis)
+   mesh % SlidingMesh%face_nodes, mesh % SlidingMesh%face_othernodes, mesh % SlidingMesh%numBFacePoints, originalNodeCount, mesh % SlidingMesh % rotationAxis)
    !end if
 
 

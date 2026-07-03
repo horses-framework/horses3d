@@ -11,6 +11,10 @@ MODULE SlidingMeshClass
 
       IMPLICIT NONE
 
+      enum, bind(C)
+        enumerator :: rotationAxis_X, rotationAxis_Z, rotationAxis_Y
+      end enum
+
 !     ---------------
 !     Mesh definition
 !     ---------------
@@ -57,6 +61,7 @@ MODULE SlidingMeshClass
       real(KIND=RP)                          :: theta        ! rotation angle
       real(KIND=RP)                          :: omega
       real(KIND=RP)                          :: localAngle
+      integer                                :: rotationAxis
       logical                                :: initialized=.false.
       logical                                :: conforming=.false.
 
@@ -100,6 +105,7 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     real(kind=RP),allocatable :: centery
     real(kind=RP),allocatable :: radius
     real(kind=RP),allocatable :: angle 
+    character(len=LINE_LENGTH) :: rotAxis
     integer :: i
 
 !     **********
@@ -112,7 +118,8 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     call readValueInRegion( trim( paramFile ), "centerx", centerx, in_label, "#end" )
     call readValueInRegion( trim( paramFile ), "centery", centery, in_label, "#end" )
     call readValueInRegion( trim( paramFile ), "radius", radius, in_label, "#end" )
-    call readValueInRegion( trim( paramFile ), "angle", angle, in_label, "#end" )   
+    call readValueInRegion( trim( paramFile ), "angle", angle, in_label, "#end" )
+    call readValueInRegion( trim( paramFile ), "rotation axis", rotAxis, in_label, "#end" )
 
     i=0 
 
@@ -131,7 +138,20 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     if (allocated(angle)) then 
         self % theta = angle 
         i=i+1
-    end if 
+    end if
+
+    call toLower(rotAxis)
+    select case (trim(rotAxis))
+    case ("x")
+        self % rotationAxis = rotationAxis_X
+    case ("y")
+        self % rotationAxis = rotationAxis_Y
+    case ("z")
+        self % rotationAxis = rotationAxis_Z
+    case default
+        print *, "Unrecognized rotation axis value. Possible values are: x, y, z."
+        error stop
+    end select    
 
     if (i==4) then 
         self % isConfigured = .true.
@@ -187,7 +207,6 @@ subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingE
     end if 
 
 end subroutine SlidingMesh_Initialize
-
 
 subroutine SlidingMesh_Destruct(self)
    implicit none
