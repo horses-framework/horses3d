@@ -18,7 +18,7 @@ MODULE TimeIntegratorClass
       USE Physics
       USE ExplicitMethods
       USE IMEXMethods
-      use AutosaveClass                   , only: Autosave_t, AUTOSAVE_BY_TIME, Autosave_LambVectorConfigure
+      use AutosaveClass
       use StopwatchClass
       use MPI_Process_Info
       use TimeIntegratorDefinitions
@@ -54,6 +54,7 @@ INTEGER, PARAMETER :: TIME_ACCURATE = 0, STEADY_STATE = 1
          class(pAdaptation_t), allocatable      :: pAdaptator
          type(adaptiveTimeStep_t)               :: adaptiveTimeStep
          type(Autosave_t)                       :: lambSave
+         type(AutosaveSlidingMesh_t)            :: SlidingMeshSave
          type(MultiTauEstim_t)                  :: TauEstimator
          character(len=LINE_LENGTH)             :: integration_method
          integer                                :: RKStep_key
@@ -340,6 +341,8 @@ SUBROUTINE constructTimeIntegrator(self,controlVariables, sem, initial_iter, ini
          call self % TauEstimator % construct(controlVariables, sem)
 
          call Autosave_LambVectorConfigure(self % lambsave, controlVariables, initial_time)
+         
+         call self % SlidingMeshSave % Configure(controlVariables, initial_time)
 
    if (.not. MPI_Process % isRoot ) return
 
@@ -571,6 +574,7 @@ IMPLICIT NONE
       integer                       :: eID
 	  logical                       :: updatelevel
       CHARACTER(len=LINE_LENGTH)    :: SolutionFileName
+      CHARACTER(len=LINE_LENGTH)    :: filename
       ! Time-step solvers:
       type(FASMultigrid_t)          :: FASSolver
       type(AnisFASMultigrid_t)      :: AnisFASSolver
@@ -868,6 +872,12 @@ DO k = sem  % numberOfTimeSteps, self % initial_iter + self % numTimeSteps-1
    call Monitors % UpdateValues( sem % mesh, t, k+1, maxResidual, self% autosave% Autosave(k+1), dt )
 
    if (sem%mesh%SlidingMesh%active) then 
+
+      ! Sliding mesh autosave
+      if ( self % SlidingMeshSave % Autosave(k+1) ) then
+         write(filename,'(A,A,I10.10)') trim(SolutionFileName), "_", k+1
+         call sem % mesh % Export( trim(filename) )
+      end if
       
       IF( (MOD( k+1, self % outputInterval) == 0) .or. (k .eq. self % initial_iter) ) then 
          !write(*,*) 'writing malla',achar(48+(k/9))
@@ -1123,7 +1133,8 @@ real(kind=RP) :: dt_temp
       integer, parameter :: ADAPT       = 2
       integer, parameter :: SURFSAVE    = 3
       integer, parameter :: LAMBSAVE    = 4
-      integer, parameter :: DONT_KNOW   = 5
+      integer, parameter :: SLIDINGMESHSAVE = 5
+      integer, parameter :: DONT_KNOW   = 6
       integer, save :: next_time_will = DONT_KNOW
       !----------------------------------------------------------
 
@@ -1134,6 +1145,7 @@ real(kind=RP) :: dt_temp
       self % autosave   % performAutosave = .FALSE.
       surfacesMesh % autosave % performAutosave = .FALSE.
       self % lambsave   % performAutosave = .FALSE.
+      self % SlidingMeshSave   % performAutosave = .FALSE.
       dt_out = dt_in
 
 !
@@ -1170,7 +1182,7 @@ select case (next_time_will)
          end if
 
                self % autosave % nextAutosaveTime = self % autosave % nextAutosaveTime + self % autosave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
             end if
 
    case (ADAPT)
@@ -1190,7 +1202,7 @@ select case (next_time_will)
          end if
 
                self % pAdaptator % nextAdaptationTime = self % pAdaptator % nextAdaptationTime + self % pAdaptator % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
             end if
 
    case (SURFSAVE)
@@ -1210,7 +1222,7 @@ select case (next_time_will)
          end if
 
                surfacesMesh % autosave % nextAutosaveTime = surfacesMesh % autosave % nextAutosaveTime + surfacesMesh % autosave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
             end if
          
          case (LAMBSAVE)
@@ -1220,7 +1232,17 @@ select case (next_time_will)
                self % lambsave % performAutosave = .TRUE.
 
                self % lambsave % nextAutosaveTime = self % lambsave % nextAutosaveTime + self % lambsave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
+            end if
+
+         case (SLIDINGMESHSAVE)
+
+            if ( self % SlidingMeshSave % nextAutosaveTime < (t + dt_out) ) then
+               dt_out = self % SlidingMeshSave % nextAutosaveTime - t
+               self % SlidingMeshSave % performAutosave = .TRUE.
+
+               self % SlidingMeshSave % nextAutosaveTime = self % SlidingMeshSave % nextAutosaveTime + self % SlidingMeshSave % time_interval
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
             end if
 
    case (DONT_KNOW)
@@ -1228,9 +1250,10 @@ select case (next_time_will)
             if (  self % pAdaptator % adaptation_mode == ADAPT_DYNAMIC_TIME .or. &
                   surfacesMesh % autosave % mode      == AUTOSAVE_BY_TIME .or. &
                   self % autosave % mode              == AUTOSAVE_BY_TIME .or. &
-                  self % lambsave % mode              == AUTOSAVE_BY_TIME) then
+                  self % lambsave % mode              == AUTOSAVE_BY_TIME .or. &
+                  self % SlidingMeshSave % mode       == AUTOSAVE_BY_TIME) then
 
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
                dt_temp = self % CorrectDt (t, dt_out)
                dt_out  = dt_temp
             else

@@ -5,7 +5,7 @@ MODULE SlidingMeshClass
       USE MeshTypes
       USE NodeClass
       use FileReaders               , only: ReadControlFile 
-      use FileReadingUtilities      , only: getFileName
+      use FileReadingUtilities      , only: getFileName, getRealArrayFromString
       use ElementConnectivityDefinitions
       use FTValueDictionaryClass
 
@@ -88,11 +88,9 @@ subroutine SlidingMesh_read_info( self, controlVariables )
     class(SlidingMesh), intent(inout) :: self
     class(FTValueDictionary)       :: controlVariables
 
-    self % active  = SlidingMeshIsDefined()
-
-    if (.not. self % active) return
-     
-    call self % GetInfo( controlVariables )
+    if (SlidingMeshIsDefined()) then
+        call self % GetInfo( controlVariables )
+    end if
      
 end subroutine SlidingMesh_read_info
 
@@ -105,8 +103,8 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     class(FTValueDictionary)       :: controlVariables
     
     character(len=LINE_LENGTH) :: in_label, paramFile
-    real(kind=RP),allocatable :: centerx
-    real(kind=RP),allocatable :: centery
+    character(len=LINE_LENGTH) :: R_center
+    real(kind=RP),allocatable :: center(:)
     real(kind=RP),allocatable :: radius
     real(kind=RP),allocatable :: angle 
     character(len=LINE_LENGTH) :: rotAxis
@@ -119,29 +117,38 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     write(in_label , '(A)') "#define slidingmesh"
     call get_command_argument(1, paramFile) 
 
-    call readValueInRegion( trim( paramFile ), "centerx", centerx, in_label, "#end" )
-    call readValueInRegion( trim( paramFile ), "centery", centery, in_label, "#end" )
+    call readValueInRegion( trim( paramFile ), "center", R_center, in_label, "#end" )
     call readValueInRegion( trim( paramFile ), "radius", radius, in_label, "#end" )
     call readValueInRegion( trim( paramFile ), "angle", angle, in_label, "#end" )
     call readValueInRegion( trim( paramFile ), "rotation axis", rotAxis, in_label, "#end" )
 
-    i=0 
+    if (R_center .ne. "") then
+        center = getRealArrayFromString(R_center)
+    else
+        print *, "center should be specified."
+        errorMessage(STD_OUT)
+        error stop
+    end if
+    if (size(center) .ne. 2) then
+        print *, "The center should have two coordinates."
+        errorMessage(STD_OUT)
+        error stop
+    endif
+    self % center = center
 
-    if (allocated(centerx)) then 
-        self % center(1) = centerx
-        i=i+1
-    end if 
-    if (allocated(centery)) then 
-        self % center(2) = centery
-        i=i+1
-    end if 
-    if (allocated(radius)) then 
+    if (.not. allocated(radius)) then
+        print *, "radius should be specified."
+        errorMessage(STD_OUT)
+        error stop
+    else
         self % radius = radius 
-        i=i+1
     end if 
-    if (allocated(angle)) then 
+    if (.not. allocated(angle)) then 
+        print *, "angle should be specified."
+        errorMessage(STD_OUT)
+        error stop
+    else
         self % theta = angle 
-        i=i+1
     end if
 
     call toLower(rotAxis)
@@ -156,13 +163,10 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
         print *, "Unrecognized rotation axis value. Possible values are: x, y, z."
         errorMessage(STD_OUT)
         error stop
-    end select    
+    end select   
+    
+    self % isConfigured = .true.
 
-    if (i==4) then 
-        self % isConfigured = .true.
-    else if (i .NE. 0) then
-        write(*,*) 'Error, missing SlidingMesh Argument : Need centerX, centerY, radius and angle'
-    end if 
 end subroutine SlidingMesh_GetInfo
 
 subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingElements, numBFacePoints)
@@ -298,8 +302,9 @@ logical function SlidingMeshIsDefined()
             ! Succeeded
             ! ---------
             line = getSquashedLine( line )
+            call toLower(line)
 
-            if ( index ( line , '#define slidingmesh' ) .gt. 0 ) then
+            if ( index ( line , '#defineslidingmesh' ) .gt. 0 ) then
                SlidingMeshIsDefined = .TRUE.
                close(fID)  
                return

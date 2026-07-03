@@ -725,7 +725,7 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
                center(2)=0.0_RP
                rad=1.01_RP
                angle=(omega(2)*deltaT) * auxiliar(k)
-               !CALL AdvanceSlidingMesh(mesh=mesh, rotationRadius=rad, rotationCenter=center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
+               !CALL AdvanceSlidingMesh(mesh=mesh, rotationRadius=mesh % slidingMesh % radius, rotationCenter=mesh % slidingMesh % center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
             end if
             if ( present(dts) ) then
                if (dts) call ComputePseudoTimeDerivative(mesh, tk, global_dt)
