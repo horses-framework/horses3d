@@ -87,6 +87,10 @@ subroutine SlidingMesh_read_info( self, controlVariables )
         
     class(SlidingMesh), intent(inout) :: self
     class(FTValueDictionary)       :: controlVariables
+
+    self % active  = SlidingMeshIsDefined()
+
+    if (.not. self % active) return
      
     call self % GetInfo( controlVariables )
      
@@ -150,6 +154,7 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
         self % rotationAxis = rotationAxis_Z
     case default
         print *, "Unrecognized rotation axis value. Possible values are: x, y, z."
+        errorMessage(STD_OUT)
         error stop
     end select    
 
@@ -243,4 +248,70 @@ subroutine SlidingMesh_Destruct(self)
    self % active       = .false.
 
 end subroutine SlidingMesh_Destruct
+
+logical function SlidingMeshIsDefined()
+    implicit none
+
+    ! ---------------
+    ! Local variables
+    ! ---------------
+
+    character(len=LINE_LENGTH) :: case_name, line
+    integer                    :: fID
+    integer                    :: io
+
+    ! Initialize
+    ! ----------
+    SlidingMeshIsDefined = .FALSE.
+
+    ! Get case file name
+    ! ------------------
+    call get_command_argument(1, case_name)
+
+
+    ! Open case file
+    ! --------------
+    open ( newunit = fID , file = case_name , status = "old" , action = "read" )
+
+    ! Read the whole file to find sliding mesh region
+    ! -------------------------------------------------
+    do
+        read ( fID , '(A)' , iostat = io ) line
+
+        if ( io .lt. 0 ) then
+
+            ! End of file
+            ! -----------
+            line = ""
+            exit readloop
+
+        elseif ( io .gt. 0 ) then
+
+            ! Error
+            ! -----
+            errorMessage(STD_OUT)
+            error stop "Stopped."
+
+        else
+
+            ! Succeeded
+            ! ---------
+            line = getSquashedLine( line )
+
+            if ( index ( line , '#define slidingmesh' ) .gt. 0 ) then
+               SlidingMeshIsDefined = .TRUE.
+               close(fID)  
+               return
+            end if
+            
+        end if
+         
+    end do
+
+    ! Close case file
+    ! ---------------
+    close(fID)                             
+
+end function SlidingMeshIsDefined
+
 END MODULE SlidingMeshClass
