@@ -197,45 +197,16 @@ subroutine SlidingMesh_Destruct(self)
    ! ---------------------------------------------------------------------
    ! Deallocate sliding mesh connectivity and mortar storage
    ! ---------------------------------------------------------------------
-   if (allocated(self % mortarNeighborElems)) then
-       deallocate(self % mortarNeighborElems)
-   end if
-
-   if (allocated(self % slidingMortarElems)) then
-       deallocate(self % slidingMortarElems)
-   end if
-
-   if (allocated(self % pureSlidingElems)) then
-       deallocate(self % pureSlidingElems)
-   end if
-
-   if (allocated(self % mortararr1)) then
-       deallocate(self % mortararr1)
-   end if
-
-   if (allocated(self % mortararr2)) then
-       deallocate(self % mortararr2)
-   end if
-
-   if (allocated(self % face_nodes)) then
-       deallocate(self % face_nodes)
-   end if
-
-   if (allocated(self % face_othernodes)) then
-       deallocate(self % face_othernodes)
-   end if
-
-   if (allocated(self % slidingMortarConnectivity)) then
-       deallocate(self % slidingMortarConnectivity)
-   end if
-
-   if (allocated(self % neighborConnectivity)) then
-       deallocate(self % neighborConnectivity)
-   end if
-
-   if (allocated(self % rotmortars)) then
-       deallocate(self % rotmortars)
-   end if
+   safedeallocate(self % mortarNeighborElems)
+   safedeallocate(self % slidingMortarElems)
+   safedeallocate(self % pureSlidingElems)
+   safedeallocate(self % mortararr1)
+   safedeallocate(self % mortararr2)
+   safedeallocate(self % face_nodes)
+   safedeallocate(self % face_othernodes)
+   safedeallocate(self % slidingMortarConnectivity)
+   safedeallocate(self % neighborConnectivity)
+   safedeallocate(self % rotmortars)
 
    ! ---------------------------------------------------------------------
    ! Reset counters and state variables
