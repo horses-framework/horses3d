@@ -250,6 +250,7 @@ subroutine SlidingMesh_Destruct(self)
 end subroutine SlidingMesh_Destruct
 
 logical function SlidingMeshIsDefined()
+    use ParamfileRegions
     implicit none
 
     ! ---------------
@@ -275,7 +276,7 @@ logical function SlidingMeshIsDefined()
 
     ! Read the whole file to find sliding mesh region
     ! -------------------------------------------------
-    do
+    readloop:do
         read ( fID , '(A)' , iostat = io ) line
 
         if ( io .lt. 0 ) then
@@ -306,7 +307,7 @@ logical function SlidingMeshIsDefined()
             
         end if
          
-    end do
+    end do readloop
 
     ! Close case file
     ! ---------------
