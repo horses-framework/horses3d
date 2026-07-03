@@ -1686,7 +1686,7 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, cente
 
    integer                       :: Connect(numElementsPerLayer, 9, 6)
 
-   integer                       :: sn, rotationAxis
+   integer                       :: sn
 
    ! =========================
    ! Initialization
@@ -1702,8 +1702,6 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, cente
    ! - Update cumulative rotation
    ! - Define rotation configuration
    ! =========================
-
-   rotationAxis = 3
 
    n  = 3
    m  = 1
