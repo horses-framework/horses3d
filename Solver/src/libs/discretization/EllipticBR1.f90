@@ -435,6 +435,17 @@ module EllipticBR1
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_mpi)
             fID = mesh % faces_mpi(iFace)
+            if (mesh% faces(fID)%IsMortar==1) then 
+               associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                  unStar=0.0_RP
+               end associate
+               do m=1,4
+                  if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                     call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                     f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                  end if 
+               end do 
+            end if 
             call BR1_ComputeMPIFaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
          end do
 !$omp end do 
@@ -443,14 +454,14 @@ module EllipticBR1
          if ( mesh % nonconforming ) then
             call mesh % UpdateMPIFacesGradMortarflux(nGradEqn)
          end if
-   !$omp end single
+!$omp end single
    
    
-   !$omp single
+!$omp single
          if ( mesh % nonconforming ) then
             call mesh % GatherMPIFacesGradMortarFlux(nGradEqn)
          end if
-   !$omp end single
+ !$omp end single
 !
 !$omp do schedule(runtime) private(eID) 
 			 do iEl = 1, size(mesh % elements_mpi)
@@ -606,14 +617,14 @@ module EllipticBR1
          if ( mesh % nonconforming ) then
             call mesh % UpdateMPIFacesGradMortarflux(nGradEqn)
          end if
-   !$omp end single
+!$omp end single
    
    
-   !$omp single
-         if ( mesh % nonconforming ) then
-            call mesh % GatherMPIFacesGradMortarFlux(nGradEqn)
-         end if
-   !$omp end single
+!$omp single
+      if ( mesh % nonconforming ) then
+         call mesh % GatherMPIFacesGradMortarFlux(nGradEqn)
+      end if
+!$omp end single
 !
 !$omp do schedule(runtime) private(eID) 
          do iEl = 1, size(mesh % HO_ElementsMPI)
@@ -823,13 +834,6 @@ module EllipticBR1
          Sidearray = (/maxloc(f % elementIDs, dim = 1), HMESH_NONE/)
          call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
 
-         if (f % IsMortar==2) then 
-            !write(*,*) 'this side', thisSide
-            call f% Interpolatesmall2biggrad(nGradEqn, uStar_n)
-            
-         end if 
-         
-         
          if (f % IsMortar==2) then 
             !write(*,*) 'this side', thisSide
             call f% Interpolatesmall2biggrad(nGradEqn, uStar_n)

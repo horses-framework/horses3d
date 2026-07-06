@@ -939,8 +939,8 @@ subroutine ConstructMeshPartition_FromHDF5File_( self, fileName, nodes, Nx, Ny, 
                               self % elements(l) % MortarFaces(HsideMap2(k)) = cgns_to_horses(slaveIdx)
                            end if 
                         end do 
-                        if (.not.masterFaceFound) masterFaceCGNS = masterFaceCGNS + 1
-                     else if (SideInfo(3,sideInfoIdx) .NE. 104) then 
+                        !if (.not.masterFaceFound) masterFaceCGNS = masterFaceCGNS + 1
+                     else if (SideInfo(1,sideInfoIdx) .NE. 104) then 
                         masterFaceCGNS = masterFaceCGNS + 1
                      end if 
                   end do 
