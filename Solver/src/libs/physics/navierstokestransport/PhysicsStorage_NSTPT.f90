@@ -94,14 +94,6 @@
      enum, bind(C)
         enumerator :: transportDiffusionType_Constant, transportDiffusionType_NS, transportDiffusionType_UserDefined
      end enum
-
-      ! interface getTransportVelocity
-      !    module procedure  :: getTransportVelocity_ELEMENT, getTransportVelocity_FACE
-      ! end interface getTransportVelocity
-
-      ! interface getTransportDiffusion
-      !    module procedure  :: getTransportDiffusion_ELEMENT, getTransportDiffusion_FACE
-      ! end interface getTransportDiffusion
 !
 !    ----------------------------
 !    Either NavierStokes or Euler
@@ -496,6 +488,7 @@
          transportVelocity_CONSTANT = GetRealArrayFromString( controlVariables % StringValueForKey(transportVelocityKey,requestedLength = LINE_LENGTH))
          transportVelocityType = transportVelocityType_Constant
       case (trim(transportVelocityTypeUserDefinedKey))
+         transportVelocityType = transportVelocityType_UserDefined
       case default
          print *, "Unknown value for keyword '", trim(transportVelocityTypeKey), "'"
          print *, "Input value: ", trim(keyword)
@@ -526,6 +519,7 @@
          transportD_CONSTANT(IX,IX) = controlVariables % DoublePrecisionValueForKey(transportDKey)
          transportD_CONSTANT(IY,IY) = transportD_CONSTANT(IX,IX)
          transportD_CONSTANT(IZ,IZ) = transportD_CONSTANT(IX,IX)
+         transportDiffusionType = transportDiffusionType_Constant
       case (trim(transportDTypeTensorKey))
          allocate(transportD_CONSTANT(1:NDIM,1:NDIM))
          allocate(array(1:9))
@@ -540,8 +534,11 @@
          transportD_CONSTANT(IZ,IY) = array(8)
          transportD_CONSTANT(IZ,IZ) = array(9)
          deallocate(array)
+         transportDiffusionType = transportDiffusionType_Constant
       case (trim(transportDTypeNSKey))
+         transportDiffusionType = transportDiffusionType_NS
       case (trim(transportDTypeUserDefinedKey))
+         transportDiffusionType = transportDiffusionType_UserDefined
       case default
          print *, "Unknown value for keyword '", trim(transportDTypeKey), "'"
          print *, "Input value: ", trim(keyword)
@@ -625,6 +622,8 @@
          call SubSection_Header("Transport data")
          if (transportVelocityType == transportVelocityType_NS) then
             write(STD_OUT,'(30X,A,A38)') "->" , "Transport velocity type: Navier-Stokes"
+         elseif (transportVelocityType == transportVelocityType_UserDefined) then
+            write(STD_OUT,'(30X,A,A38)') "->" , "Transport velocity type: User-Defined"
          elseif (transportVelocityType == transportVelocityType_Constant) then
             write(STD_OUT,'(30X,A,A33)') "->" , "Transport velocity type: Constant"
             write(STD_OUT,'(30X,A,A27,A,F4.1,A,F4.1,A,F4.1,A)') "->" , "Transport velocity: ","[", &
@@ -633,10 +632,16 @@
                                                    transportVelocity_CONSTANT(3), "]"
          end if
 
-         write(STD_OUT,'(30X,A,A43)') "->" , "Transport diffusion-dispersion coefficient:"
-         write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD_CONSTANT(IX,IX), ", ", transportD_CONSTANT(IX,IY), ", ", transportD_CONSTANT(IX,IZ)
-         write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD_CONSTANT(IY,IX), ", ", transportD_CONSTANT(IY,IY), ", ", transportD_CONSTANT(IY,IZ)
-         write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD_CONSTANT(IZ,IX), ", ", transportD_CONSTANT(IZ,IY), ", ", transportD_CONSTANT(IZ,IZ)
+         if (transportDiffusionType == transportDiffusionType_Constant) then
+            write(STD_OUT,'(30X,A,A43)') "->" , "Transport diffusion-dispersion coefficient:"
+            write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD_CONSTANT(IX,IX), ", ", transportD_CONSTANT(IX,IY), ", ", transportD_CONSTANT(IX,IZ)
+            write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD_CONSTANT(IY,IX), ", ", transportD_CONSTANT(IY,IY), ", ", transportD_CONSTANT(IY,IZ)
+            write(STD_OUT,'(30X,F4.1,A,F4.1,A,F4.1,A)') transportD_CONSTANT(IZ,IX), ", ", transportD_CONSTANT(IZ,IY), ", ", transportD_CONSTANT(IZ,IZ)
+         elseif (transportDiffusionType == transportDiffusionType_NS) then
+            write(STD_OUT,'(30X,A,A43)') "->" , "Transport diffusion-dispersion coefficient: Navier-Stokes"
+         elseif (transportDiffusionType == transportDiffusionType_UserDefined) then
+            write(STD_OUT,'(30X,A,A43)') "->" , "Transport diffusion-dispersion coefficient: User-Defined"
+         end if
                                                    
 
       END SUBROUTINE DescribePhysicsStorage_NSTPT
@@ -687,136 +692,6 @@
          end select
 
       end subroutine SetGradientVariables
-
-      ! subroutine getTransportVelocity_ELEMENT(element, i, j, k, transportVelocity)
-      !    use ElementClass
-      !    implicit none
-      !    class(Element), intent(in)  :: element
-      !    integer, intent(in)  :: i, j, k
-      !    real(kind=RP), intent(out) :: transportVelocity(1:NDIM)
-
-      !    ! Local variable
-      !    real(kind=RP)           :: u , v , w
-
-      !    associate ( Q => element % storage % Q(:,i,j,k) ) 
-
-      !    u = Q(IRHOU) / Q(IRHO)
-      !    v = Q(IRHOV) / Q(IRHO)
-      !    w = Q(IRHOW) / Q(IRHO)
-
-      !    if (transportVelocityType == transportVelocityType_Constant) then
-      !       transportVelocity = transportVelocity_CONSTANT
-      !    elseif (transportVelocityType == transportVelocityType_NS) then
-      !       transportVelocity(IX) = u
-      !       transportVelocity(IY) = v
-      !       transportVelocity(IZ) = w
-      !    elseif (transportVelocityType == transportVelocityType_UserDefined) then
-      !       transportVelocity = element % storage % transportVelocity(:,i,j,k)
-      !    end if
-
-      !    end associate
-      ! end subroutine getTransportVelocity_ELEMENT
-
-      ! subroutine getTransportVelocity_FACE(face, i, j, transportVelocityLeft, transportVelocityRight)
-      !    use FaceClass
-      !    implicit none
-      !    class(Face), intent(in)  :: face
-      !    integer, intent(in)  :: i, j
-      !    real(kind=RP), intent(out) :: transportVelocityLeft(1:NDIM)
-      !    real(kind=RP), intent(out) :: transportVelocityRight(1:NDIM)
-
-      !    ! Local variable
-      !    real(kind=RP)           :: u , v , w
-
-      !    ! Left side
-
-      !    associate ( QL => face % storage(1) % Q(:,i,j) ) 
-
-      !    u = Q(IRHOU) / Q(IRHO)
-      !    v = Q(IRHOV) / Q(IRHO)
-      !    w = Q(IRHOW) / Q(IRHO)
-
-      !    if (transportVelocityType == transportVelocityType_Constant) then
-      !       transportVelocityLeft = transportVelocity_CONSTANT
-      !    elseif (transportVelocityType == transportVelocityType_NS) then
-      !       transportVelocityLeft(IX) = u
-      !       transportVelocityLeft(IY) = v
-      !       transportVelocityLeft(IZ) = w
-      !    elseif (transportVelocityType == transportVelocityType_UserDefined) then
-      !       transportVelocityLeft = face % storage(1) % transportVelocity(:,i,j)
-      !    end if
-
-      !    end associate
-
-      !    ! Right side
-
-      !    associate ( QR => face % storage(2) % Q(:,i,j) ) 
-
-      !    u = Q(IRHOU) / Q(IRHO)
-      !    v = Q(IRHOV) / Q(IRHO)
-      !    w = Q(IRHOW) / Q(IRHO)
-
-      !    if (transportVelocityType == transportVelocityType_Constant) then
-      !       transportVelocityRight = transportVelocity_CONSTANT
-      !    elseif (transportVelocityType == transportVelocityType_NS) then
-      !       transportVelocityRight(IX) = u
-      !       transportVelocityRight(IY) = v
-      !       transportVelocityRight(IZ) = w
-      !    elseif (transportVelocityType == transportVelocityType_UserDefined) then
-      !       transportVelocityRight = face % storage(2) % transportVelocity(:,i,j)
-      !    end if
-
-      !    end associate
-      ! end subroutine getTransportVelocity_FACE
-
-      ! subroutine getTransportDiffusion_ELEMENT(element, i, j, k, transportD)
-      !    use ElementClass
-      !    implicit none
-      !    class(Element), intent(in)  :: element
-      !    integer, intent(in)  :: i, j, k
-      !    real(kind=RP), intent(out) :: transportD(1:NDIM, 1:NDIM)
-
-      !    if (transportDiffusionType == transportDiffusionType_Constant) then
-      !       transportD = transportD_CONSTANT
-      !    elseif (transportDiffusionType == transportDiffusionType_NS) then
-      !       transportD = transportD_CONSTANT
-      !       ! AJRTODO: Should we use something related with mu and mu_t instead?
-      !    elseif (transportDiffusionType == transportDiffusionType_UserDefined) then
-      !       transportD = element % storage % transportD(:,:,i,j,k)
-      !    end if
-      ! end subroutine getTransportDiffusion_ELEMENT
-
-      ! subroutine getTransportDiffusion_FACE(face, i, j, transportDLeft, transportDRight)
-      !    use FaceClass
-      !    implicit none
-      !    class(Face), intent(in)  :: face
-      !    integer, intent(in)  :: i, j
-      !    real(kind=RP), intent(out) :: transportDLeft(1:NDIM)
-      !    real(kind=RP), intent(out) :: transportDRight(1:NDIM)
-
-      !    ! Left side
-
-      !    if (transportDiffusionType == transportDiffusionType_Constant) then
-      !       transportDLeft = transportD_CONSTANT
-      !    elseif (transportDiffusionType == transportDiffusionType_NS) then
-      !       transportDLeft = transportD_CONSTANT
-      !       ! AJRTODO: Should we use something related with mu and mu_t instead?
-      !    elseif (transportDiffusionType == transportDiffusionType_UserDefined) then
-      !       transportDLeft = face % storage(1) % transportD(:,:,i,j)
-      !    end if
-
-      !    ! Right side
-
-      !    if (transportDiffusionType == transportDiffusionType_Constant) then
-      !       transportDRight = transportD_CONSTANT
-      !    elseif (transportDiffusionType == transportDiffusionType_NS) then
-      !       transportDRight = transportD_CONSTANT
-      !       ! AJRTODO: Should we use something related with mu and mu_t instead?
-      !    elseif (transportDiffusionType == transportDiffusionType_UserDefined) then
-      !       transportDRight = face % storage(2) % transportD(:,:,i,j)
-      !    end if
-
-      ! end subroutine getTransportDiffusion_FACE
 
 !
 !    **********
