@@ -2047,140 +2047,151 @@ slavecoord:             DO l = 1, 4
 !
       !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexMesh_UpdateMPIFacesMortarFlux(self, nEqn)
+subroutine HexMesh_UpdateMPIFacesMortarFlux(self, nEqn)
          use MPI_Face_Class
          implicit none
          class(HexMesh)         :: self
          integer,    intent(in) :: nEqn
 #ifdef _HAS_MPI_
-!
-!        ---------------
-!        Local variables
-!        ---------------
-!
          integer            :: mpifID, fID, thisSide, domain
-         integer            :: i, j, counter
-         integer, parameter :: otherSide(2) = (/2,1/)
+         integer            :: i, j, counter, k, ierr
+         integer            :: nShared, nreqs, idx_send
+         integer, allocatable :: all_reqs(:)
 
          if ( .not. MPI_Process % doMPIAction ) return
+
+         nShared = self % MPIfaces % nDomainShared
+         if (nShared <= 0) return
+
+         associate (MPIfaces => self % MPIfaces)
+
+         nreqs = 2 * nShared
+         allocate(all_reqs(nreqs))
+         all_reqs = MPI_REQUEST_NULL
 !
-!        ***************************
-!        Perform the receive request
-!        ***************************
+!        Receive
 !
-         do domain = 1, MPI_Process % nProcs
-            call self % MPIfaces % faces(domain) % RecvMortarFlux(domain, nEqn)
+         do k = 1, nShared
+            domain = MPIfaces % listDomain(k)
+            if (MPIfaces % faces(domain) % no_of_faces > 0) then
+               call MPIfaces % faces(domain) % RecvMortarFlux(domain, nEqn, all_reqs(k))
+            end if
          end do
 !
-!        ***********
-!        Send H flux
-!        ***********
+!        Send
 !
-         do domain = 1, MPI_Process % nProcs
-!
-!           ---------------
-!           Gather solution
-!           ---------------
-!
-            counter = 1
-            if ( self % MPIfaces % faces(domain) % no_of_faces .eq. 0 ) cycle
+         idx_send = nShared + 1
+         do k = 1, nShared
+            domain = MPIfaces % listDomain(k)
+            if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+               idx_send = idx_send + 1
+               cycle
+            end if
 
-            do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
-               fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
-               thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            counter = 1
+            do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+               fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+               thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
                associate(f => self % faces(fID))
-               if (f % Ismortar==2) then 
+               if (f % Ismortar==2) then
                   do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
-                     self % MPIfaces % faces(domain) % Flux_M_Send(counter:counter+nEqn-1) = &
+                     MPIfaces % faces(domain) % Flux_M_Send(counter:counter+nEqn-1) = &
                         f % storage(1) % MortarFlux(:,i,j)
                      counter = counter + nEqn
                   end do               ; end do
-                  !write(*,*) 'update', f % storage(1) % MortarFlux
-               end if 
+               end if
                end associate
             end do
-!
-!           -------------
-!           Send solution
-!           -------------
-!
-            call self % MPIfaces % faces(domain) % SendMortarFlux(domain, nEqn)
+
+            call MPIfaces % faces(domain) % SendMortarFlux(domain, nEqn, all_reqs(idx_send))
+            idx_send = idx_send + 1
          end do
+
+         call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+         deallocate(all_reqs)
+         end associate
 #endif
-      end subroutine HexMesh_UpdateMPIFacesMortarFlux
+end subroutine HexMesh_UpdateMPIFacesMortarFlux
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexMesh_UpdateMPIFacesGradMortarFlux(self, nEqn)
-         use MPI_Face_Class
-         implicit none
-         class(HexMesh)         :: self
-         integer,    intent(in) :: nEqn
+subroutine HexMesh_UpdateMPIFacesGradMortarFlux(self, nEqn)
+   use MPI_Face_Class
+   implicit none
+   class(HexMesh)         :: self
+   integer,    intent(in) :: nEqn
 #ifdef _HAS_MPI_
-!
-!        ---------------
-!        Local variables
-!        ---------------
-!
-         integer            :: mpifID, fID, thisSide, domain
-         integer            :: i, j, counter, d 
-         integer, parameter :: otherSide(2) = (/2,1/)
+   integer            :: mpifID, fID, thisSide, domain
+   integer            :: i, j, counter, k, ierr
+   integer            :: nShared, nreqs, idx_send
+   integer, allocatable :: all_reqs(:)
 
-         if ( .not. MPI_Process % doMPIAction ) return
-!
-!        ***************************
-!        Perform the receive request
-!        ***************************
-!
-         do domain = 1, MPI_Process % nProcs
-            call self % MPIfaces % faces(domain) % RecvMortarGradFlux(domain, nEqn)
-         end do
-!
-!        ***********
-!        Send H flux
-!        ***********
-!
-         do domain = 1, MPI_Process % nProcs
-!
-!           ---------------
-!           Gather 
-!           ---------------
-!
-            counter = 1
-            if ( self % MPIfaces % faces(domain) % no_of_faces .eq. 0 ) cycle
+   if ( .not. MPI_Process % doMPIAction ) return
 
-            do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
-               fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
-               thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
-               associate(f => self % faces(fID))
-               if (f % Ismortar==2) then 
-                  do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
-                     self % MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                        f % storage(1) % GradMortarFlux(:,1,i,j)
-                     counter = counter + nEqn
-                  end do               ; end do            
-                  do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
-                     self % MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                        f % storage(1) % GradMortarFlux(:,2,i,j)
-                     counter = counter + nEqn
-                  end do               ; end do  
-                  do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
-                     self % MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                        f % storage(1) % GradMortarFlux(:,3,i,j)
-                     counter = counter + nEqn
-                  end do               ; end do  
-               end if 
-               end associate
-            end do
+   nShared = self % MPIfaces % nDomainShared
+   if (nShared <= 0) return
+
+   associate (MPIfaces => self % MPIfaces)
+
+   nreqs = 2 * nShared
+   allocate(all_reqs(nreqs))
+   all_reqs = MPI_REQUEST_NULL
 !
-!           -------------
-!           Send solution
-!           -------------
+!        Receive
 !
-            call self % MPIfaces % faces(domain) % SendMortarGradFlux(domain, nEqn)
-         end do
+   do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces > 0) then
+         call MPIfaces % faces(domain) % RecvMortarGradFlux(domain, nEqn, all_reqs(k))
+      end if
+   end do
+!
+!        Send
+!
+   idx_send = nShared + 1
+   do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+         idx_send = idx_send + 1
+         cycle
+      end if
+
+      counter = 1
+      do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+         fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+         thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+         associate(f => self % faces(fID))
+         if (f % Ismortar==2) then
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
+                  f % storage(1) % GradMortarFlux(:,1,i,j)
+               counter = counter + nEqn
+            end do               ; end do
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
+                  f % storage(1) % GradMortarFlux(:,2,i,j)
+               counter = counter + nEqn
+            end do               ; end do
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
+                  f % storage(1) % GradMortarFlux(:,3,i,j)
+               counter = counter + nEqn
+            end do               ; end do
+         end if
+         end associate
+      end do
+
+      call MPIfaces % faces(domain) % SendMortarGradFlux(domain, nEqn, all_reqs(idx_send))
+      idx_send = idx_send + 1
+   end do
+
+   call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+
+   deallocate(all_reqs)
+   
+   end associate
 #endif
-      end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
+end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -2384,115 +2395,113 @@ slavecoord:             DO l = 1, 4
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexMesh_GatherMPIFacesMortarFlux(self, nEqn)
-         implicit none
-         class(HexMesh)      :: self
-         integer, intent(in) :: nEqn
+   subroutine HexMesh_GatherMPIFacesMortarFlux(self, nEqn)
+      implicit none
+      class(HexMesh)      :: self
+      integer, intent(in) :: nEqn
 #ifdef _HAS_MPI_
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer            :: mpifID, fID, thisSide, domain
-         integer            :: i, j, counter,p
-         integer, parameter :: otherSide(2) = [2, 1]
+      integer            :: mpifID, fID, thisSide, domain
+      integer            :: i, j, counter,p, ierr, k
+      integer, parameter :: otherSide(2) = [2, 1]
 
-         if ( .not. MPI_Process % doMPIAction ) return
+      if ( .not. MPI_Process % doMPIAction ) return
 !
 !        ***************
 !        Gather solution
 !        ***************
 !
-         do domain = 1, MPI_Process % nProcs
-!
-!           **************************************
-!           Wait until messages have been received
-!           **************************************
-!
-            call self % MPIfaces % faces(domain) % WaitForMortarFlux
+      do k = 1, self % MPIfaces % nDomainShared
+         domain = self % MPIfaces % listDomain(k)
+         if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle
+         counter = 1
 
-            counter = 1
-            do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
-               fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
-               thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
-               associate(f => self % faces(fID))
-                  if (f%Ismortar==1) then 
-                     associate(fStar => f % storage(1) % Fstar)
-                        do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
-                           fStar(:,i,j) = fStar(:,i,j) + &
-                              self % MPIfaces % faces(domain) % Flux_M_Recv(counter:counter+nEqn-1)
-                           counter = counter + nEqn
-                        end do               ; end do
-                        !write(*,*) 'fstar mpi', fstar 
-                     end associate
-            end if 
-               end associate
-            end do
+         do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+            fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            associate(f => self % faces(fID))
+               if (f%Ismortar==1) then 
+
+                  associate(fStar => f % storage(1) % Fstar)
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        fStar(:,i,j) = fStar(:,i,j) + &
+                           self % MPIfaces % faces(domain) % Flux_M_Recv(counter:counter+nEqn-1)
+                        counter = counter + nEqn
+                     end do               ; end do
+
+                  end associate
+               end if 
+            end associate
          end do
+
+      end do
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+
 #endif
-      end subroutine HexMesh_GatherMPIFacesMortarFlux
+   end subroutine HexMesh_GatherMPIFacesMortarFlux
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexMesh_GatherMPIFacesGradMortarFlux(self, nEqn)
-         implicit none
-         class(HexMesh)      :: self
-         integer, intent(in) :: nEqn
+   subroutine HexMesh_GatherMPIFacesGradMortarFlux(self, nEqn)
+      implicit none
+      class(HexMesh)      :: self
+      integer, intent(in) :: nEqn
 #ifdef _HAS_MPI_
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer            :: mpifID, fID, thisSide, domain
-         integer            :: i, j, counter, d
-         integer, parameter :: otherSide(2) = [2, 1]
+      integer            :: mpifID, fID, thisSide, domain
+      integer            :: i, j, counter, d, ierr, k
+      integer, parameter :: otherSide(2) = [2, 1]
 
-         if ( .not. MPI_Process % doMPIAction ) return
+      if ( .not. MPI_Process % doMPIAction ) return
 !
 !        ***************
 !        Gather solution
 !        ***************
 !
-         do domain = 1, MPI_Process % nProcs
-!
-!           **************************************
-!           Wait until messages have been received
-!           **************************************
-!
-            call self % MPIfaces % faces(domain) % WaitForMortarGradFlux
+      do k = 1, self % MPIfaces % nDomainShared
+         domain = self % MPIfaces % listDomain(k)
+         if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle
 
-            counter = 1
-            do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
-               fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
-               thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
-               associate(f => self % faces(fID))
-                  if (f%Ismortar==1) then 
-                     associate(unStar => f % storage(1) % unStar)
-                        do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
-                           unStar(:,1,i,j) = unStar(:,1,i,j) + &
-                              self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
-                           counter = counter + nEqn
-                        end do               ; end do       
-                        do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
-                           unStar(:,2,i,j) = unStar(:,2,i,j) + &
-                              self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
-                           counter = counter + nEqn
-                        end do               ; end do  
-                        do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
-                           unStar(:,3,i,j) = unStar(:,3,i,j) + &
-                              self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
-                           counter = counter + nEqn
-                        end do               ; end do  
-                        !write(*,*) unStar
-                     end associate
-            end if 
-               end associate
-            end do
+         counter = 1
+         do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+            fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            associate(f => self % faces(fID))
+               if (f%Ismortar==1) then 
+
+                  associate(unStar => f % storage(1) % unStar)
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
+                        unStar(:,1,i,j) = unStar(:,1,i,j) + &
+                           self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
+                        counter = counter + nEqn
+                     end do               ; end do       
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
+                        unStar(:,2,i,j) = unStar(:,2,i,j) + &
+                           self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
+                        counter = counter + nEqn
+                     end do               ; end do  
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
+                        unStar(:,3,i,j) = unStar(:,3,i,j) + &
+                           self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
+                        counter = counter + nEqn
+                     end do               ; end do  
+
+                  end associate
+         end if 
+            end associate
          end do
+      end do
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
 #endif
-      end subroutine HexMesh_GatherMPIFacesGradMortarFlux
+   end subroutine HexMesh_GatherMPIFacesGradMortarFlux
 !
 !////////////////////////////////////////////////////////////////////////
 !
