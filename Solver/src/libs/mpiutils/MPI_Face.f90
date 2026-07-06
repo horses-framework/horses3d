@@ -575,96 +575,74 @@ module MPI_Face_Class
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
-      subroutine MPI_Face_SendMortarFlux(self, domain, nEqn)
+      subroutine MPI_Face_SendMortarFlux(self, domain, nEqn, req)
          implicit none
          class(MPI_Face_t)      :: self
          integer, intent(in)    :: domain
          integer,    intent(in) :: nEqn
-!
-!        ---------------
-!        Local variables
-!        ---------------
-!
-         integer  :: ierr, dummyreq
-
+         integer, intent(out)   :: req
+         integer  :: ierr
 #ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
          if ( self % no_of_faces .gt. 0 ) then
             call mpi_isend(self % Flux_M_Send, nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
-                           DEFAULT_TAG, MPI_COMM_WORLD, dummyreq, ierr)
-            call mpi_request_free(dummyreq, ierr)
+                           DEFAULT_TAG, MPI_COMM_WORLD, req, ierr)
          end if
 #endif
-
       end subroutine MPI_Face_SendMortarFlux
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
-      subroutine MPI_Face_RecvMortarFlux(self, domain, nEqn)
+      subroutine MPI_Face_RecvMortarFlux(self, domain, nEqn, req)
          implicit none
          class(MPI_Face_t)      :: self
          integer, intent(in)    :: domain
          integer,    intent(in) :: nEqn
-!
-!        ---------------
-!        Local variables
-!        ---------------
-!
-         integer  :: ierr, dummyreq
-
+         integer, intent(out)   :: req
+         integer  :: ierr
 #ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
          if ( self % no_of_faces .gt. 0 ) then
             call mpi_irecv(self % Flux_M_Recv, nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
-                           MPI_ANY_TAG, MPI_COMM_WORLD, self % MortarFluxRecv_req, ierr)
+                           MPI_ANY_TAG, MPI_COMM_WORLD, req, ierr)
          end if
 #endif
-
       end subroutine MPI_Face_RecvMortarFlux
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
-      subroutine MPI_Face_SendGradMortarFlux(self, domain, nEqn)
+      subroutine MPI_Face_SendGradMortarFlux(self, domain, nEqn, req)
          implicit none
          class(MPI_Face_t)      :: self
          integer, intent(in)    :: domain
          integer,    intent(in) :: nEqn
-!
-!        ---------------
-!        Local variables
-!        ---------------
-!
-         integer  :: ierr, dummyreq
-
+         integer, intent(out)   :: req
+         integer  :: ierr
 #ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
          if ( self % no_of_faces .gt. 0 ) then
             call mpi_isend(self % GradFlux_M_Send, NDIM * nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
-                           DEFAULT_TAG, MPI_COMM_WORLD, dummyreq, ierr)
-            call mpi_request_free(dummyreq, ierr)
+                           DEFAULT_TAG, MPI_COMM_WORLD, req, ierr)
          end if
 #endif
-
       end subroutine MPI_Face_SendGradMortarFlux
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
-      subroutine MPI_Face_RecvGradMortarFlux(self, domain, nEqn)
+      subroutine MPI_Face_RecvGradMortarFlux(self, domain, nEqn, req)
          implicit none
          class(MPI_Face_t)      :: self
          integer, intent(in)    :: domain
          integer,    intent(in) :: nEqn
-!
-!        ---------------
-!        Local variables
-!        ---------------
-!
-         integer  :: ierr, dummyreq
-
+         integer, intent(out)   :: req
+         integer  :: ierr
 #ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
          if ( self % no_of_faces .gt. 0 ) then
             call mpi_irecv(self % GradFlux_M_Recv, NDIM * nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
-                           MPI_ANY_TAG, MPI_COMM_WORLD, self % MortarGradFluxRecv_req, ierr)
+                           MPI_ANY_TAG, MPI_COMM_WORLD, req, ierr)
          end if
 #endif
-
       end subroutine MPI_Face_RecvGradMortarFlux
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
