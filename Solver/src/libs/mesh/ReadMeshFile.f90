@@ -5,7 +5,7 @@ module ReadMeshFile
    use Read_SpecMesh
    use Read_GMSH
    use HexMeshClass
-   use MeshTypes           , only: SPECMESH, HOPRMESH, GMSHMESH, HMESH_INTERIOR, HMESH_BOUNDARY, HMESH_MPI
+   use MeshTypes           , only: SPECMESH, HOPRMESH, GMSHMESH, HMESH_INTERIOR, HMESH_BOUNDARY, HMESH_MPI, MORTAR_BIG
    use FileReadingUtilities, only: getFileExtension
    implicit none
 
@@ -108,7 +108,7 @@ contains
 !     element has no MPI face of its own, it still depends on an MPI mortar
 !     flux. Treat it as shared so the flux is available before integration.
       do fID = 1, self % no_of_faces
-         if ( self % faces(fID) % IsMortar == 1 .and. &
+         if ( self % faces(fID) % MortarType == MORTAR_BIG .and. &
               self % faces(fID) % faceType == HMESH_MPI ) then
             do m_loc = 1, 4
                if ( self % faces(fID) % Mortar(m_loc) /= 0 ) then

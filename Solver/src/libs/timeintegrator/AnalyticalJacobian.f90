@@ -295,12 +295,16 @@ contains
 !     ----------------------------------------------
 !$omp do schedule(runtime)
       do fID = 1, size(mesh % faces)
-         if (mesh % faces(fID)% IsMortar==0 .OR. mesh % faces(fID)% IsMortar==2) then 
-            if (mesh % faces(fID)% IsMortar==0) call mesh % faces(fID) % ProjectFluxJacobianToElements(nEqn,LEFT ,LEFT )   ! dF/dQL to the left element 
+         if (mesh % faces(fID)% MortarType == MORTAR_NONE .OR. mesh % faces(fID)% MortarType == MORTAR_SMALL4) then 
+
+            if (mesh % faces(fID)% MortarType == MORTAR_NONE) call mesh % faces(fID) % ProjectFluxJacobianToElements(nEqn,LEFT ,LEFT )   ! dF/dQL to the left element 
             if (.not. (mesh % faces(fID) % faceType == HMESH_BOUNDARY )) call mesh % faces(fID) % ProjectFluxJacobianToElements(nEqn,RIGHT,RIGHT)   ! dF/dQR to the right element
-         elseif(mesh % faces(fID)% IsMortar==1) then 
+
+         elseif(mesh % faces(fID)% MortarType == MORTAR_BIG) then 
+
             call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(nEqn,LEFT ,LEFT,  mesh % faces(fID+1),mesh % faces(fID+2), &
             mesh % faces(fID+3), mesh % faces(fID+4))   ! dF/dQL to the left element 
+
          end if 
       end do
 !$omp end do
@@ -310,12 +314,16 @@ contains
       if (flowIsNavierStokes) then
 !$omp do schedule(runtime)
          do fID = 1, size(mesh % faces)
-            if (mesh % faces(fID)% IsMortar==0 .OR. mesh % faces(fID)% IsMortar==2) then 
-               if (mesh % faces(fID)% IsMortar==0) call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT, LEFT)   ! dF/dQL to the left element 
+            if (mesh % faces(fID)% MortarType == MORTAR_NONE .OR. mesh % faces(fID)% MortarType == MORTAR_SMALL4) then 
+
+               if (mesh % faces(fID)% MortarType == MORTAR_NONE) call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT, LEFT)   ! dF/dQL to the left element 
                if (.not. (mesh % faces(fID) % faceType == HMESH_BOUNDARY)) call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,RIGHT)   ! dF/dQR to the right element
-            elseif(mesh % faces(fID)% IsMortar==1) then 
+
+            elseif(mesh % faces(fID)% MortarType == MORTAR_BIG) then 
+
                call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,LEFT,  mesh % faces(fID+1),mesh % faces(fID+2), &
                mesh % faces(fID+3), mesh % faces(fID+4))   ! dF/dQL to the left element 
+
             end if 
          end do
 !$omp end do
@@ -364,14 +372,20 @@ contains
 !$omp do schedule(runtime)
       do fID = 1, size(mesh % faces)
          if (mesh % faces(fID) % faceType /= HMESH_BOUNDARY) then
-            if (mesh % faces(fID) % Ismortar==0) then 
+            if (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
+
                call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, LEFT ,RIGHT)   ! dF/dQR to the left element
                call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, RIGHT,LEFT )   ! dF/dQL to the right element 
-            elseif (mesh % faces(fID) % Ismortar==2) then 
+
+            elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
+
                call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, RIGHT,LEFT )   ! dF/dQL to the right element 
-            elseif (mesh % faces(fID) % Ismortar==1) then 
+
+            elseif (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
+
                call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(NCONS, LEFT ,RIGHT, mesh % faces(fID+1), mesh % faces(fID+2), &
                mesh % faces(fID+3), mesh % faces(fID+4))   ! dF/dQR to the left element
+
             end if 
          end if
       end do
@@ -384,14 +398,20 @@ contains
 !$omp do schedule(runtime)
          do fID = 1, size(mesh % faces)
             if (mesh % faces(fID) % faceType /= HMESH_BOUNDARY) then
-               if (mesh % faces(fID) % Ismortar==0) then 
+               if (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
+
                   call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT ,RIGHT)   ! dF/dGradQR to the left element
                   call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,LEFT )   ! dF/dGradQL to the right element 
-               elseif (mesh % faces(fID) % Ismortar==2) then 
+
+               elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
+
                   call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,LEFT ) 
-               elseif (mesh % faces(fID) % Ismortar==1) then 
+
+               elseif (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
+
                   call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,RIGHT, mesh % faces(fID+1), mesh % faces(fID+2), &
                   mesh % faces(fID+3), mesh % faces(fID+4))
+                  
                end if 
             end if
          end do
@@ -444,9 +464,9 @@ contains
       do fID = 1, size(mesh % faces)
          select case (mesh % faces(fID) % faceType)
             case (HMESH_INTERIOR)
-               if (mesh % faces(fID)% IsMortar==0) then 
+               if (mesh % faces(fID)% MortarType == MORTAR_NONE) then 
                   call ComputeInterfaceFluxJacobian(mesh % faces(fID))
-               elseif (mesh % faces(fID)%IsMortar==1) then 
+               elseif (mesh % faces(fID)%MortarType == MORTAR_BIG) then 
                   call  ComputeInterfaceMortarFluxJacobian(mesh % faces(fID), mesh % faces(fID+1), mesh % faces(fID+2), &
                   mesh % faces(fID+3), mesh % faces(fID+4))
                end if 

@@ -470,7 +470,7 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_interior)
             fID = mesh % faces_interior(iFace)
-            if (mesh % faces(fID) % IsMortar==1) then 
+            if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
                associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
                   fstar=0.0_RP
                end associate
@@ -482,7 +482,7 @@ module SpatialDiscretization
                      call computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                   end if 
                end do 
-         elseif (mesh % faces(fID) % IsMortar==0) then 
+         elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
             call computeElementInterfaceFlux(mesh % faces(fID))
             end if 
          end do
@@ -548,8 +548,7 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(fID)
             do iFace = 1, size(mesh % faces_mpi)
                fID = mesh % faces_mpi(iFace)
-               if (mesh% faces(fID)%IsMortar==1) then 
-                  !write(*,*) 'big mortar face mpi'
+               if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
                   associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
                      fstar=0.0_RP
                   end associate
@@ -752,7 +751,7 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(i,j)
             do iFace = 1, no_of_faces
                associate(f => mesh % faces(face_ids(iFace)))
-                  if (f % IsMortar==1) cycle 
+                  if (f % MortarType == MORTAR_BIG) cycle 
                do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
                   do side = 1, no_of_sides
                       call get_laminar_mu_kappa(f % storage(side) % Q(:,i,j), f % storage(side) % mu_NS(1,i,j), f % storage(side) % mu_NS(2,i,j))
@@ -766,7 +765,7 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(i,j,mu_t, kinematic_viscocity, mu_dim)
             do iFace = 1, no_of_faces
                associate(f => mesh % faces(face_ids(iFace)))
-                  if (f % IsMortar==1) cycle 
+                  if (f % MortarType == MORTAR_BIG) cycle 
                do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
                   do side = 1, no_of_sides
 
@@ -1108,7 +1107,6 @@ module SpatialDiscretization
          real(kind=RP) :: mu_left(3), mu_right(3)
         integer        :: Sidearray(2)
 
-       !if (f % IsMortar==0 .OR. f % IsMortar==2) then 
 !
   !        ---------------------------
   !        Artificial viscosity fluxes
@@ -1191,11 +1189,11 @@ module SpatialDiscretization
   !        Return the flux to elements
   !        ---------------------------
   !
-      if (f % IsMortar==0) then  
+      if (f % MortarType == MORTAR_NONE) then  
          Sidearray = (/1,2/)
          call f % ProjectFluxToElements(NCONS, flux, Sidearray)
          end if 
-     if (f % IsMortar==2 .and. present(masterFace)) then 
+     if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace)) then 
       Sidearray = (/1,0/)
       call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
       slaveFace=f, MortarFlux=flux)
@@ -1305,8 +1303,7 @@ module SpatialDiscretization
 
          Sidearray = (/thisSide, HMESH_NONE/)
          call f % ProjectFluxToElements(NCONS, flux, Sidearray )
-         if (f % IsMortar==2) then 
-            !write(*,*) 'this side', thisSide
+         if (f % MortarType == MORTAR_SMALL4) then 
             call f% Interpolatesmall2big(NCONS, flux)
 
          end if 

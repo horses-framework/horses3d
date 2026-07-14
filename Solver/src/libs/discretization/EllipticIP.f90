@@ -310,7 +310,7 @@ module EllipticIP
 !$omp do schedule(runtime) private(fID)
             do iFace = 1, size(mesh % HO_FacesInterior)
                fID = mesh % HO_FacesInterior(iFace)
-               if (mesh % faces(fID) % IsMortar==3) then 
+               if (mesh % faces(fID) % MortarType == MORTAR_SLIDING) then 
                   associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                      unStar=0.0_RP
                   end associate
@@ -318,7 +318,7 @@ module EllipticIP
                      unStar=0.0_RP
                   end associate 
                end if 
-               if (mesh % faces(fID) % IsMortar==1) then 
+               if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
                   associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                      unStar=0.0_RP
                   end associate
@@ -331,7 +331,7 @@ module EllipticIP
                      f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
-               elseif(mesh % faces(fID) % IsMortar==0) then
+               elseif(mesh % faces(fID) % MortarType == MORTAR_NONE) then
                call IP_GradientInterfaceSolution(mesh % faces(fID), nEqn, nGradEqn, GetGradients)
                end if 
             end do
@@ -340,7 +340,7 @@ module EllipticIP
 !$omp do schedule(runtime) private(fID)
             do iFace = 1, size(mesh % faces_interior)
                fID = mesh % faces_interior(iFace)
-               if (mesh % faces(fID) % IsMortar==3) then 
+               if (mesh % faces(fID) % MortarType == MORTAR_SLIDING) then 
                   associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                      unStar=0.0_RP
                   end associate
@@ -348,7 +348,7 @@ module EllipticIP
                      unStar=0.0_RP
                   end associate 
                end if 
-               if (mesh % faces(fID) % IsMortar==1) then 
+               if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
                   associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                      unStar=0.0_RP
                   end associate
@@ -361,7 +361,7 @@ module EllipticIP
                      f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
-               elseif(mesh % faces(fID) % IsMortar==0) then
+               elseif(mesh % faces(fID) % MortarType == MORTAR_NONE) then
                call IP_GradientInterfaceSolution(mesh % faces(fID), nEqn, nGradEqn, GetGradients)
                end if 
             end do
@@ -455,7 +455,7 @@ module EllipticIP
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_mpi)
             fID = mesh % faces_mpi(iFace)
-            if (mesh% faces(fID)%IsMortar==1) then 
+            if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
                associate(UnStar=>mesh% faces(fID)%storage(1)%UnStar)
                   UnStar=0.0_RP
                end associate
@@ -604,10 +604,10 @@ module EllipticIP
          end do               ; end do
 
       if (.not.present(sliding)) then 
-         if (f % IsMortar==0) then 
+         if (f % MortarType == MORTAR_NONE) then 
          call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/1,2/),1)
          end if 
-         if (f % IsMortar==2 .and. present(masterFace1)) then 
+         if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace1)) then 
             call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, HFlux=HFlux,whichElements=(/0,2/),factor=1)
             call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/0,2/),1)
          end if 
@@ -667,7 +667,7 @@ module EllipticIP
 
          thisSide = maxloc(f % elementIDs, dim = 1)
          call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/thisSide, HMESH_NONE/),1)
-         if (f % IsMortar==2) then 
+         if (f % MortarType == MORTAR_SMALL4) then 
          
             call f% Interpolatesmall2biggrad(NCONS, HFlux)
             
@@ -847,7 +847,6 @@ module EllipticIP
          class(Face), intent(in)    :: f
          real(kind=RP)              :: PenaltyParameterNS
 
-         if (f % geom % h==0.0_RP)write(*,*)'ip line 844 h', f % geom % h, 'fID', f%ID,'ismortar:', f%IsMortar
          PenaltyParameterNS = 0.5_RP*self % sigma * (maxval(f % Nf)+1)*(maxval(f % Nf)+2) / f % geom % h 
 
       end function PenaltyParameterNS

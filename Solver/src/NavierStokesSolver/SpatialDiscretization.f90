@@ -467,7 +467,7 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_interior)
             fID = mesh % faces_interior(iFace)
-            if (mesh % faces(fID) % IsMortar==3) then 
+            if (mesh % faces(fID) % MortarType == MORTAR_SLIDING) then 
                associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
                   fstar=0.0_RP
                end associate
@@ -475,7 +475,7 @@ module SpatialDiscretization
                   fstar=0.0_RP
                end associate
             end if 
-            if (mesh % faces(fID) % IsMortar==1) then 
+            if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
                associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
                   fstar=0.0_RP
                end associate
@@ -487,7 +487,7 @@ module SpatialDiscretization
                      call computeElementInterfaceFlux(masterFace1=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)), m=m)
                   end if 
                end do 
-            elseif (mesh % faces(fID) % IsMortar==0) then 
+            elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
                call computeElementInterfaceFlux(f=mesh % faces(fID))
    
             end if 
@@ -583,14 +583,12 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(fID)
             do iFace = 1, size(mesh % faces_mpi)
                fID = mesh % faces_mpi(iFace)
-               if (mesh% faces(fID)%IsMortar==1) then 
-                  !write(*,*) 'big mortar face mpi'
+               if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
                   associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
                      fstar=0.0_RP
                   end associate
                   do m=1,4
                      if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                        !write(*,*) mesh % faces(fID)%Mortar(m), mesh % faces(mesh % faces(fID)%Mortar(m))%IsMortar
                         call computeElementInterfaceFlux(masterFace1=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
@@ -1446,10 +1444,9 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(i,j)
             do iFace = 1, no_of_faces
                associate(f => mesh % faces(face_ids(iFace)))
-                  if (f % IsMortar==1 .OR. f % IsMortar==3) cycle  
+                  if (f % MortarType == MORTAR_BIG .OR. f % MortarType == MORTAR_SLIDING) cycle  
                do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
                   do side = 1, no_of_sides
-                     !write(*,*) 'Q(1)',f % storage(side) % Q(1,i,j)
                       call get_laminar_mu_kappa(f % storage(side) % Q(:,i,j), f % storage(side) % mu_NS(1,i,j), f % storage(side) % mu_NS(2,i,j))
                   end do
                end do              ; end do
@@ -1464,11 +1461,7 @@ module SpatialDiscretization
                associate(f => mesh % mortar_faces(iFace))  
                do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
                   do side = 1, no_of_sides
-                     !write(*,*) 'Q1 mortar_faces', f % storage(side) % Q(1,i,j)
-                     !write(*,*) 'Q2 mortar_faces', f % storage(side) % Q(2,i,j)
-                     !write(*,*) 'Q3 mortar_faces', f % storage(side) % Q(3,i,j)
-                     !write(*,*) 'Q4 mortar_faces', f % storage(side) % Q(4,i,j)
-                     !write(*,*) 'Q5 mortar_faces', f % storage(side) % Q(5,i,j)
+
                       call get_laminar_mu_kappa(f % storage(side) % Q(:,i,j), f % storage(side) % mu_NS(1,i,j), f % storage(side) % mu_NS(2,i,j))
                   end do
                end do              ; end do
@@ -1482,7 +1475,7 @@ module SpatialDiscretization
                associate(f => mesh % faces(face_ids(iFace)))
 
                delta = sqrt(f % geom % surface / product(f % Nf + 1))
-               if (f % IsMortar==1 .OR. f % IsMortar==3) cycle 
+               if (f % MortarType == MORTAR_BIG .OR. f % MortarType == MORTAR_SLIDING) cycle 
                do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
                   do side = 1, no_of_sides
                      call LESModel % ComputeViscosity(delta, f % geom % dWall(i,j), f % storage(side) % Q(:,i,j),   &
@@ -1947,11 +1940,11 @@ module SpatialDiscretization
   !        ---------------------------
   !
       if (.not.present(sliding)) then     
-         if (f % IsMortar==0) then 
+         if (f % MortarType == MORTAR_NONE) then 
             Sidearray = (/1,2/)
             call f % ProjectFluxToElements(NCONS, flux, Sidearray)
          end if 
-         if (f % IsMortar==2 .and. present(masterFace1)) then 
+         if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace1)) then 
             Sidearray = (/1,0/)
             call masterFace1 % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
                slaveFace=f, MortarFlux=flux)
@@ -2062,8 +2055,8 @@ module SpatialDiscretization
 
          Sidearray = (/thisSide, HMESH_NONE/)
          call f % ProjectFluxToElements(NCONS, flux, Sidearray )
-         if (f % IsMortar==2) then 
-            !write(*,*) 'this side', thisSide
+         if (f % MortarType == MORTAR_SMALL4) then 
+
             call f% Interpolatesmall2big(NCONS, flux)
 
          end if 
@@ -2105,9 +2098,6 @@ module SpatialDiscretization
       real(kind=RP)                   :: wallFunMu(0:f % Nf(1), 0:f % Nf(2))
       real(kind=RP)                   :: wallFunY(0:f % Nf(1), 0:f % Nf(2))
 
-      if (f % IsMortar .ne. 0) then 
-         write(*,*) 'bface problem mortar...'
-      end if 
       if ( ShockCapturingDriver % isActive ) then
          do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
             Avisc_flux(:,i,j) = f % storage(1) % Aviscflux(:,i,j) / f % geom % jacobian(i,j)
@@ -2190,10 +2180,6 @@ module SpatialDiscretization
 !
 !           Hyperbolic part
 !           -------------
-            !write(*,*) 'riemann solver for boudnary face', f% ID, 'element', f % elementIDs(1), f % elementIDs(2)
-           !! write(*,*) 'qleft=',f % storage(1) % Q(:,i,j)
-            !write(*,*) 'qright=',f % storage(2) % Q(:,i,j)
-            !write(*,*) '///////////////////////////////////'
             call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
                                QRight = f % storage(2) % Q(:,i,j), &
                                nHat   = f % geom % normal(:,i,j), &

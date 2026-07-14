@@ -354,7 +354,7 @@ module SpatialDiscretization
             associate( f => mesh % faces(fID)) 
             select case (f % faceType) 
             case (HMESH_INTERIOR) 
-               if (f % IsMortar==1) then 
+               if (f % MortarType == MORTAR_BIG) then 
                associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
                   fstar=0.0_RP
                end associate
@@ -366,7 +366,7 @@ module SpatialDiscretization
             CALL computeElementInterfaceFlux_iNS(masterFace=f, f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
                   end if 
                end do 
-            elseif  (f % IsMortar==0) then
+            elseif  (f % MortarType == MORTAR_NONE) then
                   CALL computeElementInterfaceFlux_iNS( f ) 
                end if 
             case (HMESH_BOUNDARY) 
@@ -413,8 +413,7 @@ module SpatialDiscretization
                associate( f => mesh % faces(fID)) 
                select case (f % faceType) 
                case (HMESH_MPI)
-                  if (mesh% faces(fID)%IsMortar==1) then 
-                     !write(*,*) 'big mortar face mpi'
+                  if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
                      associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
                         fstar=0.0_RP
                      end associate
@@ -766,7 +765,6 @@ module SpatialDiscretization
          real(kind=RP) :: flux(1:NCONS,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: muL, muR, mu
 
-         !if (f % IsMortar==0 .OR. f % IsMortar==2) then 
             DO j = 0, f % Nf(2)
                DO i = 0, f % Nf(1)
 
@@ -825,15 +823,14 @@ module SpatialDiscretization
    !        Return the flux to elements
    !        ---------------------------
    !
-      if (f % IsMortar==0) then 
+      if (f % MortarType == MORTAR_NONE) then 
             call f % ProjectFluxToElements(NCONS, flux, (/1,2/))
        end if 
-       if (f % IsMortar==2 .and. present(masterFace)) then 
+      if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace)) then 
          call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), &
          slaveFace=f, MortarFlux=flux)
          call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
       end if 
- !end if 
 
       END SUBROUTINE computeElementInterfaceFlux_iNS
 
@@ -900,8 +897,8 @@ module SpatialDiscretization
 !
          thisSide = maxloc(f % elementIDs, dim = 1)
          call f % ProjectFluxToElements(NCONS, flux, (/thisSide, HMESH_NONE/))
-         if (f % IsMortar==2) then 
-            !write(*,*) 'this side', thisSide
+         if (f % MortarType == MORTAR_SMALL4) then
+
             call f% Interpolatesmall2big(NCONS, flux)
            
          end if 

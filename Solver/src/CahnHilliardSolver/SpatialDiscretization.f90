@@ -428,7 +428,15 @@ stop
             associate( f => mesh % faces(fID)) 
             select case (f % faceType) 
             case (HMESH_INTERIOR) 
-               if (f % IsMortar==1) then 
+               if (f% MortarType == MORTAR_SLIDING) then 
+                  associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                     fstar=0.0_RP
+                  end associate
+                  associate(fstar=>mesh% faces(fID)%storage(2)%fStar)
+                     fstar=0.0_RP
+                  end associate
+               end if 
+               if (f % MortarType == MORTAR_BIG) then 
                   associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
                      fstar=0.0_RP
                   end associate
@@ -440,7 +448,7 @@ stop
                         CALL computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do  
-               elseif (f % IsMortar==0) then
+               elseif (f % MortarType == MORTAR_NONE) then
                CALL computeElementInterfaceFlux( f ) 
                end if 
  
@@ -497,8 +505,11 @@ stop
                associate( f => mesh % faces(fID)) 
                select case (f % faceType) 
                case (HMESH_MPI) 
-                  if (f%IsMortar==1) then 
+                  if (f%MortarType == MORTAR_BIG) then 
                      associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                        fstar=0.0_RP
+                     end associate
+                     associate(fstar=>mesh% faces(fID)%storage(2)%fStar)
                         fstar=0.0_RP
                      end associate
                      do m=1,4
@@ -735,7 +746,6 @@ stop
          real(kind=RP) :: flux(1:NCOMP,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: mu
 
-         !if (f % IsMortar==0 .OR. f % IsMortar==2) then 
          DO j = 0, f % Nf(2)
             DO i = 0, f % Nf(1)
 
@@ -771,10 +781,10 @@ stop
 !        Return the flux to elements
 !        ---------------------------
 !
-      if (f % IsMortar==0) then 
+      if (f % MortarType == MORTAR_NONE) then 
          call f % ProjectFluxToElements(NCOMP, flux, (/1,2/))
       end if 
-      if (f % IsMortar==2 .and. present(masterFace)) then 
+      if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace)) then 
          call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), &
             slaveFace=f, MortarFlux=flux)
          call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
@@ -830,7 +840,7 @@ stop
 !
          thisSide = maxloc(f % elementIDs, dim = 1)
          call f % ProjectFluxToElements(NCOMP, flux, (/thisSide, HMESH_NONE/))
-         if (f % IsMortar==2) then 
+         if (f % MortarType == MORTAR_SMALL4) then 
             !write(*,*) 'this side', thisSide
             call f% Interpolatesmall2big(NCONS, flux)
             

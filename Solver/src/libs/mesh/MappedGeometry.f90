@@ -492,7 +492,7 @@ Module MappedGeometryClass
 !  -----------------------------------------
 !  Computation of the metric terms on a face
 !  -----------------------------------------
-   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, fID,scale,IsMortar)
+   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, fID,scale)
       use PhysicsStorage
       use InterpolationMatrices
       implicit none
@@ -511,7 +511,6 @@ Module MappedGeometryClass
       logical,   optional,       intent(in)     :: sliding 
       integer,   optional,       intent(in)     :: fID 
       real(kind=RP), optional,   intent(in)     :: scale
-      integer,   optional,       intent(in)     :: IsMortar
 !
 !     ---------------
 !     Local variables
@@ -569,14 +568,7 @@ Module MappedGeometryClass
             do j = 0, Nf(2) ; do i = 0, Nf(1)
                call coordRotation(NodalStorage(Nf(1)) % x(i), NodalStorage(Nf(2)) % x(j), rot, xi, eta)
                x = [-1.0_RP, xi, eta]
-               if (present(IsMortar)) then 
-                  write(*,*)'calculating x before transfiniteMap,side ELEFT', x
-               end if 
-               !write(*,*)'x befor transfite map'
                self % x(:,i,j) = hexMap % transfiniteMapAt(x)
-               if (present(IsMortar)) then 
-                  write(*,*)' x after transfiniteMap,side ELEFT', self % x(:,i,j)
-               end if 
             end do ; end do
 !  
 !           Get surface Jacobian and normal vector
@@ -599,16 +591,8 @@ Module MappedGeometryClass
             do j = 0, Nf(2) ; do i = 0, Nf(1)
                call coordRotation(NodalStorage(Nf(1)) % x(i), NodalStorage(Nf(2)) % x(j), rot, xi, eta)
                x = [ 1.0_RP, xi, eta ]
-               if (present(IsMortar)) then 
-                  write(*,*)'calculating x before transfiniteMap,side ERIGHT', x
-               end if 
-               !write(*,*)'x befor transfite map'
                self % x(:,i,j) = hexMap % transfiniteMapAt(x)
-               if (present(IsMortar)) then 
-                  write(*,*)' x after transfiniteMap,side ERIGHT', self % x(:,i,j)
-               end if 
             end do ; end do
-           ! write(*,*)'calculating x,side ERIGHT', self % x
 !
 !           Get surface Jacobian and normal vector
 !           --------------------------------------
@@ -623,16 +607,8 @@ Module MappedGeometryClass
             do j = 0, Nf(2) ; do i = 0, Nf(1)
                call coordRotation(NodalStorage(Nf(1)) % x(i), NodalStorage(Nf(2)) % x(j), rot, xi, eta)
                x = [xi, eta,-1.0_RP]
-               if (present(IsMortar)) then 
-                  write(*,*)'calculating x before transfiniteMap,side EBOTTOM', x
-               end if 
-               !write(*,*)'x befor transfite map'
                self % x(:,i,j) = hexMap % transfiniteMapAt(x)
-               if (present(IsMortar)) then 
-                  write(*,*)' x after transfiniteMap,side EBOTTOM', self % x(:,i,j)
-               end if 
             end do ; end do
-            !write(*,*)'calculating x,side EBOTTOM', self % x
 !
 !           Get surface Jacobian and normal vector
 !           --------------------------------------
@@ -651,16 +627,8 @@ Module MappedGeometryClass
             do j = 0, Nf(2) ; do i = 0, Nf(1)
                call coordRotation(NodalStorage(Nf(1)) % x(i), NodalStorage(Nf(2)) % x(j), rot, xi, eta)
                x = [xi, eta, 1.0_RP]
-               if (present(IsMortar)) then 
-                  write(*,*)'calculating x before transfiniteMap,side ETOP', x
-               end if 
-               !write(*,*)'x befor transfite map'
                self % x(:,i,j) = hexMap % transfiniteMapAt(x)
-               if (present(IsMortar)) then 
-                  write(*,*)' x after transfiniteMap,side ETOP', self % x(:,i,j)
-               end if 
             end do ; end do
-            !write(*,*)'calculating x,side ETOP', self % x
 !
 !           Get surface Jacobian and normal vector
 !           --------------------------------------
@@ -675,16 +643,8 @@ Module MappedGeometryClass
             do j = 0, Nf(2) ; do i = 0, Nf(1)
                call coordRotation(NodalStorage(Nf(1)) % x(i), NodalStorage(Nf(2)) % x(j), rot, xi, eta)
                x = [xi, -1.0_RP, eta]
-               if (present(IsMortar)) then 
-                  write(*,*)'calculating x before transfiniteMap,side EFRONT', x
-               end if 
-               !write(*,*)'x befor transfite map'
                self % x(:,i,j) = hexMap % transfiniteMapAt(x)
-               if (present(IsMortar)) then 
-                  write(*,*)' x after transfiniteMap,side EFRONT', self % x(:,i,j)
-               end if 
             end do ; end do
-            !write(*,*)'calculating,side EFRONT', self % x
 !
 !           Get surface Jacobian and normal vector
 !           --------------------------------------
@@ -703,14 +663,7 @@ Module MappedGeometryClass
             do j = 0, Nf(2) ; do i = 0, Nf(1)
                call coordRotation(NodalStorage(Nf(1)) % x(i), NodalStorage(Nf(2)) % x(j), rot, xi, eta)
                x = [xi, 1.0_RP, eta]
-               if (present(IsMortar)) then 
-                  write(*,*)'calculating x before transfiniteMap,side EBACK', x
-               end if 
-               !write(*,*)'x befor transfite map'
                self % x(:,i,j) = hexMap % transfiniteMapAt(x)
-               if (present(IsMortar)) then 
-                  write(*,*)' x after transfiniteMap,side EBACK', self % x(:,i,j)
-               end if 
             end do ; end do
             !write(*,*)'calculating x,side EBACK',  self % x
 !

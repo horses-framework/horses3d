@@ -275,7 +275,7 @@ module MeshPartitioning
 !           Cycle non-interior faces
 !           ------------------------
             if ( f % faceType .ne. HMESH_INTERIOR ) cycle
-         if ( f % IsMortar==1 ) cycle
+            if ( f % MortarType == MORTAR_BIG ) cycle
 !           Create references to left and right elements
 !           --------------------------------------------
 
@@ -327,7 +327,7 @@ module MeshPartitioning
 !           Cycle non-interior faces
 !           ------------------------
             if ( f % faceType .ne. HMESH_INTERIOR ) cycle
-            if ( f % IsMortar==1 ) cycle
+            if ( f % MortarType == MORTAR_BIG ) cycle
 !
 !           Create references to left and right elements
 !           --------------------------------------------

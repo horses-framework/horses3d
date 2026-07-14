@@ -510,14 +510,14 @@ MODULE HexMeshClass
                                                                       side      = faceNumber)
 
                   self % faces(self % numberOfFaces) % boundaryName = self % elements(eID) % boundaryName(faceNumber)
-                  self % faces(self % numberOfFaces) % IsMortar     = 0
+                  self % faces(self % numberOfFaces) % MortarType     = MORTAR_NONE
 !
 !                 Slave mortar whose master is on another process
 !
                   IF (self % elements(eID) % MortarFaces(faceNumber) >= 2 .AND. present(globalToLocalElementID)) THEN
                      if (globalToLocalElementID(HorsesMortars(3,(eID*6)-5+faceNumber-1)) == -1) THEN
                         self % faces(self % numberOfFaces) % FaceType       = HMESH_INTERIOR
-                        self % faces(self % numberOfFaces) % IsMortar       = 2
+                        self % faces(self % numberOfFaces) % MortarType       = MORTAR_SMALL4
                         self % faces(self % numberOfFaces) % Mortarpos      = MODULO(self % elements(eID) % MortarFaces(faceNumber),20)
                         self % faces(self % numberOfFaces) % elementIDs(2)  = self % faces(self % numberOfFaces) % elementIDs(1)
                         self % faces(self % numberOfFaces) % elementIDs(1)  = 0
@@ -569,7 +569,7 @@ MODULE HexMeshClass
 
                call table % AddEntry(faceNodeIDs)
 
-               self % faces(self % numberOfFaces) % IsMortar = 1
+               self % faces(self % numberOfFaces) % MortarType = MORTAR_BIG
                mID = self % numberOfFaces
 
                allocate(self % faces(mID) % Mortar(4))
@@ -588,7 +588,7 @@ MODULE HexMeshClass
 !
                   IF (present(globalToLocalElementID)) THEN
                      IF (globalToLocalElementID(eIDM) == -1) then
-                        !write(*,*) 'slaveface in other process'
+
                         self % faces(mID) % n_mpi_mortar = self % faces(mID) % n_mpi_mortar + 1
                         cycle
                      end if
@@ -658,7 +658,7 @@ MODULE HexMeshClass
                   ! self % faces(self % numberOfFaces) % rotation     = faceRotation(masterNodeIDs = self % faces(faceID) % nodeIDs, &
                   !                                                                  slaveNodeIDs  = faceNodeIDs                      )
                   self % faces(self % numberOfFaces) % rotation       = 0
-                  self % faces(self % numberOfFaces) % IsMortar       = 2
+                  self % faces(self % numberOfFaces) % MortarType       = MORTAR_SMALL4
                   self % faces(self % numberOfFaces) % Mortarpos      = l
 
                   call table % AddEntry(MfaceNodeIDs)
@@ -707,8 +707,7 @@ subroutine GetElementsFaceIDs(self)
    do fID = 1, size(self % faces)
       select case (self % faces(fID) % faceType)
       case (HMESH_INTERIOR)
-         !select case (self % faces(fID) % IsMortar)  
-         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%IsMortar==0) then !conforming
+         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%MortarType == MORTAR_NONE) then !conforming
             eL = self % faces(fID) % elementIDs(1)
             eR = self % faces(fID) % elementIDs(2)
 
@@ -717,13 +716,13 @@ subroutine GetElementsFaceIDs(self)
             self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
             self % elements(eR) % faceSide(self % faces(fID) % elementSide(2)) = 2
          end if 
-         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%IsMortar==1) then !Big master
+         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%MortarType == MORTAR_BIG) then !Big master
 
             eL = self % faces(fID) % elementIDs(1)
             self % elements(eL) % faceIDs(self % faces(fID) % elementSide(1)) = fID
             self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
          end if 
-         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%IsMortar==2) then
+         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%MortarType == MORTAR_SMALL4) then
 
             eR = self % faces(fID) % elementIDs(2)
             self % elements(eR) % faceIDs(self % faces(fID) % elementSide(2)) = fID
@@ -2093,7 +2092,7 @@ subroutine HexMesh_UpdateMPIFacesMortarFlux(self, nEqn)
                fID = MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
                associate(f => self % faces(fID))
-               if (f % Ismortar==2) then
+               if (f % MortarType == MORTAR_SMALL4) then
                   do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                      MPIfaces % faces(domain) % Flux_M_Send(counter:counter+nEqn-1) = &
                         f % storage(1) % MortarFlux(:,i,j)
@@ -2161,7 +2160,7 @@ subroutine HexMesh_UpdateMPIFacesGradMortarFlux(self, nEqn)
          fID = MPIfaces % faces(domain) % faceIDs(mpifID)
          thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
          associate(f => self % faces(fID))
-         if (f % Ismortar==2) then
+         if (f % MortarType == MORTAR_SMALL4) then
             do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
                   f % storage(1) % GradMortarFlux(:,1,i,j)
@@ -2231,7 +2230,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
                   f % storage(otherSide(thisSide)) % Q(1:nEqn,i,j) = self % MPIfaces % faces(domain) % Qrecv(counter:counter+nEqn-1)
                   counter = counter + nEqn
                end do               ; end do
-               if (f % IsMortar==2) then 
+               if (f % MortarType == MORTAR_SMALL4) then 
                   call f % Interpolatebig2small(nEqn, f)
                end if 
                end associate
@@ -2288,15 +2287,10 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
                   counter = counter + nEqn
                end do               ; end do
 
-               if (f % IsMortar==2) then 
-                  !write(*,*) 'gradient mpi ux before interpolation', f % storage(otherSide(thisSide)) % U_x
-                   !write(*,*) 'gradient mpi uy before interpolation', f % storage(otherSide(thisSide)) % U_y
-                   !write(*,*) 'gradient mpi uz before interpolation', f % storage(otherSide(thisSide)) % U_z
+               if (f % MortarType == MORTAR_SMALL4) then 
                    do l=1,3
                       call f % Interpolatebig2small(nEqn, f,grad=l)
                    end do 
- 
- 
                 end if 
                end associate
             end do
@@ -2424,7 +2418,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
             fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
             thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
             associate(f => self % faces(fID))
-               if (f%Ismortar==1) then 
+               if (f%MortarType == MORTAR_BIG) then 
 
                   associate(fStar => f % storage(1) % Fstar)
                      do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
@@ -2475,7 +2469,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
             fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
             thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
             associate(f => self % faces(fID))
-               if (f%Ismortar==1) then 
+               if (f%MortarType == MORTAR_BIG) then 
 
                   associate(unStar => f % storage(1) % unStar)
                      do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
@@ -3187,9 +3181,8 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
 
            select case (f % faceType)
            case (HMESH_INTERIOR)
-              select case (f % IsMortar)
+              select case (f % MortarType)
               case (0, 2)   
-               !write(*,*) 'line 2664 f % IsMortar', f % IsMortar,'fID', f%ID, 'f % elementIDs(1)',f % elementIDs(1),'f % elementIDs(2)',f % elementIDs(2)
                if (f % elementIDs(1)==0) then 
                   associate(eR => self % elements(f % elementIDs(2))   )
                      NelR = eR % Nxyz(axisMap(:, f % elementSide(2)))
@@ -3232,31 +3225,27 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
                  call eR % Connection(SideR) % Construct(eL % GlobID, eL % Nxyz)
                  end associate
                end if 
-                 if (f % Ismortar==2) then 
+                 if (f % MortarType == MORTAR_SMALL4) then 
                  offset(1)=0.5_RP!!!!!!!if
                  offset(2)=0.5_RP
                   call f % LinkWithElements(NelL, NelR, nodes, offset)!!!!!!!
-                   !write(*,*) NelL, NelR 
-                  !write(*,*) 'after construction :', f % NelLeft, f % NelLeft
-                                    !write(*,*) 'li,ki,g mortar slave face'
-                 elseif (f % Ismortar ==0) then 
+   
+                 elseif (f % MortarType == MORTAR_NONE) then 
                  call f % LinkWithElements(NelL, NelR, nodes)!!!!!!!
                  end if 
                
               case (1, 3) 
-               !if (f % Ismortar==3) write(*,*) 'Ismorta=3 2699 hex'
+             
                  associate(eL => self % elements(f % elementIDs(1)))
 !
 !                 Get polynomial orders of elements
 !                 ---------------------------------
                  NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
                  NelR = NelL
-                  !if (f %Ismortar==3) write(*,*) 'mortar 3, face', f%ID
-                 ! NumberOfConnections = 4 ????
-                 ! write(*,*)'NELL 2708', NelL 
+   
                  end associate
                   if (NelL(1)==-1 .or. NelL(2)==-1) then 
-                     if (f%IsMortar==3) then 
+                     if (f%MortarType == MORTAR_SLIDING) then 
                         associate(eL => self % elements(f % elementIDs(2)))
                            NelL = eL % Nxyz(axisMap(:, f % elementSide(2)))
                            NelR = NelL
@@ -3265,8 +3254,6 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
                      end if 
                   end if 
                  call f % LinkWithElements(NelL, NelR, nodes)   
-                 !if (f %Ismortar==3) write(*,*) ' line 2720 hexmesh mortar 3, face', f%ID, 'Nf',f%Nf
-
 
               end select  
 
@@ -3311,15 +3298,15 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
 
                  associate( f => self % faces(fID) )
                  associate( e => self % elements(maxval(f % elementIDs)) )
-                  select case (f % IsMortar)
+                  select case (f % MortarType)
                   case (0, 2)   
                   sideL = f % elementSide(side)                                  ! element side 1/2/3/4/5/6
                   Nel(:,      side ) = e % Nxyz(axisMap(:,sideL))
                   Nel(:,other(side)) = self % MPIfaces % faces(domain) % Nrecv(counter:counter+1)
-                  if (f % IsMortar == 2) then 
+                  if (f % MortarType == MORTAR_SMALL4) then 
                    offset=0.5_RP
                    call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes, offset)
-                  elseif (f % IsMortar == 0 ) then 
+                  elseif (f % MortarType == MORTAR_NONE ) then 
                    call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes)
                   end if 
                    Nxyz   = self % MPIfaces % faces(domain) % Nrecv(counter+2:counter+4)
@@ -3365,7 +3352,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
                   fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
                   associate( fc => self % faces(fID) )
                   MPI_NDOFS(domain) = MPI_NDOFS(domain) + product(fc % Nf + 1)
-                  if (fc % IsMortar == 1 .OR. fc % IsMortar == 2) then 
+                  if (fc % MortarType == MORTAR_BIG .OR. fc % MortarType == MORTAR_SMALL4) then 
                         MPI_MNDOFS(domain) = MPI_MNDOFS(domain) + product(fc % Nf + 1)
                   end if 
                   end associate
@@ -3508,15 +3495,8 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
             no_of_mpifaces(domain) = no_of_mpifaces(domain) + 1
             self % MPIfaces % faces(domain) % faceIDs(no_of_mpifaces(domain)) = fID
             self % MPIfaces % faces(domain) % elementSide(no_of_mpifaces(domain)) = eSide
-               write(*,*) 'curent partition:', partition%ID 
-               write(*,*) 'shared partition:', domain
-                        !if (f % IsMortar==1) then 
-              ! write(*,*) 'MPI Big Mortar fID', fID 
-            !elseif (f % IsMortar==2) then 
-              ! write(*,*) 'MPI slave Mortar fID', fID 
-            !end if
+
          end do
-                 write(*,*) 'number mpifaces', no_of_mpifaces
       
       end subroutine HexMesh_UpdateFacesWithPartition
 !
@@ -3665,7 +3645,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
             select case (f % faceType)
 
             case (HMESH_INTERIOR)
-               if (f % IsMortar==0 .OR. f % IsMortar==2) then
+               if (f % MortarType == MORTAR_NONE .OR. f % MortarType == MORTAR_SMALL4) then
                   eIDLeft  = f % elementIDs(1)
                   SideIDL  = f % elementSide(1)
                   NSurfL   = SurfInfo(eIDLeft) % facePatches(SideIDL) % noOfKnots - 1
@@ -3728,7 +3708,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
                      deallocate(faceCL)
                   end if
                end if 
-               if (f % IsMortar==1 .OR. f % IsMortar==3) then 
+               if (f % MortarType == MORTAR_BIG .OR. f % MortarType == MORTAR_SLIDING) then 
 
                   eIDLeft  = f % elementIDs(1)
                   SideIDL  = f % elementSide(1)
@@ -3868,7 +3848,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
             select case(f % faceType)
             case(HMESH_INTERIOR, HMESH_BOUNDARY)
                if (self%nonconforming) then
-               select case (f % IsMortar)
+               select case (f % MortarType)
                case (0, 1)
                associate(eL => self % elements(f % elementIDs(1)))
 
@@ -3933,12 +3913,12 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
             associate(f => self % faces(fID))
             select case(f % faceType)
             case(HMESH_INTERIOR)
-               if (f % IsMortar ==0 .OR. f % IsMortar == 2) then 
+               if (f % MortarType == MORTAR_NONE .OR. f % MortarType == MORTAR_SMALL4) then 
                f % geom % h = min(minval(self % elements(f % elementIDs(1)) % geom % jacobian), &
                                   minval(self % elements(f % elementIDs(2)) % geom % jacobian)) &
                         / maxval(f % geom % jacobian)
 
-               elseif(f % IsMortar==1 .or. f % IsMortar==3) then 
+               elseif(f % MortarType == MORTAR_BIG .or. f % MortarType == MORTAR_SLIDING) then 
                   f % geom % h = minval(self % elements(f % elementIDs(1)) % geom % jacobian) &
                   / maxval(f % geom % jacobian)
                end if 
@@ -6570,7 +6550,7 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
             allocate(fe % geom % dWall(0:fe % Nf(1), 0:fe % Nf(2)))
             if( self% IBM% active ) then
                fe % geom % dWall = huge(1.0_RP)
-               if (fe%IsMortar==3) then 
+               if (fe%MortarType == MORTAR_SLIDING) then 
                   if(.not. allocated(self%mortar_faces(fe%mortar(1))%geom%dwall)) then 
                      allocate(self%mortar_faces(fe%mortar(1))% geom % dWall(0:fe % Nf(1), 0:fe % Nf(2)))
                      self%mortar_faces(fe%mortar(1))%geom%dwall=fe % geom % dWall
@@ -6598,7 +6578,7 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
                   fe % geom % dWall(i,j) = sqrt(minimumDistance)
 
                 end do                ; end do
-                if (fe%IsMortar==3) then 
+                if (fe%MortarType == MORTAR_SLIDING) then 
                   if(.not. allocated(self%mortar_faces(fe%mortar(1))%geom%dwall)) then 
                      allocate(self%mortar_faces(fe%mortar(1))%geom%dWall(0:fe % Nf(1), 0:fe % Nf(2)))
                      self%mortar_faces(fe%mortar(1))%geom%dwall=fe % geom % dWall
@@ -6801,7 +6781,7 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
       if (Face_St) then
          do fID = 1, size(self % faces)
             associate ( f => self % faces(fID) )
-               if (f % IsMortar==2) then 
+               if (f % MortarType == MORTAR_SMALL4) then 
                   call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
                   call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
                else 

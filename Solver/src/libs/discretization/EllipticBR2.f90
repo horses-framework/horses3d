@@ -222,7 +222,7 @@ module EllipticBR2
 !$omp do schedule(runtime) private(fID)
             do iFace = 1, size(mesh % HO_FacesInterior)
                fID = mesh % HO_FacesInterior(iFace)
-               if (mesh % faces(fID) % IsMortar==1) then 
+               if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
                   associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                      unStar=0.0_RP
                   end associate
@@ -235,7 +235,7 @@ module EllipticBR2
                         f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
-               elseif (mesh % faces(fID) % IsMortar==0) then 
+               elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
                call BR2_GradientInterfaceSolution(mesh % faces(fID), nEqn, nGradEqn, GetGradients)
                end if 
             end do
@@ -244,7 +244,7 @@ module EllipticBR2
 !$omp do schedule(runtime) private(fID)
             do iFace = 1, size(mesh % faces_interior)
                fID = mesh % faces_interior(iFace)
-               if (mesh % faces(fID) % IsMortar==1) then 
+               if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
                   associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                      unStar=0.0_RP
                   end associate
@@ -257,7 +257,7 @@ module EllipticBR2
                         f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
-               elseif (mesh % faces(fID) % IsMortar==0) then 
+               elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
                call BR2_GradientInterfaceSolution(mesh % faces(fID), nEqn, nGradEqn, GetGradients)
                end if 
             end do
@@ -318,7 +318,7 @@ module EllipticBR2
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_mpi)
             fID = mesh % faces_mpi(iFace)
-            if (mesh% faces(fID)%IsMortar==1) then 
+            if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
                associate(unstar=>mesh% faces(fID)%storage(1)%unStar)
                   unstar=0.0_RP
                end associate
@@ -576,11 +576,11 @@ module EllipticBR2
             Hflux(:,IZ,i,j) = Uhat * f % geom % normal(IZ,i,j)
          end do               ; end do
 
-            if (f % IsMortar==0) then 
+            if (f % MortarType == MORTAR_NONE) then 
          
                call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/1,2/),1)
             end if 
-            if (f % IsMortar==2 .and. present(masterFace1)) then 
+            if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace1)) then 
                  call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, HFlux=HFlux,whichElements=(/1,0/),factor=1) 
 
                  call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/0,2/),1)
@@ -623,7 +623,7 @@ module EllipticBR2
          thisSide = maxloc(f % elementIDs, dim = 1)
          call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/thisSide, HMESH_NONE/),1)
          
-         if (f % IsMortar==2) then 
+         if (f % MortarType == MORTAR_SMALL4) then 
 
             call f% Interpolatesmall2biggrad(nGradEqn, HFlux)
             

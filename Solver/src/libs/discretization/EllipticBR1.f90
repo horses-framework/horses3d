@@ -311,7 +311,7 @@ module EllipticBR1
 				if (present(element_mask)) compute_element = face_mask(fID)
 				
 				if (compute_element) then
-				   if (mesh % faces(fID) % IsMortar==3) then 
+				   if (mesh % faces(fID) % MortarType == MORTAR_SLIDING) then 
                   associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                      unStar=0.0_RP
                   end associate
@@ -319,7 +319,7 @@ module EllipticBR1
                      unStar=0.0_RP
                   end associate 
                end if 
-               if (mesh % faces(fID) % IsMortar==1) then 
+               if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
                   associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                      unStar=0.0_RP
                   end associate
@@ -332,7 +332,7 @@ module EllipticBR1
                      f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                      end if 
                   end do 
-               elseif (mesh % faces(fID) % IsMortar==0) then
+               elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then
                   call BR1_ComputeElementInterfaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
                end if
 				endif
@@ -435,7 +435,7 @@ module EllipticBR1
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_mpi)
             fID = mesh % faces_mpi(iFace)
-            if (mesh% faces(fID)%IsMortar==1) then 
+            if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
                associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
                   unStar=0.0_RP
                end associate
@@ -760,11 +760,11 @@ module EllipticBR1
            end do               ; end do
          
          if (.not.present(sliding)) then 
-            if (f % IsMortar==0) then 
+            if (f % MortarType == MORTAR_NONE) then 
             Sidearray = (/1,2/)
             call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
             end if 
-            if (f % IsMortar==2 .and. present(masterFace1)) then 
+            if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace1)) then 
                Sidearray = (/1,0/)
                call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1) 
                Sidearray = (/0,2/)
@@ -834,8 +834,8 @@ module EllipticBR1
          Sidearray = (/maxloc(f % elementIDs, dim = 1), HMESH_NONE/)
          call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
 
-         if (f % IsMortar==2) then 
-            !write(*,*) 'this side', thisSide
+         if (f % MortarType == MORTAR_SMALL4) then 
+            
             call f% Interpolatesmall2biggrad(nGradEqn, uStar_n)
             
          end if 

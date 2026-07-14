@@ -271,10 +271,10 @@ subroutine AdvanceSlidingMesh(mesh, rotationRadius, rotationCenter, numBFacePoin
 
             do l = 1, size(SM % slidingMortarElems)
          
-               mesh % faces(mesh % elements(SM  % slidingMortarElems(l)) % faceIDs(SM  % mortararr2(l,2))) % IsMortar = 3
+               mesh % faces(mesh % elements(SM  % slidingMortarElems(l)) % faceIDs(SM  % mortararr2(l,2))) % MortarType = MORTAR_SLIDING
                mesh % faces(mesh % elements(SM  % slidingMortarElems(l)) % faceIDs(SM  % mortararr2(l,2))) % faceType = 1
          
-               mesh % faces(mesh % elements(SM  % mortarNeighborElems(l)) % faceIDs(SM  % mortararr1(l,2))) % IsMortar = 3
+               mesh % faces(mesh % elements(SM  % mortarNeighborElems(l)) % faceIDs(SM  % mortararr1(l,2))) % MortarType = MORTAR_SLIDING
                mesh % faces(mesh % elements(SM  % mortarNeighborElems(l)) % faceIDs(SM  % mortararr1(l,2))) % faceType = 1
          
             end do 
@@ -2203,7 +2203,7 @@ subroutine PrintMortarConnectivity(mesh)
 
    do i=1 , size(mesh % faces)
      
-      if (mesh % faces(i) % IsMortar==3) then 
+      if (mesh % faces(i) % MortarType == MORTAR_SLIDING) then 
          write(*,*) 'face',i,'is connected to mortarface; connection:',mesh % faces(i) %  mortar, 'elements:', mesh % faces(i) % elementIDs 
       end if 
    end do 
