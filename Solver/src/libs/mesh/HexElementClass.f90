@@ -16,7 +16,7 @@
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      Module ElementClass
+   Module ElementClass
       USE SMConstants
       USE PolynomialInterpAndDerivsModule
       USE GaussQuadrature
@@ -68,8 +68,8 @@
          integer                         :: faceIDs(6)
          integer                         :: faceSide(6)
          integer                         :: MLevel            ! RK Level
-		   integer                         :: MLevelwN          ! RK Level with Neighbour
-		   real(kind=RP)                   :: ML_CFL            ! CFL storage for Multi Level RK	
+         integer                         :: MLevelwN          ! RK Level with Neighbour
+         real(kind=RP)                   :: ML_CFL            ! CFL storage for Multi Level RK	
          real(kind=RP)                   :: ML_error_ratio    ! Ratio between temporal and spatial error relative to the global ratio
          INTEGER, DIMENSION(3)           :: Nxyz              ! Polynomial orders in every direction (Nx,Ny,Nz)
          real(kind=RP)                   :: hn                ! Ratio of size and polynomial order
@@ -262,9 +262,9 @@
          spAzeta => NodalStorage(N(3))
 
          if (present(computeQdot)) then
-             prolongQdot = computeQdot
+               prolongQdot = computeQdot
          else
-             prolongQdot = .FALSE.
+               prolongQdot = .FALSE.
          end if
 !
 !        *************************
@@ -287,12 +287,12 @@
             QBOT(:,i,j)= QBOT(:,i,j)+ self % storage % Q(:,i,j,k)* spAzeta % v(k,BOTTOM)
             QT  (:,i,j)= QT  (:,i,j)+ self % storage % Q(:,i,j,k)* spAzeta % v(k,TOP   )
             if (prolongQdot) then
-                QdotL  (:,j,k)= QdotL  (:,j,k)+ self % storage % Qdot(:,i,j,k)* spAxi % v  (i,LEFT  )
-                QdotR  (:,j,k)= QdotR  (:,j,k)+ self % storage % Qdot(:,i,j,k)* spAxi % v  (i,RIGHT )
-                QdotFR (:,i,k)= QdotFR (:,i,k)+ self % storage % Qdot(:,i,j,k)* spAeta % v (j,FRONT )
-                QdotBK (:,i,k)= QdotBK (:,i,k)+ self % storage % Qdot(:,i,j,k)* spAeta % v (j,BACK  )
-                QdotBOT(:,i,j)= QdotBOT(:,i,j)+ self % storage % Qdot(:,i,j,k)* spAzeta % v(k,BOTTOM)
-                QdotT  (:,i,j)= QdotT  (:,i,j)+ self % storage % Qdot(:,i,j,k)* spAzeta % v(k,TOP   )
+                  QdotL  (:,j,k)= QdotL  (:,j,k)+ self % storage % Qdot(:,i,j,k)* spAxi % v  (i,LEFT  )
+                  QdotR  (:,j,k)= QdotR  (:,j,k)+ self % storage % Qdot(:,i,j,k)* spAxi % v  (i,RIGHT )
+                  QdotFR (:,i,k)= QdotFR (:,i,k)+ self % storage % Qdot(:,i,j,k)* spAeta % v (j,FRONT )
+                  QdotBK (:,i,k)= QdotBK (:,i,k)+ self % storage % Qdot(:,i,j,k)* spAeta % v (j,BACK  )
+                  QdotBOT(:,i,j)= QdotBOT(:,i,j)+ self % storage % Qdot(:,i,j,k)* spAzeta % v(k,BOTTOM)
+                  QdotT  (:,i,j)= QdotT  (:,i,j)+ self % storage % Qdot(:,i,j,k)* spAzeta % v(k,TOP   )
             end if
          end do                   ; end do                   ; end do
          nullify (spAxi, spAeta, spAzeta)
@@ -1255,18 +1255,19 @@
    
          end subroutine HexElement_ConstructIBM
 #if defined(ACOUSTIC)
-      subroutine HexElement_ProlongBaseSolutionToFaces(self, nEqn, fFR, fBK, fBOT, fR, fT, fL)
+subroutine HexElement_ProlongBaseSolutionToFaces(self, nEqn, fFR, fBK, fBOT, fR, fT, fL, faces)
          use FaceClass
          implicit none
          class(Element),   intent(in)  :: self
          integer,          intent(in)  :: nEqn
          class(Face),      intent(inout) :: fFR, fBK, fBOT, fR, fT, fL
+         type(Face),optional, intent(inout) :: faces(:)
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer  :: i, j, k, l, N(3)
+         integer  :: i, j, k, N(3), m
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(1), 0:self % Nxyz(3)) :: QFR, QBK
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(1), 0:self % Nxyz(2)) :: QBOT, QT
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(2), 0:self % Nxyz(3)) :: QL, QR
@@ -1276,7 +1277,6 @@
          spAxi   => NodalStorage(N(1))
          spAeta  => NodalStorage(N(2))
          spAzeta => NodalStorage(N(3))
-
 !
 !        *************************
 !        Prolong solution to faces
@@ -1296,15 +1296,102 @@
          end do                   ; end do                   ; end do
          nullify (spAxi, spAeta, spAzeta)
 
-         call fL   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QL  , self % faceSide(ELEFT  ) )
-         call fR   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QR  , self % faceSide(ERIGHT ) )
-         call fFR  % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QFR , self % faceSide(EFRONT ) )
-         call fBK  % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QBK , self % faceSide(EBACK  ) )
-         call fBOT % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM) )
-         call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT  , self % faceSide(ETOP   ) )
+         if (present(faces)) then
+            if (fL % MortarType == MORTAR_BIG) then
+               if (fL % n_mpi_mortar .ne. 0) then
+                  call fL   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QL, self % faceSide(ELEFT  ))
+               end if
+               do m=1,4
+                  if (fL % Mortar(m) .ne. 0) then
+                     call fL % AdaptBaseSolutionToMortarFace(nEqn, N(2), N(3), QL, self % faceSide(ELEFT  ), faces(fL % Mortar(m)))
+                  end if
+               end do
+            elseif (fL % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fL   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QL, self % faceSide(ELEFT  ))
+            end if
+            if (fR % MortarType == MORTAR_BIG) then
+               if (fR % n_mpi_mortar .ne. 0) then
+                  call fR   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QR, self % faceSide(ERIGHT ))
+               end if
+               do m=1,4
+                  if (fR % Mortar(m) .ne. 0) then
+                     call fR % AdaptBaseSolutionToMortarFace(nEqn, N(2), N(3), QR, self % faceSide(ERIGHT ), faces(fR % Mortar(m)))
+                  end if
+               end do
+            elseif (fR % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fR   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QR, self % faceSide(ERIGHT ))
+            end if
+            if (fFR % MortarType == MORTAR_BIG) then
+               if (fFR % n_mpi_mortar .ne. 0) then
+                  call fFR   % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QFR, self % faceSide(EFRONT ))
+               end if
+               do m=1,4
+                  if (fFR % Mortar(m) .ne. 0) then
+                     call fFR % AdaptBaseSolutionToMortarFace(nEqn, N(1), N(3), QFR, self % faceSide(EFRONT ), faces(fFR % Mortar(m)))
+                  end if
+               end do
+            elseif (fFR % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fFR   % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QFR, self % faceSide(EFRONT ))
+            end if
+            if (fBK % MortarType == MORTAR_BIG) then
+               if (fBK % n_mpi_mortar .ne. 0) then
+                  call fBK   % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QBK, self % faceSide(EBACK  ))
+               end if
+               do m=1,4
+                  if (fBK % Mortar(m) .ne. 0) then
+                     call fBK % AdaptBaseSolutionToMortarFace(nEqn, N(1), N(3), QBK, self % faceSide(EBACK  ), faces(fBK % Mortar(m)))
+                  end if
+               end do
+            elseif (fBK % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fBK   % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QBK, self % faceSide(EBACK  ))
+            end if
+            if (fBOT % MortarType == MORTAR_BIG) then
+               if (fBOT % n_mpi_mortar .ne. 0) then
+                  call fBOT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM))
+               end if
+               do m=1,4
+                  if (fBOT % Mortar(m) .ne. 0) then
+                     call fBOT % AdaptBaseSolutionToMortarFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM), faces(fBOT % Mortar(m)))
+                  end if
+               end do
+            elseif (fBOT % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fBOT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM))
+            end if
+            if (fT % MortarType == MORTAR_BIG) then
+               if (fT % n_mpi_mortar .ne. 0) then
+                  call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT, self % faceSide(ETOP   ))
+               end if
+               do m=1,4
+                  if (fT % Mortar(m) .ne. 0) then
+                     call fT % AdaptBaseSolutionToMortarFace(nEqn, N(1), N(2), QT, self % faceSide(ETOP  ), faces(fT % Mortar(m)))
+                  end if
+               end do
+            elseif (fT % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT, self % faceSide(ETOP   ))
+            end if
+         else
+            call fL   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QL  , self % faceSide(ELEFT  ))
+            call fR   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QR  , self % faceSide(ERIGHT ))
+            call fFR  % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QFR , self % faceSide(EFRONT ))
+            call fBK  % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QBK , self % faceSide(EBACK  ))
+            call fBOT % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM))
+            call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT  , self % faceSide(ETOP   ))
+         end if
 
       end subroutine HexElement_ProlongBaseSolutionToFaces
 #endif
 ! 
-      END Module ElementClass
+END Module ElementClass
    
