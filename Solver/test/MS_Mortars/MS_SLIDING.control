@@ -1,13 +1,15 @@
 /* Control file for the implicit Navier-Stokes solver */
 Flow equations        = "NS"
-mesh file name        = "MESH/for_121.h5"
-Polynomial order      = 2 ! T2
-Number of time steps  = 1000
-Output Interval       = 100 ! for explicit
+mesh file name        = "MESH/CircleCombine_HO_NoSlidingBoundary.mesh"
+mesh inner curves     = .TRUE.
+Polynomial order      = 6! T2
+Number of time steps  = 100
+Output Interval       = 10! for explicit
 autosave mode         = "iteration"
-autosave interval     = 1000
+autosave interval     = 10
 
-Convergence tolerance = 1.d-10
+
+Convergence tolerance = 1.d-8
 cfl                   = 0.05d0
 dcfl                  = 0.05d0
 mach number            = 0.4d0
@@ -20,39 +22,41 @@ save gradients with solution = .true.
 restart               = .false.
 restart file name     = "RESULTS/TMMS.hsol"
 riemann solver         = "lax-friedrichs"
-viscous discretization = "BR1"
-manufactured solution  = 3D
+viscous discretization = "IP"
+!penalty parameter = 1.0
 final time            = 40.d0
-simulation type       = steady-state
+simulation type       = time-accurate
 time integration      = explicit
 multigrid levels      = 3
 delta n = 1
 mg sweeps exact = [1,1,1]
 mg preconditioner = LTS ! for all runge kutta explicit
 
+#define SlidingMesh
+  center = [0.0d0, 0.d0]
+!  centerX = 0.d0
+!  centerY = 0.d0
+  radius = 1.01d0
+  angle = 0.07853981d0
+  rotation axis = y 
+#end
+
 !-------------------------------------------------------------
 ! Inflow
 !-------------------------------------------------------------
-#define boundary back
-  type = user-defined
+
+#define boundary Top
+    type = user-defined
 #end
 
-#define boundary front
-  type = user-defined
+#define boundary Bottom
+    type = user-defined
 #end
 
-#define boundary bottom
-  type = user-defined
+#define boundary Inner
+    type = user-defined
+#end
+#define boundary Outer
+    type = user-defined
 #end
 
-#define boundary top
-  type = user-defined
-#end
-
-#define boundary left
-  type = user-defined
-#end
-
-#define boundary right
-  type = user-defined
-#end
