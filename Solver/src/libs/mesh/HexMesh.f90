@@ -1405,7 +1405,7 @@ slavecoord:             DO l = 1, 4
 !$omp end do
       else
          ! The following differentiation is needed due to problem on AnisFAS NS
-      if (present(Level)) then ! AJRTODO: Implement mortars for this case (level is present)
+if (present(Level)) then
          locLevel = Level
 !$omp do schedule(runtime) private(fIDs, eID)
          do lID = 1, self % MLRK % MLIter(locLevel,8)
@@ -1416,13 +1416,35 @@ slavecoord:             DO l = 1, 4
 
             if (compute_element) then
                fIDs = self % elements(eID) % faceIDs
-               call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
-                                                      self % faces(fIDs(1)),&
-                                                      self % faces(fIDs(2)),&
-                                                      self % faces(fIDs(3)),&
-                                                      self % faces(fIDs(4)),&
-                                                      self % faces(fIDs(5)),&
-                                                      self % faces(fIDs(6)) )
+               if (.not.self % slidingMesh % active) then
+                  if (.not.self%nonconforming) then
+                     call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                        self % faces(fIDs(1)),&
+                                                                        self % faces(fIDs(2)),&
+                                                                        self % faces(fIDs(3)),&
+                                                                        self % faces(fIDs(4)),&
+                                                                        self % faces(fIDs(5)),&
+                                                                        self % faces(fIDs(6)) )
+                  else
+                     call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                        fFR=self % faces(fIDs(1)),&
+                                                                        fBK=self % faces(fIDs(2)),&
+                                                                        fBOT=self % faces(fIDs(3)),&
+                                                                        fR=self % faces(fIDs(4)),&
+                                                                        fT=self % faces(fIDs(5)),&
+                                                                        fL=self % faces(fIDs(6)),&
+                                                                        faces=self % faces )
+                  end if
+               else
+                  call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                     fFR=self % faces(fIDs(1)),&
+                                                                     fBK=self % faces(fIDs(2)),&
+                                                                     fBOT=self % faces(fIDs(3)),&
+                                                                     fR=self % faces(fIDs(4)),&
+                                                                     fT=self % faces(fIDs(5)),&
+                                                                     fL=self % faces(fIDs(6)),&
+                                                                     faces=self % mortar_faces )
+               end if
             endif
          end do
 !$omp end do
@@ -6267,7 +6289,7 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
 
 !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexMesh_ProlongBaseSolutionToFaces(self, nEqn)
+subroutine HexMesh_ProlongBaseSolutionToFaces(self, nEqn)
          implicit none
          class(HexMesh),    intent(inout) :: self
          integer,           intent(in)    :: nEqn
@@ -6277,18 +6299,40 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
 !        ---------------
 !
          integer  :: fIDs(6)
-         integer  :: eID, i
+         integer  :: eID
 
 !$omp do schedule(runtime) private(fIDs)
          do eID = 1, size(self % elements)
             fIDs = self % elements(eID) % faceIDs
-            call self % elements(eID) % ProlongBaseSolutionToFaces(nEqn, &
-                                                                   self % faces(fIDs(1)),&
-                                                                   self % faces(fIDs(2)),&
-                                                                   self % faces(fIDs(3)),&
-                                                                   self % faces(fIDs(4)),&
-                                                                   self % faces(fIDs(5)),&
-                                                                   self % faces(fIDs(6)) )
+            if (.not.self % slidingMesh % active) then
+               if (.not.self%nonconforming) then
+                  call self % elements(eID) % ProlongBaseSolutionToFaces(nEqn, &
+                                                                     self % faces(fIDs(1)),&
+                                                                     self % faces(fIDs(2)),&
+                                                                     self % faces(fIDs(3)),&
+                                                                     self % faces(fIDs(4)),&
+                                                                     self % faces(fIDs(5)),&
+                                                                     self % faces(fIDs(6)) )
+               else
+                  call self % elements(eID) % ProlongBaseSolutionToFaces(nEqn, &
+                                                                     fFR=self % faces(fIDs(1)),&
+                                                                     fBK=self % faces(fIDs(2)),&
+                                                                     fBOT=self % faces(fIDs(3)),&
+                                                                     fR=self % faces(fIDs(4)),&
+                                                                     fT=self % faces(fIDs(5)),&
+                                                                     fL=self % faces(fIDs(6)),&
+                                                                     faces=self % faces )
+               end if
+            else
+               call self % elements(eID) % ProlongBaseSolutionToFaces(nEqn, &
+                                                                  fFR=self % faces(fIDs(1)),&
+                                                                  fBK=self % faces(fIDs(2)),&
+                                                                  fBOT=self % faces(fIDs(3)),&
+                                                                  fR=self % faces(fIDs(4)),&
+                                                                  fT=self % faces(fIDs(5)),&
+                                                                  fL=self % faces(fIDs(6)),&
+                                                                  faces=self % mortar_faces )
+            end if
          end do
 !$omp end do
 
