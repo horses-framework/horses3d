@@ -116,6 +116,7 @@
 #endif
 #if defined(ACOUSTIC)
             procedure   :: AdaptBaseSolutionToFace       => Face_AdaptBaseSolutionToFace
+            procedure   :: AdaptBaseSolutionToMortarFace => Face_AdaptBaseSolutionToMortarFace
 #endif
             procedure   :: copy           => Face_Assign
             generic     :: assignment(=)  => copy
@@ -1988,6 +1989,50 @@
       end select
 
    end subroutine Face_AdaptBaseSolutionToFace
+
+   !
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!  
+   subroutine Face_AdaptBaseSolutionToMortarFace(self, nEqn, Nelx, Nely, Qe, side, fma)
+      use MappedGeometryClass
+      implicit none
+      class(Face),   intent(inout)              :: self
+      integer,       intent(in)                 :: nEqn
+      integer,       intent(in)                 :: Nelx, Nely
+      real(kind=RP), intent(in)                 :: Qe(1:nEqn, 0:Nelx, 0:Nely)
+      integer,       intent(in)                 :: side
+      type(Face), intent(inout)                 :: fma
+
+      integer       :: i, j, l, m
+
+      real(kind=RP) :: MIntXi(0:fma%Nf(1), 0:fma%NfLeft(1))
+      real(kind=RP) :: MIntEta(0:fma%Nf(2), 0:fma%NfLeft(2))
+
+      real(kind=RP) :: tmp(1:nEqn, 0:fma%Nf(1), 0:fma%NfLeft(2))
+
+      if (fma % MortarType .ne. MORTAR_SMALL4) then
+         error stop 'MortarType SMALL4 reached in subroutine AdaptBaseSolutionToMortarFace expecting non-SMALL4: check calling logic'
+      end if
+
+      call GetMortarMInt(fma, MIntXi, MIntEta)
+
+      associate(Qf => fma % storage(1) % Qbase)
+         Qf = 0.0_RP
+
+         ! Pass 1: contraction direction 1 (xi)  -> tmp(i,l)
+         tmp = 0.0_RP
+         do l = 0, fma % NfLeft(2) ; do i = 0, fma % Nf(1) ; do m = 0, fma % NfLeft(1)
+            tmp(:,i,l) = tmp(:,i,l) + MIntXi(i,m) * Qe(:,m,l)
+         end do ; end do ; end do
+
+         ! Pass 2: contraction direction 2 (eta) -> Qf(i,j)
+         do j = 0, fma % Nf(2) ; do i = 0, fma % Nf(1) ; do l = 0, fma % NfLeft(2)
+            Qf(:,i,j) = Qf(:,i,j) + MIntEta(j,l) * tmp(:,i,l)
+         end do ; end do ; end do
+
+      end associate
+
+   end subroutine Face_AdaptBaseSolutionToMortarFace
 #endif
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
