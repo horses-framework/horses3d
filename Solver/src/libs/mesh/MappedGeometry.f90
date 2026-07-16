@@ -113,17 +113,12 @@ Module MappedGeometryClass
 !     Compute interior locations
 !     --------------------------
 !
-      !write(*,*)'constructing geometry'
-     !write(*,*)'spAxi % x', spAxi % x
-      !(*,*)'spAeta % x', spAeta % x
-      !write(*,*)'spAzeta % x',spAzeta % x
+
       DO k = 0, Nz
          DO j= 0, Ny
             DO i = 0,Nx
                x = [spAxi % x(i), spAeta % x(j), spAzeta % x(k)]
-               !write(*,*)'x befor transfine map', x
                self % x(:,i,j,k) = mapper %  transfiniteMapAt(x)
-               !write(*,*)'self % x(:,i,j,k) (after transfine map)', self % x(:,i,j,k)
             END DO
          END DO
       END DO

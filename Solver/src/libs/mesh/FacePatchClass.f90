@@ -261,13 +261,6 @@
       call InterpolatingPolynomialVector(u(2), self % noOfKnots(2)-1, self % vKnots, self % wbv, l_j)
 
       p = 0.0_RP
-      !write(*,*) 'we are at line 263 of facepatch'
-      !write(*,*) 'noOfKnots(2)',self % noOfKnots(2)
-      !write(*,*) 'noOfKnots(1)',self % noOfKnots(1)
-      !write(*,*) 'size point(:,1,1)',size(self % points(:,1,1))
-      !write(*,*) 'size point(:,1,1)',size(self % points(1,:,1))
-      !write(*,*) 'size point(:,1,1)',size(self % points(1,1,:))
-
 
       DO j = 1, self % noOfKnots(2)
          do i = 1, self % noOfKnots(1)
