@@ -467,7 +467,7 @@ module SpatialDiscretization
 !        Compute Riemann solver of non-shared faces
 !        ******************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
          do iFace = 1, size(mesh % faces_interior)
             fID = mesh % faces_interior(iFace)
             if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
@@ -545,7 +545,7 @@ module SpatialDiscretization
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
             do iFace = 1, size(mesh % faces_mpi)
                fID = mesh % faces_mpi(iFace)
                if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 

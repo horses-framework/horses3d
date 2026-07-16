@@ -876,15 +876,6 @@ MODULE Read_SpecMesh
          self % numberOfFaces = numberOfFaces
          allocate( self % faces(self % numberOfFaces) )
          CALL ConstructFaces( self, success )
-        ! write(*,*) 'about to print the constructed faces, id of the partition:', mpi_partition%ID 
-        ! do i=1, self % numberOfFaces 
-            !write(*,*) 'face ID in this process', self%faces(i)%ID 
-            !write(*,*) 'elementIDs',self%faces(i)%elementIDs
-            !write(*,*) 'elementSide',self%faces(i)%elementSide
-        !    if (self%faces(i)%elementIDs(1)==0) write(*,*) 'here! elementIDs', self%faces(i)%elementIDs 
-        !    write(*,*) '****************************************'
-
-         !end do 
 !
 !        --------------------------------
 !        Get actual mesh element face IDs

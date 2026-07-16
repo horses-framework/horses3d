@@ -791,7 +791,7 @@ module SpatialDiscretization
 !        Compute Riemann solver of non-shared faces
 !        ******************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
          do iFace = 1, MLIter(locLevel,3)
 		    fID = MLIter_fID_Interior(iFace)
 		    compute_element = .true.
@@ -885,7 +885,7 @@ module SpatialDiscretization
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
             do iFace = 1, MLIter(locLevel,7)
                fID = MLIter_fID_MPI(iFace)
                compute_element = .true.
@@ -1492,7 +1492,7 @@ module SpatialDiscretization
 !        Compute Riemann solver of non-shared faces
 !        ******************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
          do iFace = 1, MLIter(locLevel,3)
             fID = MLIter_fID_Interior(iFace)
 			compute_element = .true.
@@ -1567,7 +1567,7 @@ module SpatialDiscretization
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
             do iFace = 1, MLIter(locLevel,7)
                fID = MLIter_fID_MPI(iFace)
                compute_element = .true.

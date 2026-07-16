@@ -79,7 +79,6 @@ module MeshPartitioning
 		 integer              :: nEleLevel(1), i
 
 
-         !write(*,*)'no_of_domains',no_of_domains
          allocate(nodesDomain(size(mesh % nodes)))
 !
 !        **********************************************
@@ -381,10 +380,6 @@ module MeshPartitioning
             end associate
             end associate
          end do
-
-         !do domain = 1, no_of_domains
-           ! write(*,*) 'domain', domain, 'nuùner mpifaces', partitions(domain) % no_of_mpifaces
-         !end do
 
       end subroutine GetPartitionBoundaryFaces
 !
