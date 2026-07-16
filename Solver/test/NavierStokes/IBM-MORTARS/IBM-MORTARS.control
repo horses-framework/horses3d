@@ -1,0 +1,77 @@
+!-------------------- Physical parameters:-
+Flow equations = "NS"
+mach number = 0.2d0
+Reynolds number = 40.0d0
+AOA theta = 0.0
+AOA phi = 0.0
+
+!-------------------- INPUT/OUTPUT:-
+mesh file name = "MESH/HERA-WING-FLAP_L03_mesh.h5"
+stl file name = "hera-wing-flap-mid-resolution"
+solution file name = "RESULTS/HERA-WING-FLAP_L03.hsol"
+save gradients with soluton = .false.
+restart = .false.
+restart file name = "RESULTS/HERA-WING-FLAP_L03_0000000000.hsol"
+
+!------------------------- Discretization:-
+Polynomial order = 3
+Discretization nodes = "Gauss"
+Riemann solver = "lax-friedrichs"
+Viscous discretization = "BR1"
+
+!----------------------- Time integration:-
+Time integration = Explicit
+cfl = 0.1
+dcfl = 0.1
+Number of time steps = 100
+Output interval = 5
+Convergence tolerance = 1.0e-10
+Simulation type = "time-accurate"
+Final time = 1000.0
+autosave mode = "iteration"
+autosave interval = 100
+
+!----------------------- IBM:-
+#define IBM
+  name = herawingflap
+  active = .true.
+  describe = .true.
+  number of objects = 1
+  number of interpolation points = 15
+  ### plot mask = .true.
+#end
+
+! ACTUATOR LINE
+!----------------------- ACTUATOR LINE:-
+!!! use actuatorline = .true.
+!!! actuator epsilon type = 2
+!!! actuator calculate with projection = .false.
+!!! actuator save average = .true.
+
+#define boundary left
+type = Inflow
+#end
+
+#define boundary right
+type = Outflow
+#end
+
+#define boundary bottom
+type = FreeSlipWall
+#end
+
+#define boundary top
+type = FreeSlipWall
+#end
+
+#define boundary front
+type = FreeSlipWall
+#end
+
+#define boundary back
+type = FreeSlipWall
+#end
+
+#define boundary herawingflap
+type = NoSlipWall
+#end
