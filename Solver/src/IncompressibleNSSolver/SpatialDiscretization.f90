@@ -349,7 +349,7 @@ module SpatialDiscretization
 !        Compute Riemann solver of non-shared faces
 !        ******************************************
 !
-!$omp do schedule(runtime) 
+!$omp do schedule(runtime) private(m)
          do fID = 1, size(mesh % faces) 
             associate( f => mesh % faces(fID)) 
             select case (f % faceType) 
@@ -408,7 +408,7 @@ module SpatialDiscretization
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
-!$omp do schedule(runtime) 
+!$omp do schedule(runtime) private(m)
             do fID = 1, size(mesh % faces) 
                associate( f => mesh % faces(fID)) 
                select case (f % faceType) 
