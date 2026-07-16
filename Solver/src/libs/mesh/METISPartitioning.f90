@@ -11,6 +11,7 @@ subroutine GetMETISElementsPartition(mesh, no_of_domains, elementsDomain, nodesD
       use MPI_Process_Info
       use FTValueDictionaryClass
 	  use Utilities                   , only : reindexIntegerList, combine_partitions
+      use MeshPartitioningPolicies
       implicit none
       type(HexMesh), intent(in)              :: mesh
       integer,       intent(in)              :: no_of_domains
@@ -89,6 +90,14 @@ subroutine GetMETISElementsPartition(mesh, no_of_domains, elementsDomain, nodesD
               write(*,*) "From inside METIS partitioning "
               write(*,'(A,I6,A,I6,A)') 'Identified ', water_count, ' water elements and ', air_count, ' air elements'
           end if
+      end if
+
+      !
+      ! Partitioning policy
+      !
+      if (controlVariables % containsKey(partitioningNumberOfRegions_KEY)) then
+        call GetMETISElementsPartitionByPolicy(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
+        return
       end if
 !
 !     Construct the reference element partition from single level for MLRK

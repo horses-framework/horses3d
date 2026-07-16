@@ -27,6 +27,7 @@ LIBOBJS_NS = 	./build_ns/ConnectivityClass.o \
 		./build_ns/IBMClass.o \
 		./build_ns/HexMesh.o \
 		./build_ns/MeshPartitioning.o \
+		./build_ns/MeshPartitioningPolicies.o \
 		./build_ns/SurfaceMesh.o \
 		./build_ns/Read_HDF5Mesh_HOPR.o \
 		./build_ns/Read_SpecMesh.o \
@@ -52,6 +53,7 @@ LIBOBJS_NSSA = 	./build_nssa/ConnectivityClass.o \
 		./build_nssa/IBMClass.o \
 		./build_nssa/HexMesh.o \
 		./build_nssa/MeshPartitioning.o \
+		./build_nssa/MeshPartitioningPolicies.o \
 		./build_nssa/SurfaceMesh.o \
 		./build_nssa/Read_HDF5Mesh_HOPR.o \
 		./build_nssa/Read_SpecMesh.o \
@@ -77,6 +79,7 @@ LIBOBJS_iNS = 	./build_ins/ConnectivityClass.o \
 		./build_ins/IBMClass.o \
 		./build_ins/HexMesh.o \
 		./build_ins/MeshPartitioning.o \
+		./build_ins/MeshPartitioningPolicies.o \
 		./build_ins/SurfaceMesh.o \
 		./build_ins/Read_HDF5Mesh_HOPR.o \
 		./build_ins/Read_SpecMesh.o \
@@ -103,6 +106,7 @@ LIBOBJS_CH = 	./build_ch/ConnectivityClass.o \
 		./build_ch/IBMClass.o \
 		./build_ch/HexMesh.o \
 		./build_ch/MeshPartitioning.o \
+		./build_ch/MeshPartitioningPolicies.o \
 		./build_ch/SurfaceMesh.o \
 		./build_ch/Read_HDF5Mesh_HOPR.o \
 		./build_ch/Read_SpecMesh.o \
@@ -128,6 +132,7 @@ LIBOBJS_MU =  ./build_mu/ConnectivityClass.o \
 		./build_mu/IBMClass.o \
 		./build_mu/HexMesh.o \
 		./build_mu/MeshPartitioning.o \
+		./build_mu/MeshPartitioningPolicies.o \
 		./build_mu/SurfaceMesh.o \
 		./build_mu/Read_HDF5Mesh_HOPR.o \
 		./build_mu/Read_SpecMesh.o \
@@ -153,6 +158,7 @@ LIBOBJS_CAA =  ./build_caa/ConnectivityClass.o \
 		./build_caa/IBMClass.o \
 		./build_caa/HexMesh.o \
 		./build_caa/MeshPartitioning.o \
+		./build_caa/MeshPartitioningPolicies.o \
 		./build_caa/SurfaceMesh.o \
 		./build_caa/Read_HDF5Mesh_HOPR.o \
 		./build_caa/Read_SpecMesh.o \
