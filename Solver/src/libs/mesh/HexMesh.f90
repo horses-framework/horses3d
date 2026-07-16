@@ -114,7 +114,6 @@ MODULE HexMeshClass
          integer                                   :: nMasterMortars 
          integer                                   :: nSlaveFaces 
          logical                                   :: slidingflux= .FALSE.
-         real(kind=RP)                             :: omega=0.0_RP
          integer                                   :: numBFacePoints
          type(SlidingMesh)                         :: SlidingMesh
 
