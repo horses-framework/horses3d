@@ -114,24 +114,24 @@ jobs:
       - name: Check METIS PATH
         run: echo $METIS_HOME
       
-      - name: Install hdf5 (only gfortran)
-        if: (matrix.compiler == 'gfortran')
-        run: |
-          sudo apt-get update
-          sudo apt install libhdf5-openmpi-dev
+      # - name: Install hdf5 (only gfortran)
+      #   if: (matrix.compiler == 'gfortran')
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt install libhdf5-openmpi-dev
 
-          mkdir -p $HOME/hdf5/lib
-          mkdir -p $HOME/hdf5/include/shared
+      #     mkdir -p $HOME/hdf5/lib
+      #     mkdir -p $HOME/hdf5/include/shared
           
-          ln -s /usr/lib/x86_64-linux-gnu/hdf5/openmpi/* $HOME/hdf5/lib/          
-          ln -s /usr/include/hdf5/openmpi/* $HOME/hdf5/include/
-          ln -s /usr/include/hdf5/openmpi/* $HOME/hdf5/include/shared/
+      #     ln -s /usr/lib/x86_64-linux-gnu/hdf5/openmpi/* $HOME/hdf5/lib/          
+      #     ln -s /usr/include/hdf5/openmpi/* $HOME/hdf5/include/
+      #     ln -s /usr/include/hdf5/openmpi/* $HOME/hdf5/include/shared/
           
-          echo "HDF5_ROOT=$HOME/hdf5" >> $GITHUB_ENV
+      #     echo "HDF5_ROOT=$HOME/hdf5" >> $GITHUB_ENV
 
-      #   # --- INSERT DEBUG STEP HERE ---
-      # - name: Setup interactive tmate session
-      #   uses: mxschmitt/action-tmate@v3
+        # --- INSERT DEBUG STEP HERE ---
+      - name: Setup interactive tmate session
+        uses: mxschmitt/action-tmate@v3
 
       # Runs a single command using the runners shell
       ##- name: Install gfortran
