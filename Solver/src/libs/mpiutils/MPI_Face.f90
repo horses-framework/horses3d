@@ -24,13 +24,13 @@ module MPI_Face_Class
       integer                    :: gradQrecv_req
       integer                    :: AviscFluxRecv_req
       integer                    :: QBaseRecv_req
-      integer                    :: MortarFluxRecv_req!!!
-      integer                    :: MortarGradFluxRecv_req!!!
+      integer                    :: MortarFluxRecv_req
+      integer                    :: MortarGradFluxRecv_req
       integer                    :: sizeQ
       integer                    :: sizeU_xyz
       integer                    :: sizeAviscFlux
-      integer                    :: sizeMortarFlux !!!
-      integer                    :: sizeGradMortarFlux !!!
+      integer                    :: sizeMortarFlux 
+      integer                    :: sizeGradMortarFlux 
       integer      , allocatable :: Nsend(:)          ! Information to send: [fNxi, fNeta, eNxi, eNeta, eNzeta, eGlobID]
       integer      , allocatable :: Nrecv(:)
       real(kind=RP), allocatable :: Qsend(:)
@@ -164,7 +164,6 @@ module MPI_Face_Class
                   safedeallocate(facesSet % faces(domain) % Flux_M_Send)
                   safedeallocate(facesSet % faces(domain) % GradFlux_M_Recv)
                   safedeallocate(facesSet % faces(domain) % GradFlux_M_Send)
-                  !write(*,*) 'domain', domain, 'Mortar dofs:', NMDOFS(domain)
                end if 
 
                allocate( facesSet % faces(domain) % Qsend(NCONS * NDOFS(domain)) )
@@ -696,7 +695,7 @@ module MPI_Face_Class
          self % AviscFluxRecv_req = MPI_REQUEST_NULL
          self % QBaseRecv_req     = MPI_REQUEST_NULL
          self % MortarFluxRecv_req= MPI_REQUEST_NULL
-         
+         self % MortarGradFluxRecv_req = MPI_REQUEST_NULL
 #endif
 
       end subroutine MPI_Face_Construct
