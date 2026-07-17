@@ -106,7 +106,7 @@ module InterpolationMatrices
             end do            ; end do
          end if
       end if 
-      if (present (offset) .and. .and. present (scale) .and. present(inout)) then 
+      if (present (offset) .and. present (scale) .and. present(inout)) then 
          if (inout==1) then
    !
    !        Prolongation matrix
