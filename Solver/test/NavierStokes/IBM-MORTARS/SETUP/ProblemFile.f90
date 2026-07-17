@@ -527,11 +527,11 @@ end module ProblemFileFunctions
             CHARACTER(LEN=29)                  :: testName           = "IBM-MORTARS"
             TYPE(FTAssertionsManager), POINTER :: sharedManager
             LOGICAL                            :: success
-            real(kind=RP), parameter           :: residuals_saved(5) = [2.5542644292925876E+00_RP, &
-                                                                        9.8358551370815430E+00_RP, &
-                                                                        4.0002125264000048E+00_RP, &
-                                                                        8.7245770209562377E+00_RP, &
-                                                                        1.6398064998624676E+02_RP]
+            real(kind=RP), parameter           :: residuals_saved(5) = [8.1741078358618822E+00_RP, &
+                                                                        4.6190339558266885E+01_RP, &
+                                                                        1.1264278927216340E+01_RP, &
+                                                                        1.6723694099840230E+01_RP, &
+                                                                        4.9559501799725638E+02_RP]
                                                                         CALL initializeSharedAssertionsManager
             sharedManager => sharedAssertionsManager()
             
