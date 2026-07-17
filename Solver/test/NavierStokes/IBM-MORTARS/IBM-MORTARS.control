@@ -6,12 +6,12 @@ AOA theta = 0.0
 AOA phi = 0.0
 
 !-------------------- INPUT/OUTPUT:-
-mesh file name = "MESH/HERA-WING-FLAP_L03_mesh.h5"
+mesh file name = "MESH/HERA-WING-FLAP_L02_mesh.h5"
 stl file name = "hera-wing-flap-mid-resolution"
-solution file name = "RESULTS/HERA-WING-FLAP_L03.hsol"
+solution file name = "RESULTS/HERA-WING-FLAP_L02.hsol"
 save gradients with soluton = .false.
 restart = .false.
-restart file name = "RESULTS/HERA-WING-FLAP_L03_0000000000.hsol"
+restart file name = "RESULTS/HERA-WING-FLAP_L02_0000000000.hsol"
 
 !------------------------- Discretization:-
 Polynomial order = 3
