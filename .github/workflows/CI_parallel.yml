@@ -118,14 +118,14 @@ jobs:
         if: (matrix.compiler == 'gfortran')
         run: |
           sudo apt-get update
-          sudo apt install libhdf5-openmpi-dev
+          sudo apt install libhdf5-mpich-dev
 
           mkdir -p $HOME/hdf5/lib
           mkdir -p $HOME/hdf5/include/shared
           
-          ln -s /usr/lib/x86_64-linux-gnu/hdf5/openmpi/* $HOME/hdf5/lib/          
-          ln -s /usr/include/hdf5/openmpi/* $HOME/hdf5/include/
-          ln -s /usr/include/hdf5/openmpi/* $HOME/hdf5/include/shared/
+          ln -s /usr/lib/x86_64-linux-gnu/hdf5/mpich/* $HOME/hdf5/lib/          
+          ln -s /usr/include/hdf5/mpich/* $HOME/hdf5/include/
+          ln -s /usr/include/hdf5/mpich/* $HOME/hdf5/include/shared/
           
           echo "HDF5_ROOT=$HOME/hdf5" >> $GITHUB_ENV
 
