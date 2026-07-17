@@ -114,6 +114,9 @@ jobs:
       - name: Check METIS PATH
         run: echo $METIS_HOME
       
+      # Install hdf5
+      # Since mpiexec is used to run the tests, I believe that open-mpi is not used and mpiexec points to mpich.
+      # Thus, the installed version of hdf5 is the one linked with mpich.
       - name: Install hdf5 (only gfortran)
         if: (matrix.compiler == 'gfortran')
         run: |
@@ -128,18 +131,6 @@ jobs:
           ln -s /usr/include/hdf5/mpich/* $HOME/hdf5/include/shared/
           
           echo "HDF5_ROOT=$HOME/hdf5" >> $GITHUB_ENV
-
-      #   # --- INSERT DEBUG STEP HERE ---
-      # - name: Setup interactive tmate session
-      #   uses: mxschmitt/action-tmate@v3
-      - name: MPI Diagnostics
-        run: |
-          which mpirun
-          mpirun --version
-          which mpif90
-          mpif90 --version
-          which mpiexec
-          mpiexec --version
 
       # Runs a single command using the runners shell
       ##- name: Install gfortran
