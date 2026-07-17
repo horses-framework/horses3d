@@ -198,5 +198,5 @@ jobs:
         working-directory: ./Solver/test/NavierStokes/IBM-MORTARS
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          mpiexec -n 10 ./horses3d.ns IBM-MORTARS.control
+          mpiexec -n 64 ./horses3d.ns IBM-MORTARS.control
         if: '!cancelled()'
