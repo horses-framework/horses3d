@@ -132,6 +132,14 @@ jobs:
       #   # --- INSERT DEBUG STEP HERE ---
       # - name: Setup interactive tmate session
       #   uses: mxschmitt/action-tmate@v3
+      - name: MPI Diagnostics
+        run: |
+          which mpirun
+          mpirun --version
+          which mpif90
+          mpif90 --version
+          which mpiexec
+          mpiexec --version
 
       # Runs a single command using the runners shell
       ##- name: Install gfortran
