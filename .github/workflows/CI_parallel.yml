@@ -114,14 +114,14 @@ jobs:
       - name: Check METIS PATH
         run: echo $METIS_HOME
       
-      - name: Install hdf5 (only gfortran)
-        if: (matrix.compiler == 'gfortran')
-        run: |
-          sudo apt-get update
-          sudo apt install libhdf5-openmpi-dev
-          dpkg -L libhdf5-openmpi-dev
-          echo "HDF5_ROOT=/usr/lib/x86_64-linux-gnu/hdf5/openmpi" >> $GITHUB_ENV
-        #  echo "HDF5_ROOT="/usr/lib/x86_64-linux-gnu/hdf5/serial/"" >> $GITHUB_ENV
+      # - name: Install hdf5 (only gfortran)
+      #   if: (matrix.compiler == 'gfortran')
+      #   run: |
+      #     sudo apt-get update
+      #     sudo apt install libhdf5-openmpi-dev
+      #     dpkg -L libhdf5-openmpi-dev
+      #     echo "HDF5_ROOT=/usr/lib/x86_64-linux-gnu/hdf5/openmpi" >> $GITHUB_ENV
+      #   #  echo "HDF5_ROOT="/usr/lib/x86_64-linux-gnu/hdf5/serial/"" >> $GITHUB_ENV
 
         # --- INSERT DEBUG STEP HERE ---
       - name: Setup interactive tmate session
