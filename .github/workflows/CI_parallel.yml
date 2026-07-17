@@ -158,7 +158,23 @@ jobs:
          make allclean MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES WITH_HDF5=${{matrix.hdf5}}
          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES WITH_HDF5=${{matrix.hdf5}}
 
+#
+# 27) IBM CYLINDER 
+# -------------------
 
+      - name: Build IBM_Cylinder
+        working-directory: ./Solver/test/NavierStokes/IBM_Cylinder/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES WITH_HDF5=${{matrix.hdf5}}
+        if: '!cancelled()'
+     
+      - name: Run IBM_Cylinder
+        working-directory: ./Solver/test/NavierStokes/IBM_Cylinder
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 64 ./horses3d.ns IBMCylinder.control
+        if: '!cancelled()'
 
 #
 # 41) IBM-MORTARS
