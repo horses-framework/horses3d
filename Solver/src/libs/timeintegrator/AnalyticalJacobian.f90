@@ -509,7 +509,7 @@ contains
 #endif
    end subroutine ComputeNumericalFluxJacobian
 
-   subroutine ComputeInterfaceMortarFluxJacobian(f, fma, fmb, fmc, fmd )
+   subroutine ComputeInterfaceMortarFluxJacobian(f, fma, fmb, fmc, fmd ) 
       implicit none
       !--------------------------------------------
       type(Face), intent(inout) :: f
@@ -548,8 +548,8 @@ contains
 !
 !        Scale with the mapping Jacobian
 !        -------------------------------
-         fma % storage(LEFT ) % dFStar_dqF (:,:,i,j) = f % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fma % geom % jacobian(i,j)
-         fma % storage(RIGHT) % dFStar_dqF (:,:,i,j) = f % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fma % geom % jacobian(i,j)
+         fma % storage(LEFT ) % dFStar_dqF (:,:,i,j) = fma % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fma % geom % jacobian(i,j)
+         fma % storage(RIGHT) % dFStar_dqF (:,:,i,j) = fma % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fma % geom % jacobian(i,j)
 
         case(2) 
 
@@ -566,8 +566,8 @@ contains
 !
 !        Scale with the mapping Jacobian
 !        -------------------------------
-         fmb % storage(LEFT ) % dFStar_dqF (:,:,i,j) = f % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmb % geom % jacobian(i,j)
-         fmb % storage(RIGHT) % dFStar_dqF (:,:,i,j) = f % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmb % geom % jacobian(i,j)
+         fmb % storage(LEFT ) % dFStar_dqF (:,:,i,j) = fmb % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmb % geom % jacobian(i,j)
+         fmb % storage(RIGHT) % dFStar_dqF (:,:,i,j) = fmb % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmb % geom % jacobian(i,j)
 
         case(3)
         
@@ -584,8 +584,8 @@ contains
 !
 !        Scale with the mapping Jacobian
 !        -------------------------------
-         fmc % storage(LEFT ) % dFStar_dqF (:,:,i,j) = f % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmc % geom % jacobian(i,j)
-         fmc % storage(RIGHT) % dFStar_dqF (:,:,i,j) = f % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmc % geom % jacobian(i,j)
+         fmc % storage(LEFT ) % dFStar_dqF (:,:,i,j) = fmc % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmc % geom % jacobian(i,j)
+         fmc % storage(RIGHT) % dFStar_dqF (:,:,i,j) = fmc % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmc % geom % jacobian(i,j)
 
         case(4)
 
@@ -602,8 +602,8 @@ contains
 !
 !        Scale with the mapping Jacobian
 !        -------------------------------
-         fmd % storage(LEFT ) % dFStar_dqF (:,:,i,j) = f % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmd % geom % jacobian(i,j)
-         fmd % storage(RIGHT) % dFStar_dqF (:,:,i,j) = f % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmd % geom % jacobian(i,j)
+         fmd % storage(LEFT ) % dFStar_dqF (:,:,i,j) = fmd % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmd % geom % jacobian(i,j)
+         fmd % storage(RIGHT) % dFStar_dqF (:,:,i,j) = fmd % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmd % geom % jacobian(i,j)
         end select 
       end do             ; end do
 #ifndef SPALARTALMARAS
