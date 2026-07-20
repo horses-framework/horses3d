@@ -484,7 +484,7 @@ module SpatialDiscretization
                end associate
                do m=1,4
                   if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
-                     call computeElementInterfaceFlux(masterFace1=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)), m=m)
+                     call computeElementInterfaceFlux(masterFace1=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                   end if 
                end do 
             elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
@@ -521,7 +521,7 @@ module SpatialDiscretization
             do iFace = 1, size(mesh % mortar_faces)
                fID = mesh % mortar_faces(iFace)%ID
                call computeElementInterfaceFlux(masterFace1=mesh % faces(mesh % mortar_faces(fID)%Mortar(1)), masterFace2=mesh % faces(mesh % mortar_faces(fID)%Mortar(2)), &
-               f=mesh % mortar_faces(iFace), m=m, sliding=.true.)
+               f=mesh % mortar_faces(iFace), sliding=.true.)
             end do 
 !$omp end do nowait
          end if 
@@ -1134,7 +1134,6 @@ module SpatialDiscretization
 !        Compute the viscosity at the elements and faces
 !        ***********************************************
 !
-         write(*,*)'HO element spatial discretization line 774'
          if (flowIsNavierStokes) then
 !$omp do schedule(runtime) private(i,j,k)
             do eID = 1, size(mesh % HO_Elements)
@@ -1202,7 +1201,6 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(fID)
       do iFace = 1, size(mesh % HO_FacesInterior)
          fID = mesh % HO_FacesInterior(iFace)
-         write(*,*)'HOOOOOO L842'
          call computeElementInterfaceFlux(mesh % faces(fID))
       end do
 !$omp end do nowait
@@ -1845,14 +1843,13 @@ module SpatialDiscretization
 !
 !/////////////////////////////////////////////////////////////////////////////////////////////
 !
-      subroutine computeElementInterfaceFlux(f, masterFace1, masterFace2, m, sliding )
+      subroutine computeElementInterfaceFlux(f, masterFace1, masterFace2, sliding )
         use FaceClass
         use RiemannSolvers_NS
         implicit none
         type(Face)   , intent(inout) :: f
         type(Face), optional, intent(inout) :: masterFace1 
         type(Face), optional, intent(inout) :: masterFace2
-        integer, optional, intent(in) :: m 
         logical, optional , intent(in) :: sliding
 
 
