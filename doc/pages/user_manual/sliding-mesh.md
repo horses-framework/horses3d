@@ -1,43 +1,21 @@
-title: Sliding mesh
----
-[TOC]
+# Sliding mesh
 
-WRITE HERE THE DOCUMENTATION FOR THE SLIDING MESHES. YOU CAN TAKE INSPIRATION FROM THE STRUCTURE BELOW.
-
-TODO @Hatem
+The sliding mesh feature takes a conforming cylindrical mesh and, if activated, builds a sliding interface at the specified radius. It then performs the prescribed rotation and generates the mortars needed to handle the resulting non-conforming interface between the fixed and rotating regions.
 
 | Keyword               | Description                                                                                                                                                                                              | Default value  |
 |-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------|
-| center       | *REAL(2)*: The center of rotation. | Mandatory keyword. |
-| radius       | *REAL*: Radius defining sliding mesh interface. | Mandatory keyword. |
-| angle       | *REAL*: Angle defining sliding mesh interface. | Mandatory keyword. |
-| rotation axis       | *CHARACTER*: Rotation axis. Possible values are `"x"`, `"y"`, or `"z"`. | Mandatory keyword. |
+| center                | *REAL(2)*: The center of rotation.                                                                                                                                                                        | **Mandatory keyword** |
+| radius                | *REAL*: Radius defining the sliding mesh interface.                                                                                                                                                       | **Mandatory keyword** |
+| angle                 | *REAL*: Rotation angle (radians) applied to the rotating region at every time step, once the sliding mesh is active.                                                                                     | **Mandatory keyword** |
+| rotation axis         | *CHARACTER*: Rotation axis. Possible values are `x`, `y`, or `z`.                                                                                                                                         | **Mandatory keyword** |
+| autosave mode         | *CHARACTER*: Can be `iteration` or `time`. Enables autosaving of the sliding mesh state at the specified interval.                                                                                       | Disabled       |
+| autosave interval     | *INTEGER/REAL*: Iteration (integer) or time (real) interval for autosaving, depending on `autosave mode`.                                                                                                | --             |
 
-
-This algorithm can perform a p-adaptation to decrease the truncation error below a threshold.
-
-```Markdown
-#define slidingmesh
-   centerx       = TE
-   centery
-   radius
-   angle
-   rotation axis
-   Truncation error type = isolated
-   truncation error      = 1.d-2
-   Nmax                  = [10,10,10]
-   Nmin                  = [2 ,2 ,2 ]
-   Conforming boundaries = [InnerCylinder,sphere]
-   order across faces    = N*2/3
-   increasing            = .FALSE.
-   write error files     = .FALSE.
-   adjust nz             = .FALSE.
-   mode                  = time
-   interval              = 1.d0
-   restart files         = .TRUE.
-   max N decrease        = 1
-   padapted mg sweeps pre      = 10
-   padapted mg sweeps post     = 12
-   padapted mg sweeps coarsest = 20
+```
+#define SlidingMesh
+  center = [0.0d0, 0.d0]
+  radius = 1.01d0
+  angle = 0.07853981d0
+  rotation axis = y
 #end
 ```
