@@ -249,7 +249,7 @@ module SpatialDiscretization
                end associate
                do m=1,4
                   if (mesh % faces(fID)%Mortar(m) .ne. 0) then
-                     call computeElementInterfaceFlux(masterFace1=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)), m=m)
+                     call computeElementInterfaceFlux(masterFace1=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                   end if
                end do
             elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then
@@ -579,13 +579,13 @@ module SpatialDiscretization
 !
 !/////////////////////////////////////////////////////////////////////////////////////////////
 !
-      subroutine computeElementInterfaceFlux(f, masterFace1, m)
+      subroutine computeElementInterfaceFlux(f, masterFace1)
          use FaceClass
          use RiemannSolvers_CAA
          implicit none
          type(Face)   , intent(inout) :: f
          type(Face), optional, intent(inout) :: masterFace1
-         integer, optional, intent(in) :: m
+         
          integer       :: i, j
          real(kind=RP) :: inv_flux(1:NCONS,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: visc_flux(1:NCONS)
