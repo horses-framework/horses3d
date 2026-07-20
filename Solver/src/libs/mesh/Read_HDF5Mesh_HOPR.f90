@@ -601,6 +601,7 @@ subroutine ConstructMeshPartition_FromHDF5File_( self, fileName, nodes, Nx, Ny, 
       ! Mortar connectivity table: (1)=local eID, (2)=face type, (3)=neighbour eID, (4:7)=slave eIDs
       integer, allocatable       :: HorsesMortars(:,:)
       integer                    :: sideInfoOffset        ! offset within SideInfo for current face (+4 for big mortar, +2 for small mortar)
+      integer                    :: sideInfoOffset_m
       logical                    :: isConformingMesh
       ! Mesh topology counters
       integer :: nMasterMortars    ! number of non-conforming master faces (big mortar)
@@ -915,35 +916,46 @@ subroutine ConstructMeshPartition_FromHDF5File_( self, fileName, nodes, Nx, Ny, 
                   first = ElemInfo(3,masterElemGlobalID) + 1
                   last  = ElemInfo(4,masterElemGlobalID) 
 
-                  masterFaceCGNS  = 1
                   masterFaceFound = .false.
+                  masterFaceCGNS  = 1
+                  sideInfoOffset_m = 0
 
-                  do sideInfoIdx = first, last 
-                     if (SideInfo(3,sideInfoIdx) == -1) then 
+                  do while (masterFaceCGNS .LE. FACES_PER_ELEMENT)
+                     sideInfoIdx = ElemInfo(3,masterElemGlobalID) + masterFaceCGNS + sideInfoOffset_m
+
+                     if (SideInfo(3,sideInfoIdx) == -1) then
                         do slaveIdx = 1, 4
-                           if (SideInfo(2,sideInfoIdx+slaveIdx) == -SideInfo(2,ElemInfo(3,GlobeID)+k+sideInfoOffset)) then 
+                           if (SideInfo(2,sideInfoIdx+slaveIdx) == -SideInfo(2,ElemInfo(3,GlobeID)+k+sideInfoOffset)) then
                               masterFaceFound  = .true.
                               masterFaceHORSES = HSideMap2(masterFaceCGNS)
 
                               select case (masterFaceHORSES)
-                              case (2)       
+                              case (2)
                                  cgns_to_horses = [2, 1, 4, 3]
-                              case (6)       
+                              case (6)
                                  cgns_to_horses = [1, 3, 2, 4]
-                              case (3)       
+                              case (3)
                                  cgns_to_horses = [1, 3, 2, 4]
-                              case default   
+                              case default
                                  cgns_to_horses = [1, 2, 3, 4]
                               end select
 
-                              self % elements(l) % MortarFaces(HsideMap2(k)) = cgns_to_horses(slaveIdx)
-                           end if 
-                        end do 
-                        !if (.not.masterFaceFound) masterFaceCGNS = masterFaceCGNS + 1
-                     else if (SideInfo(1,sideInfoIdx) .NE. 104) then 
-                        masterFaceCGNS = masterFaceCGNS + 1
-                     end if 
-                  end do 
+                              do ll = 1, 4
+                                 if (cgns_to_horses(ll) == slaveIdx) then
+                                    self % elements(l) % MortarFaces(HsideMap2(k)) = ll
+                                 end if
+                              end do
+                              exit
+                           end if
+                        end do
+                        sideInfoOffset_m = sideInfoOffset_m + 4
+                     else if (SideInfo(3,sideInfoIdx) == -2 .OR. SideInfo(3,sideInfoIdx) == -3) then
+                        sideInfoOffset_m = sideInfoOffset_m + 2
+                     end if
+
+                     if (masterFaceFound) exit
+                     masterFaceCGNS = masterFaceCGNS + 1
+                  end do
 
                   self % elements(l) % MortarFaces(HsideMap2(k)) = 20 + self % elements(l) % MortarFaces(HsideMap2(k))
                end if 
