@@ -487,7 +487,7 @@ Module MappedGeometryClass
 !  -----------------------------------------
 !  Computation of the metric terms on a face
 !  -----------------------------------------
-   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, fID,scale)
+   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, mortar_position,scale)
       use PhysicsStorage
       use InterpolationMatrices
       implicit none
@@ -504,7 +504,7 @@ Module MappedGeometryClass
       integer,                   intent(in)     :: rot
 
       logical,   optional,       intent(in)     :: sliding 
-      integer,   optional,       intent(in)     :: fID 
+      integer,   optional,       intent(in)     :: mortar_position 
       real(kind=RP), optional,   intent(in)     :: scale
 !
 !     ---------------
@@ -522,15 +522,7 @@ Module MappedGeometryClass
       real(kind=RP)  :: GradEtaRot (NDIM,0:Nelf(1),0:Nelf(2))
       real(kind=RP)  :: GradZetaRot(NDIM,0:Nelf(1),0:Nelf(2))
       real(kind=RP)  :: x(3)
-      real(kind=RP), allocatable  :: xx(:,:,:)
-      real(kind=RP) :: MInt(0:Nelf(1),0:Nf(1),1:2)
-      real(kind=RP) ::  xxx(NDIM, 0:Nelf(1), 0:Nf(2),2)
       real(kind=RP) ::  xrot(NDIM, 0:Nelf(1), 0:Nf(2))
-      real(kind=RP) ::  xrot2(NDIM, 0:Nelf(1), 0:Nf(2))
-      ! (present(sliding)) then 
-         !(:,:,1)=transpose(TsetM(Nelf(1), Nf(1),1,1) % T)
-        !! MInt(:,:,2)=transpose(TsetM(Nelf(1), Nf(1),3,1) % T)
-     ! end if 
 
       if (.not.allocated(self % jacobian)) allocate( self % jacobian(0:Nf(1), 0:Nf(2)))
       if (.not.allocated(self % x)) allocate( self % x       (NDIM, 0:Nf(1), 0:Nf(2)))
@@ -758,47 +750,43 @@ Module MappedGeometryClass
 !     Perform h/p-Adaption if it's a sliding mesh
 !     ------------------------------------------
 
-      if (present(sliding) .and. present(fID)) then 
+      if (present(sliding) .and. present(mortar_position) .and. present(scale)) then 
          if (sliding) then 
-         allocate(xx(NDIM, 0:Nf(1), 0:Nf(2)))
-        
-         xx= self % x 
-         xrot=self % x 
-         xxx=0.0_RP
-         self % x = 0.0_RP 
-         self % normal = 0.0_RP
-         self % GradXi   = 0.0_RP
-         self % GradEta  = 0.0_RP
-         self % GradZeta = 0.0_RP
 
-         if(fID==1) then !2
-            do l = 0, Nelf(2)  ; do j = 0, Nf(2)   ; do i = 0, Nf(1)    !3;1
-              ! self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 4, 1) % T(j,l) * xrot(:,i,l)
-               self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * xrot(:,i,l)
-               self % normal(:,i,j) = self % normal(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * dSRot(:,i,l)
-               self % GradXi  (:,i,j) = self % GradXi  (:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * GradXiRot  (:,i,l)
-               self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1), Nf(1),3 , 1) % T(j,l) * GradEtaRot (:,i,l)
-               self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * GradZetaRot(:,i,l)
-            end do                  ; end do                   ; end do
-            self % GradXi=self % GradXi*scale
-            self % GradEta=self % GradEta *scale
-            self % GradZeta=self % GradZeta*scale
-         else 
-            !do j = 0, Nf(2)  ; do l = 0, Nelf(1)   ; do i = 0, Nf(1)
-            do l = 0, Nelf(2)  ; do j = 0, Nf(2)   ; do i = 0, Nf(1)        !1;1
-               self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * xx(:,i,l)
-               self % normal(:,i,j) = self % normal(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l)* dSRot(:,i,l)
-               self % GradXi  (:,i,j) = self % GradXi  (:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradXiRot  (:,i,l)
-               self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradEtaRot (:,i,l)
-               self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradZetaRot(:,i,l)
+            xrot=self % x 
+            self % x = 0.0_RP 
+            self % normal = 0.0_RP
+            self % GradXi   = 0.0_RP
+            self % GradEta  = 0.0_RP
+            self % GradZeta = 0.0_RP
 
-            end do                  ; end do                   ; end do
-            self % GradXi=self % GradXi*scale
-            self % GradEta=self % GradEta *scale
-            self % GradZeta=self % GradZeta*scale
+            if (mortar_position==1) then 
+               do l = 0, Nelf(2)  ; do j = 0, Nf(2)   ; do i = 0, Nf(1)    
+               ! self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 4, 1) % T(j,l) * xrot(:,i,l)
+                  self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * xrot(:,i,l)
+                  self % normal(:,i,j) = self % normal(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * dSRot(:,i,l)
+                  self % GradXi  (:,i,j) = self % GradXi  (:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * GradXiRot  (:,i,l)
+                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1), Nf(1),3 , 1) % T(j,l) * GradEtaRot (:,i,l)
+                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * GradZetaRot(:,i,l)
+               end do                  ; end do                   ; end do
+               self % GradXi=self % GradXi*scale
+               self % GradEta=self % GradEta *scale
+               self % GradZeta=self % GradZeta*scale
+            else 
+               !do j = 0, Nf(2)  ; do l = 0, Nelf(1)   ; do i = 0, Nf(1)
+               do l = 0, Nelf(2)  ; do j = 0, Nf(2)   ; do i = 0, Nf(1)      
+                  self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * xrot(:,i,l)
+                  self % normal(:,i,j) = self % normal(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l)* dSRot(:,i,l)
+                  self % GradXi  (:,i,j) = self % GradXi  (:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradXiRot  (:,i,l)
+                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradEtaRot (:,i,l)
+                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradZetaRot(:,i,l)
+
+               end do                  ; end do                   ; end do
+               self % GradXi=self % GradXi*scale
+               self % GradEta=self % GradEta *scale
+               self % GradZeta=self % GradZeta*scale
+            end if 
          end if 
-         deallocate(xx)
-      end if 
       end if 
 
 !
