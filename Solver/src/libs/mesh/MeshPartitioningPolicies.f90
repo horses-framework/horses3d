@@ -1,24 +1,45 @@
 #include "Includes.h"
 module MeshPartitioningPolicies
+    use SMConstants
     implicit none
     
     private
     public GetMETISElementsPartitionByPolicy
     public partitioningNumberOfRegions_KEY
+    public setPointerRegion
 
-    character, parameter :: partitioningNumberOfRegions_KEY = "partitioning regions"
-    character, parameter :: partitioningRegionsPolicy_KEY = "partitioning regions policy"
-    character, parameter :: partitioningRegionsPolicyFixedRatio_KEY = "fixed-ratio"
-    character, parameter :: partitioningRegionsPolicyProportional_KEY = "proportional"
-    character, parameter :: partitioningRegionsPolicyShared_KEY = "shared"
-    character, parameter :: partitioningRegionsPolicyCustom_KEY = "custom"
+    character(len=LINE_LENGTH), parameter :: partitioningNumberOfRegions_KEY = "partitioning regions"
+    character(len=LINE_LENGTH), parameter :: partitioningRegionsPolicy_KEY = "partitioning regions policy"
+    character(len=LINE_LENGTH), parameter :: partitioningRegionsPolicyFixedRatio_KEY = "fixed-ratio"
+    character(len=LINE_LENGTH), parameter :: partitioningRegionsPolicyProportional_KEY = "proportional"
+    character(len=LINE_LENGTH), parameter :: partitioningRegionsPolicyShared_KEY = "shared"
+    character(len=LINE_LENGTH), parameter :: partitioningRegionsPolicyCustom_KEY = "custom"
     integer :: partitioningRegionsPolicyType
     integer, parameter :: partitioningRegionsPolicyFixedRatioType = 1
     integer, parameter :: partitioningRegionsPolicyProportionalType = 2
     integer, parameter :: partitioningRegionsPolicySharedType = 3
     integer, parameter :: partitioningRegionsPolicyCustomType = 4
+
+    abstract interface
+        pure integer function getRegion_f(e)
+            use ElementClass
+            implicit none
+            type(Element), intent(in) :: e
+        end function getRegion_f
+    end interface
+
+    procedure(getRegion_f), save, pointer :: getRegion ! AJRTODO: Save ?
     
     contains
+
+    subroutine setPointerRegion(user_func)
+        procedure(getRegion_f) :: user_func
+        print *, "Inside setPointerRegion"
+        print *, "user_func: ", loc(user_func)
+        print *, "getRegion before: ", loc(getRegion)
+        getRegion => user_func
+        print *, "getRegion after: ", loc(getRegion)
+    end subroutine setPointerRegion
 
     subroutine GetMETISElementsPartitionByPolicy(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
         use HexMeshClass
