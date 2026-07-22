@@ -28,17 +28,13 @@ module MeshPartitioningPolicies
         end function getRegion_f
     end interface
 
-    procedure(getRegion_f), save, pointer :: getRegion ! AJRTODO: Save ?
-    
+    procedure(getRegion_f), pointer :: getRegion
+    ! AJRTODO: Inside folder needed?
     contains
 
     subroutine setPointerRegion(user_func)
         procedure(getRegion_f) :: user_func
-        print *, "Inside setPointerRegion"
-        print *, "user_func: ", loc(user_func)
-        print *, "getRegion before: ", loc(getRegion)
         getRegion => user_func
-        print *, "getRegion after: ", loc(getRegion)
     end subroutine setPointerRegion
 
     subroutine GetMETISElementsPartitionByPolicy(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
@@ -76,9 +72,10 @@ module MeshPartitioningPolicies
         nra = GetIntValue(controlVariables % StringValueForKey(partitioningNumberOfRegions_KEY, requestedLength=LINE_LENGTH))
         allocate(ner_ra(nra)) ! For each region (ra), the number of elements in such region (ner)
         allocate(ra_ea(nea)) ! Stores, for each global element (ea), its region (ra)
+        ner_ra = 0
         ! Count the number of elements in each region
         do ea = 1, nea
-            ra = 1!getElementRegion(mesh % elements(ielem)) ! AJRTODO: This should be a function in the problem file
+            ra = getRegion(mesh % elements(ea))
             ner_ra(ra) = ner_ra(ra) + 1
             ra_ea(ea) = ra
         end do
@@ -87,6 +84,7 @@ module MeshPartitioningPolicies
             do ra = 1, nra
             write(*,'(A,I0,A,I0)') 'Identified ', ner_ra(ra), ' elements of region ', ra
             end do
+            error stop
         end if
 
         allocate(ndom_ra(nra)) ! For each region (ra), the number of domains this region should be decomposed into
