@@ -377,12 +377,12 @@ mkdirs: FORCE
 
 clean: FORCE
 	$(RM) lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a lib$(LIB)_caa.a
-	$(RM) ./build_ns/*.o ./include_ns/*.mod 
-	$(RM) ./build_nssa/*.o ./include_nssa/*.mod 
-	$(RM) ./build_ins/*.o ./include_ins/*.mod 
-	$(RM) ./build_ch/*.o ./include_ch/*.mod
-	$(RM) ./build_mu/*.o ./include_mu/*.mod
-	$(RM) ./build_caa/*.o ./include_caa/*.mod
+	$(RM) ./build_ns/*.o ./build_ns/*.so ./include_ns/*.mod 
+	$(RM) ./build_nssa/*.o ./build_nssa/*.so ./include_nssa/*.mod 
+	$(RM) ./build_ins/*.o ./build_ins/*.so ./include_ins/*.mod 
+	$(RM) ./build_ch/*.o ./build_ch/*.so ./include_ch/*.mod
+	$(RM) ./build_mu/*.o ./build_mu/*.so ./include_mu/*.mod
+	$(RM) ./build_caa/*.o ./build_caa/*.so ./include_caa/*.mod
 
 #############################################
 #	Dummy procedure to force a rule     #
