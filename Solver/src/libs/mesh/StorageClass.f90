@@ -188,7 +188,9 @@ module StorageClass
       real(kind=RP), dimension(:,:,:),     pointer     :: FStar
       real(kind=RP), dimension(:,:,:),     allocatable :: AviscFlux
       real(kind=RP), dimension(:,:,:),     allocatable :: MortarFlux
-      real(kind=RP), dimension(:,:,:,:),     allocatable :: GradMortarFlux
+      real(kind=RP), dimension(:,:,:,:),   allocatable :: MortarFlux_J
+      real(kind=RP), dimension(:,:,:,:),   allocatable :: GradMortarFlux
+      real(kind=RP), dimension(:,:,:,:,:), allocatable :: GradMortarFlux_J
       real(kind=RP), dimension(:,:,:,:),   pointer     :: unStar
       real(kind=RP), dimension(:),         allocatable :: genericInterfaceFluxMemory ! unStar and fStar point to this memory simultaneously. This seems safe.
 #ifdef FLOW
@@ -1521,11 +1523,27 @@ module StorageClass
          self % AviscFlux = 0.0_RP
 #endif
 
-         if (present(Mortar)) then 
+         if (present(Mortar)) then !allocate storage for MPI 4:1 mortars communication 
+
             allocate(self % MortarFlux(NCONS,0:Nf(1), 0:Nf(2)))
             allocate(self % GradMortarFlux(NCONS, NDIM,0:Nf(1), 0:Nf(2)))
+
+            if (analyticalJac) then 
+
+               allocate(self % MortarFlux_J(NCONS, NCONS, 0:Nf(1), 0:Nf(2)))
+               allocate(self % GradMortarFlux_J(NCONS, NCONS, NDIM,0:Nf(1), 0:Nf(2)))
+
+            end if 
+
             self % MortarFlux = 0.0_RP
             self % GradMortarFlux = 0.0_RP
+            
+            if (analyticalJac)  then 
+
+               self % MortarFlux_J=0.0_RP
+               self % GradMortarFlux_J=0.0_RP
+
+            end if 
          end if 
 #ifdef CAHNHILLIARD
          self % c     = 0.0_RP
