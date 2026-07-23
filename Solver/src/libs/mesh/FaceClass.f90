@@ -1307,7 +1307,7 @@
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !  
-   subroutine Face_ProjectMortarFluxJacobianToElements(self, nEqn, whichElement,whichderiv, fma, fmb, fmc, fmd) !!!ok
+   subroutine Face_ProjectMortarFluxJacobianToElements(self, nEqn, whichElement,whichderiv, slaveFace, sliding) 
       use MappedGeometryClass
       use PhysicsStorage
       implicit none
@@ -1315,64 +1315,54 @@
       integer,       intent(in)  :: nEqn
       integer,       intent(in)  :: whichElement
       integer,       intent(in)  :: whichderiv !<  One can either transfer the derivative with respect to qL (LEFT) or to qR (RIGHT)
-      type(Face), intent(inout)      ::fma
-      type(Face), intent(inout)      ::fmb
-      type(Face), intent(inout)      :: fmc
-      type(Face), intent(inout)      :: fmd 
+      type(Face), intent(inout)      :: slaveFace
+      logical, intent(in), optional  :: sliding 
+
 !
 !     ---------------
 !     Local variables
 !     ---------------
 !
-      integer                :: i, j, l, m, side, lm, p, q
+      integer                :: i, j, l, m
       real(kind=RP), pointer :: fluxDeriv(:,:,:,:)
+      real(kind=RP)     :: dFStar_dqFAux(nEqn, nEqn, 0: slaveFace % NfLeft(1),0:slaveFace % NfLeft(2))
+      real(kind=RP)     :: Flux_tmp(nEqn,nEqn,0: slaveFace % NfLeft(1),0:slaveFace % Nf(2))
+      real(kind=RP) :: MoutXi(0:slaveFace%NfLeft(1), 0:slaveFace%Nf(1))
+      real(kind=RP) :: MoutEta(0:slaveFace%NfLeft(2), 0:slaveFace%Nf(2))
 
-      real(kind=RP)     :: Flux_tmp(nEqn,nEqn,0: fma % NfLeft(1),0:fma % NfLeft(1))
-      real(kind=RP)     :: Flux_master(nEqn,nEqn,0: fma % NfLeft(1),0:fma % NfLeft(1),2,4)
-      real(kind=RP)     :: small(nEqn,nEqn,0: fma % NfLeft(1), 0:fma % NfLeft(1),4)
-      real(kind=RP)     :: Mout(0: fma % NfLeft(1), 0:fma % NfLeft(1), 2)
+      !if (.not.present(sliding)) then 
+         call GetMortarMout(slaveFace, MoutXi, MoutEta)
+      !else 
+         !call GetSlidingMout(slaveFace, MoutSliding)
+      !end if 
 
+         fluxDeriv(1:,1:,0:,0:) => self % storage(whichderiv) % dFStar_dqF
+         dFStar_dqFAux=0.0_RP 
 
-         if (self % MortarType == MORTAR_BIG ) then 
-         small(:,:,:,:,1) = fma  % storage(whichderiv) % dFStar_dqF
-         small(:,:,:,:,2) = fmb % storage(whichderiv) % dFStar_dqF
-         small(:,:,:,:,3) = fmc % storage(whichderiv) % dFStar_dqF
-         small(:,:,:,:,4) = fmd % storage(whichderiv) % dFStar_dqF
-         
-            
-         Mout(:,:,1)=transpose(TsetM(fma % NfLeft(1), fma % Nf(1), 1, 2) % T)
-         Mout(:,:,2)=transpose(TsetM(fma % NfLeft(1), fma % Nf(1), 2, 2) % T)
-         Flux_master=0.0_RP
-         do lm=1,4
-            do j=1,2
-               Flux_tmp(:,:,:,:)=0.0_RP
-               do i=1,2
-                  do q=0,fma % NfLeft(1) ; do p=0,fma % NfLeft(1); do l=0,fma % NfLeft(1)
-                     Flux_tmp(:,:,p,q)=Flux_tmp(:,:,p,q) + Mout(l,p,i)*small(:,:,l,q,i+2*(j-1))
-                  end do ; end do ; end do 
-               end do 
-               
-               do p=0,fma % NfLeft(1) ; do q=0,fma % NfLeft(1) ; do l=0,fma % NfLeft(1)
-                     Flux_master(1:nEqn,1:nEqn,p,q,whichderiv,lm)=Flux_master(1:nEqn,1:nEqn,p,q,whichderiv,lm) &
-                        + Mout(l,q,j)*Flux_tmp(:,:,p,l) 
-               end do ; end do ; end do 
-            end do 
-         end do
+        ! Pass 1: contraction direction 1 (i <- m) -> Flux_tmp(i,l)
+         Flux_tmp(:,:,:,:)=0.0_RP
+         do l = 0, slaveFace % Nf(2) ; do i = 0, slaveFace % NfLeft(1) ; do m = 0, slaveFace % Nf(1)
+           Flux_tmp(1:nEqn,1:nEqn,i,l) = Flux_tmp(1:nEqn,1:nEqn,i,l)  + MoutXi(i,m) * fluxDeriv(1:nEqn,1:nEqn,m,l)
+        end do ; end do ; end do
 
-         associate(dFStar_dq => self % storage(1) % dFStar_dqEl)
-            dFStar_dq(1:nEqn,1:nEqn,:,:,whichderiv)=0.25_RP*(Flux_master(1:nEqn,1:nEqn,:,:,whichderiv,1)+&
-            Flux_master(1:nEqn,1:nEqn,:,:,whichderiv,2)+ Flux_master(1:nEqn,1:nEqn,:,:,whichderiv,4)+ &
-            Flux_master(1:nEqn,1:nEqn,:,:,whichderiv,3))
+        ! Pass 2: contraction direction 2 (j <- l) -> fStarAux(i,j)
+        do j = 0, slaveFace % NfLeft(2) ; do i = 0, slaveFace % NfLeft(1) ; do l = 0, slaveFace % Nf(2)
+           dFStar_dqFAux(1:nEqn,1:nEqn,i,j) = dFStar_dqFAux(1:nEqn,1:nEqn,i,j) + MoutEta(j,l) * Flux_tmp(1:nEqn,1:nEqn,i,l) 
+        end do ; end do ; end do
+
+      select case (whichElement)
+      case (1)
+         associate(dFStar_dq => self % storage(whichElement) % dFStar_dqEl)
+            dFStar_dq(1:nEqn,1:nEqn,:,:,whichderiv)=dFStar_dq(1:nEqn,1:nEqn,:,:,whichderiv) + &
+            dFStar_dqFAux(1:nEqn,1:nEqn,:,:)
+        end associate 
+      case (2)
+         associate(dFStar_dq => self % storage(whichElement) % dFStar_dqEl)
+            dFStar_dq(1:nEqn,1:nEqn,:,:,whichderiv)=dFStar_dq(1:nEqn,1:nEqn,:,:,whichderiv) + &
+            (-dFStar_dqFAux(1:nEqn,1:nEqn,:,:))
          end associate 
-         associate(dFStar_dq => self % storage(2) % dFStar_dqEl)
-            dFStar_dq(1:nEqn,1:nEqn,:,:,whichderiv)=0.25_RP*(Flux_master(1:nEqn,1:nEqn,:,:,whichderiv,1)+&
-            Flux_master(1:nEqn,1:nEqn,:,:,whichderiv,2)+ Flux_master(1:nEqn,1:nEqn,:,:,whichderiv,4)+ &
-            Flux_master(1:nEqn,1:nEqn,:,:,whichderiv,3))
-            dFStar_dq = -dFStar_dq
-         end associate 
+      end select 
 
-         end if 
-      
    end subroutine Face_ProjectMortarFluxJacobianToElements
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1573,6 +1563,8 @@
       type(Face), intent(inout)                 ::fma
       integer, optional                         :: grad
 
+#ifdef _HAS_MPI_
+
       integer       :: i, j, l, m
       real(kind=RP) :: Um(1:nEqn, 0:fma%Nf(1), 0:fma%Nf(2))
       real(kind=RP) :: Qfm(1:nEqn, 0:fma%Nf(1), 0:fma%Nf(2))
@@ -1646,18 +1638,21 @@
          end associate 
 
       end if 
-
+#endif
    end subroutine Face_Interpolatebig2small
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !  
-   SUBROUTINE Face_Interpolatesmall2big(self, nEqn, flux_M)
+   SUBROUTINE Face_Interpolatesmall2big(self, nEqn, flux_M, anJacobian)
       use MappedGeometryClass
       use PhysicsStorage
       implicit none
       class(Face)       :: self
       integer,       intent(in)  :: nEqn
-      real(kind=RP), intent(inout)  :: flux_M(1:nEqn, 0:self % Nf(1), 0:self % Nf(2))
+      real(kind=RP), intent(inout), optional  :: flux_M(1:nEqn, 0:self % Nf(1), 0:self % Nf(2))
+      logical, intent(in), optional :: anJacobian
+
+#ifdef _HAS_MPI_
    !
    !     ---------------
    !     Local variables
@@ -1665,40 +1660,66 @@
    !
       integer           :: i, j, l, m
       real(kind=RP)     :: fStarAux(nEqn, 0:self % NfLeft(1), 0:self % NfLeft(2))
+      real(kind=RP)     :: dFStar_dqFAux(nEqn, nEqn, 0:self % NfLeft(1), 0:self % NfLeft(2))
 
       real(kind=RP)     :: MoutXi(0: self % NfLeft(1), 0:self % Nf(1))
       real(kind=RP)     :: MoutEta(0: self % NfLeft(2), 0:self % Nf(2))
       real(kind=RP)     :: tmp(nEqn, 0:self % NfLeft(1), 0:self % Nf(2))
+      real(kind=RP)     :: Flux_tmp(nEqn,nEqn,0: self % NfLeft(1),0:self % Nf(2))
 
       call GetMortarMout(self, MoutXi, MoutEta)
 
-      fStarAux(1:nEqn,:,:) = 0.0_RP 
+      if (.not.present(anJacobian)) then 
+         fStarAux(1:nEqn,:,:) = 0.0_RP 
 
-      ! Pass 1: contraction direction 1 (i <- m) -> tmp(i,l)
-      tmp(1:nEqn,:,:) = 0.0_RP
-      do l = 0, self % Nf(2) ; do i = 0, self % NfLeft(1) ; do m = 0, self % Nf(1)
-         tmp(1:nEqn,i,l) = tmp(1:nEqn,i,l) + MoutXi(i,m) * flux_M(1:nEqn,m,l)
-      end do ; end do ; end do
+         ! Pass 1: contraction direction 1 (i <- m) -> tmp(i,l)
+         tmp(1:nEqn,:,:) = 0.0_RP
+         do l = 0, self % Nf(2) ; do i = 0, self % NfLeft(1) ; do m = 0, self % Nf(1)
+            tmp(1:nEqn,i,l) = tmp(1:nEqn,i,l) + MoutXi(i,m) * flux_M(1:nEqn,m,l)
+         end do ; end do ; end do
 
-      ! Pass 2: contraction direction 2 (j <- l) -> fStarAux(i,j)
-      do j = 0, self % NfLeft(2) ; do i = 0, self % NfLeft(1) ; do l = 0, self % Nf(2)
-         fStarAux(1:nEqn,i,j) = fStarAux(1:nEqn,i,j) + MoutEta(j,l) * tmp(1:nEqn,i,l)
-      end do ; end do ; end do
+         ! Pass 2: contraction direction 2 (j <- l) -> fStarAux(i,j)
+         do j = 0, self % NfLeft(2) ; do i = 0, self % NfLeft(1) ; do l = 0, self % Nf(2)
+            fStarAux(1:nEqn,i,j) = fStarAux(1:nEqn,i,j) + MoutEta(j,l) * tmp(1:nEqn,i,l)
+         end do ; end do ; end do
 
-      associate(Mflux => self % storage(1) % MortarFlux)
-         Mflux=fStarAux
-      end associate 
+         associate(Mflux => self % storage(1) % MortarFlux)
+            Mflux=fStarAux
+         end associate 
 
+      else 
+#if defined(NAVIERSTOKES)
+         dFStar_dqFAux=0.0_RP 
+
+         ! Pass 1: contraction direction 1 (i <- m) -> Flux_tmp(i,l)
+         Flux_tmp(:,:,:,:)=0.0_RP
+         do l = 0, self % Nf(2) ; do i = 0, self % NfLeft(1) ; do m = 0, self % Nf(1)
+            Flux_tmp(1:nEqn,1:nEqn,i,l) = Flux_tmp(1:nEqn,1:nEqn,i,l)  + MoutXi(i,m) * self % storage(1) % dFStar_dqF(1:nEqn,1:nEqn,m,l)
+         end do ; end do ; end do
+
+         ! Pass 2: contraction direction 2 (j <- l) -> fStarAux(i,j)
+         do j = 0, self % NfLeft(2) ; do i = 0, self % NfLeft(1) ; do l = 0, self % Nf(2)
+            dFStar_dqFAux(1:nEqn,1:nEqn,i,j) = dFStar_dqFAux(1:nEqn,1:nEqn,i,j) + MoutEta(j,l) * Flux_tmp(1:nEqn,1:nEqn,i,l) 
+         end do ; end do ; end do
+
+         associate(MfluxJ => self % storage(1) % MortarFlux_J)
+            MfluxJ=dFStar_dqFAux
+         end associate 
+#endif
+      end if 
+#endif
    END SUBROUTINE Face_Interpolatesmall2big
    
 
-   SUBROUTINE Face_Interpolatesmall2biggrad(self, nEqn, Hflux)
+   SUBROUTINE Face_Interpolatesmall2biggrad(self, nEqn, Hflux, anJacobian)
       use MappedGeometryClass
       use PhysicsStorage
       implicit none
       class(Face)       :: self
       integer,       intent(in)  :: nEqn
       real(kind=RP), intent(in)     :: Hflux(nEqn, NDIM, 0:self % Nf(1), 0:self % Nf(2))
+      logical, optional, intent(in) :: anJacobian
+#ifdef _HAS_MPI_
    !
    !     ---------------
    !     Local variables
@@ -1710,24 +1731,52 @@
       real(kind=RP)     :: MoutEta(0: self % NfLeft(2), 0:self % Nf(2))
       real(kind=RP)     :: tmp(nEqn, NDIM, 0:self % NfLeft(1), 0:self % Nf(2))
 
+      real(kind=RP)     :: Flux_tmp(NCONS,NCONS,1:NDIM,0: self % NfLeft(1),0:self % Nf(2))
+      real(kind=RP)     :: dFv_dGradQElAux(NCONS,NCONS,1:NDIM, 0:self % NfLeft(1),0:self % NfLeft(2))
+
       call GetMortarMout(self, MoutXi, MoutEta)
 
-      hStarAux = 0.0_RP 
+      if (.not.present(anJacobian)) then 
+         hStarAux = 0.0_RP 
 
-      ! Pass 1: contraction direction 1 (i <- m) -> tmp(i,l)
-      tmp = 0.0_RP
-      do l = 0, self % Nf(2) ; do i = 0, self % NfLeft(1) ; do m = 0, self % Nf(1)
-         tmp(:,:,i,l) = tmp(:,:,i,l) + MoutXi(i,m) * Hflux(:,:,m,l)
-      end do ; end do ; end do
+         ! Pass 1: contraction direction 1 (i <- m) -> tmp(i,l)
+         tmp = 0.0_RP
+         do l = 0, self % Nf(2) ; do i = 0, self % NfLeft(1) ; do m = 0, self % Nf(1)
+            tmp(:,:,i,l) = tmp(:,:,i,l) + MoutXi(i,m) * Hflux(:,:,m,l)
+         end do ; end do ; end do
 
-      ! Pass 2: contraction direction 2 (j <- l) -> hStarAux(i,j)
-      do j = 0, self % NfLeft(2) ; do i = 0, self % NfLeft(1) ; do l = 0, self % Nf(2)
-         hStarAux(:,:,i,j) = hStarAux(:,:,i,j) + MoutEta(j,l) * tmp(:,:,i,l)
-      end do ; end do ; end do
+         ! Pass 2: contraction direction 2 (j <- l) -> hStarAux(i,j)
+         do j = 0, self % NfLeft(2) ; do i = 0, self % NfLeft(1) ; do l = 0, self % Nf(2)
+            hStarAux(:,:,i,j) = hStarAux(:,:,i,j) + MoutEta(j,l) * tmp(:,:,i,l)
+         end do ; end do ; end do
 
-      associate(MunStar => self % storage(1) %GradMortarFlux)
-         MunStar=hStarAux
-      end associate 
+         associate(MunStar => self % storage(1) %GradMortarFlux)
+            MunStar=hStarAux
+         end associate 
+
+      else
+
+#if defined(NAVIERSTOKES)
+
+         dFv_dGradQElAux=0.0_RP 
+
+         ! Pass 1: contraction direction 1 (i <- m) -> Flux_tmp(i,l)
+         Flux_tmp(:,:,:,:,:)=0.0_RP
+         do l = 0, self % Nf(2) ; do i = 0, self % NfLeft(1) ; do m = 0, self % Nf(1)
+         Flux_tmp(1:NCONS,1:NCONS, 1:NDIM, i,l) = Flux_tmp(1:NCONS,1:NCONS, 1:NDIM, i,l)  + MoutXi(i,m) * self % storage(1) % dFv_dGradQF(1:NCONS,1:NCONS,1:NDIM,m,l)
+         end do ; end do ; end do
+
+         ! Pass 2: contraction direction 2 (j <- l) -> fStarAux(i,j)
+         do j = 0, self % NfLeft(2) ; do i = 0, self % NfLeft(1) ; do l = 0, self % Nf(2)
+            dFv_dGradQElAux(1:NCONS,1:NCONS,1:NDIM,i,j) = dFv_dGradQElAux(1:NCONS,1:NCONS,1:NDIM,i,j) + MoutEta(j,l) * Flux_tmp(1:NCONS,1:NCONS, 1:NDIM,i,l) 
+         end do ; end do ; end do
+
+         associate(MfluxJ => self % storage(1) % GradMortarFlux_J)
+            MfluxJ=dFv_dGradQElAux
+         end associate 
+#endif
+      end if 
+#endif
    END SUBROUTINE Face_Interpolatesmall2biggrad
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1844,66 +1893,63 @@
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !  
-   subroutine Face_ProjectMortarGradJacobianToElements(self, whichElement, whichderiv, fma, fmb, fmc, fmd)
+   subroutine Face_ProjectMortarGradJacobianToElements(self, whichElement, whichderiv, slaveFace, sliding)
       use MappedGeometryClass
       use PhysicsStorage
       implicit none
       !---------------------------------------------------------
       class(Face), target        :: self
       integer,       intent(in)  :: whichElement
-      integer,       intent(in)  :: whichderiv
-      type(Face), intent(inout)      ::fma
-      type(Face), intent(inout)      ::fmb
-      type(Face), intent(inout)      :: fmc
-      type(Face), intent(inout)      :: fmd 
-      !---------------------------------------------------------
+      integer,       intent(in)  :: whichderiv !<  One can either transfer the derivative with respect to qL (LEFT) or to qR (RIGHT)
+      type(Face), intent(inout)      :: slaveFace
+      logical, intent(in), optional  :: sliding 
 
+!
+!     ---------------
+!     Local variables
+!     ---------------
+!
+      integer                :: i, j, l, m
       real(kind=RP), pointer :: fluxDeriv(:,:,:,:,:)
 
-      integer           :: i, j, l, m, p, q, lm
-      real(kind=RP)     :: Flux_tmp(1:NCONS,1:NCONS,1:NDIM,0: fma % NfLeft(1),0:fma % NfLeft(1))
-      real(kind=RP)     :: Flux_master(1:NCONS,1:NCONS,1:NDIM,0: fma % NfLeft(1),0:fma % NfLeft(1),2,4)
-      real(kind=RP)     :: Mout(0: fma % NfLeft(1), 0:fma % NfLeft(1), 2)
-      real(kind=RP)     :: small(1:NCONS,1:NCONS,NDIM,0: fma % NfLeft(1), 0:fma % NfLeft(1),4)
-      
-         if (self % MortarType == MORTAR_BIG ) then 
-         small(:,:,:,:,:,1)=fma % storage(whichderiv) % dFv_dGradQF
-         
-         small(:,:,:,:,:,2) = fmb % storage(whichderiv) % dFv_dGradQF
+      real(kind=RP)     :: Flux_tmp(NCONS,NCONS,1:NDIM,0:slaveFace % NfLeft(1), 0:slaveFace % Nf(2))
+      real(kind=RP)     :: dFv_dGradQElAux(NCONS,NCONS,1:NDIM, 0:slaveFace % NfLeft(1), 0:slaveFace % NfLeft(2))
+      real(kind=RP)     :: MoutXi(0:slaveFace%NfLeft(1), 0:slaveFace%Nf(1))
+      real(kind=RP)     :: MoutEta(0:slaveFace%NfLeft(2), 0:slaveFace%Nf(2))
 
-         small(:,:,:,:,:,3) = fmc % storage(whichderiv) % dFv_dGradQF
+      !if (.not.present(sliding)) then 
+         call GetMortarMout(slaveFace, MoutXi, MoutEta)
+      !else 
+         !call GetSlidingMout(slaveFace, MoutSliding)
+      !end if 
 
-         small(:,:,:,:,:,4) = fmd % storage(whichderiv) % dFv_dGradQF
+         fluxDeriv(1:,1:,1:,0:,0:) => self % storage(whichderiv) % dFv_dGradQF
+         dFv_dGradQElAux=0.0_RP 
 
+        ! Pass 1: contraction direction 1 (i <- m) -> Flux_tmp(i,l)
+         Flux_tmp(:,:,:,:,:)=0.0_RP
+         do l = 0, slaveFace % Nf(2) ; do i = 0, slaveFace % NfLeft(1) ; do m = 0, slaveFace % Nf(1)
+           Flux_tmp(1:NCONS,1:NCONS, 1:NDIM, i,l) = Flux_tmp(1:NCONS,1:NCONS, 1:NDIM, i,l)  + MoutXi(i,m) * fluxDeriv(1:NCONS,1:NCONS,1:NDIM,m,l)
+        end do ; end do ; end do
 
-         Mout(:,:,1)=transpose(TsetM(fma % NfLeft(1), fma % Nf(1), 1, 2) % T)
-         Mout(:,:,2)=transpose(TsetM(fma % NfLeft(1), fma % Nf(1), 2, 2) % T)
-         Flux_master=0.0_RP
-         do lm=1,4
-            do j=1,2
-               Flux_tmp(:,:,:,:,:)=0.0_RP
-               do i=1,2
-                  do q=0,fma % NfLeft(1) ; do p=0,fma % NfLeft(1); do l=0,fma % NfLeft(1)
-                     Flux_tmp(:,:,:,p,q)=Flux_tmp(:,:,:,p,q) + Mout(l,p,i)*small(:,:,:,l,q,i+2*(j-1))
-                  end do ; end do ; end do 
-               end do 
-               
-               do p=0,fma % NfLeft(1) ; do q=0,fma % NfLeft(1) ; do l=0,fma % NfLeft(1)
-                     Flux_master(1:NCONS,1:NCONS,1:NDIM,p,q,whichderiv,lm)=Flux_master(1:NCONS,1:NCONS,1:NDIM,p,q,whichderiv,lm) &
-                        + Mout(l,q,j)*Flux_tmp(:,:,:,p,l) 
-               end do ; end do ; end do 
-            end do 
-         end do
+        ! Pass 2: contraction direction 2 (j <- l) -> fStarAux(i,j)
+        do j = 0, slaveFace % NfLeft(2) ; do i = 0, slaveFace % NfLeft(1) ; do l = 0, slaveFace % Nf(2)
+         dFv_dGradQElAux(1:NCONS,1:NCONS,1:NDIM,i,j) = dFv_dGradQElAux(1:NCONS,1:NCONS,1:NDIM,i,j) + MoutEta(j,l) * Flux_tmp(1:NCONS,1:NCONS, 1:NDIM,i,l) 
+        end do ; end do ; end do
 
-         associate(dFv_dGradQEl => self % storage(1) % dFv_dGradQEl)
-            dFv_dGradQEl=0.25_RP*(Flux_master(:,:,:,:,:,:,1)+Flux_master(:,:,:,:,:,:,2)+Flux_master(:,:,:,:,:,:,4)+Flux_master(:,:,:,:,:,:,3))
+      select case (whichElement)
+      case (1)
+         associate(dFv_dGradQEl => self % storage(whichElement) % dFv_dGradQEl)
+            dFv_dGradQEl(1:NCONS,1:NCONS,1:NDIM,:,:,whichderiv)=dFv_dGradQEl(1:NCONS,1:NCONS,1:NDIM,:,:,whichderiv) + &
+            dFv_dGradQElAux(1:NCONS, 1:NCONS, 1:NDIM,:,:)
+        end associate 
+      case (2)
+         associate(dFv_dGradQEl => self % storage(whichElement) % dFv_dGradQEl)
+            dFv_dGradQEl(1:NCONS,1:NCONS, 1:NDIM,:,:,whichderiv)=dFv_dGradQEl(1:NCONS,1:NCONS, 1:NDIM,:,:,whichderiv) + &
+            (-dFv_dGradQElAux(1:NCONS, 1:NCONS, 1:NDIM,:,:))
          end associate 
-         associate(dFv_dGradQEl => self % storage(2) % dFv_dGradQEl)
-            dFv_dGradQEl=0.25_RP*(Flux_master(:,:,:,:,:,:,1)+Flux_master(:,:,:,:,:,:,2)+Flux_master(:,:,:,:,:,:,4)+Flux_master(:,:,:,:,:,:,3))
-         dFv_dGradQEl = -dFv_dGradQEl
-         end associate 
-      end if 
-      
+      end select 
+
    end subroutine Face_ProjectMortarGradJacobianToElements
 
 #endif
