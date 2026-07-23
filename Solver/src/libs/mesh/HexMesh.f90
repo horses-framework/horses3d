@@ -2557,6 +2557,9 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                   f % storage(otherSide(thisSide)) % Qbase(:,i,j) = self % MPIfaces % faces(domain) % QBaseRecv(counter:counter+nEqn-1)
                   counter = counter + nEqn
                end do               ; end do
+               if (f % MortarType == MORTAR_SMALL4) then
+                  call f % Interpolatebig2smallacoustic(nEqn, f)
+               end if 
                end associate
             end do
          end do
