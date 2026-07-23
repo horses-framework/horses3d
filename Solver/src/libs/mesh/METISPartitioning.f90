@@ -95,7 +95,7 @@ subroutine GetMETISElementsPartition(mesh, no_of_domains, elementsDomain, nodesD
       !
       ! Partitioning policy
       !
-      if (controlVariables % containsKey(partitioningNumberOfRegions_KEY)) then
+      if (controlVariables % containsKey(partitioningRegionsPolicy_KEY)) then
         call GetMETISElementsPartitionByPolicy(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
         return
       end if

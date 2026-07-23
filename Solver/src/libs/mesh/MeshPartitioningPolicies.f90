@@ -5,7 +5,7 @@ module MeshPartitioningPolicies
     
     private
     public GetMETISElementsPartitionByPolicy
-    public partitioningNumberOfRegions_KEY
+    public partitioningRegionsPolicy_KEY
     public setPointerGetRegion
     public setPointerUserDefinedMeshPartitioning
 
@@ -64,7 +64,7 @@ module MeshPartitioningPolicies
         use MPI_Process_Info
         use FTValueDictionaryClass
         use Utilities                   , only : toLower
-        use FileReadingUtilities        , only : getIntArrayFromString
+        use FileReadingUtilities        , only : getRealArrayFromString
         implicit none
         type(HexMesh), intent(in)              :: mesh
         integer,       intent(in)              :: no_of_domains
@@ -80,11 +80,47 @@ module MeshPartitioningPolicies
         integer, allocatable :: r_arrayPartMat(:)
         character(len=LINE_LENGTH) :: r_value
         integer :: ra, nra, ea, nea, pe, npe
-        integer, allocatable :: ndom_ra(:), ner_ra(:), ra_ea(:), ndr_ra(:)
+        integer :: offset
+        integer, allocatable :: ner_ra(:), ra_ea(:), ndr_ra(:)
         real(kind=rp), allocatable :: rat_ra(:)
 
         nea = mesh % no_of_elements
         npe = 8 ! Number of points per element (=8 for hexahedron)
+
+        !
+        ! Read policy information from control file
+        !
+        r_value = controlVariables % StringValueForKey(partitioningRegionsPolicy_KEY, requestedLength=LINE_LENGTH)
+        call toLower(r_value)
+        select case (r_value)
+        case (partitioningRegionsPolicyFixedRatio_KEY)
+            partitioningRegionsPolicyType = partitioningRegionsPolicyFixedRatioType
+        case (partitioningRegionsPolicyProportional_KEY)
+            partitioningRegionsPolicyType = partitioningRegionsPolicyProportionalType
+        case (partitioningRegionsPolicyShared_KEY)
+            partitioningRegionsPolicyType = partitioningRegionsPolicySharedType
+        case (partitioningRegionsPolicyCustom_KEY)
+            partitioningRegionsPolicyType = partitioningRegionsPolicyCustomType
+        case default
+            print *, "Unknown partition policy: ", r_value
+            print *, "Implemeted policies are:"
+            print *, "* ", partitioningRegionsPolicyFixedRatio_KEY
+            print *, "* ", partitioningRegionsPolicyProportional_KEY
+            print *, "* ", partitioningRegionsPolicyShared_KEY
+            print *, "* ", partitioningRegionsPolicyCustom_KEY
+            errorMessage(STD_OUT)
+            error stop
+        end select
+        if (partitioningRegionsPolicyType == partitioningRegionsPolicyCustomType) then
+            if (.not. associated(userDefinedMeshPartitioning)) then
+                print *, "userDefinedMeshPartitioning pointer has not been associated. Associate it in the UserDefinedStartup subroutine of the ProblemFile."
+                print *, "See an example in the documentation: AJRTODO."
+                errorMessage(STD_OUT)
+                error stop
+            end if
+            call userDefinedMeshPartitioning(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
+            return
+        end if
 
         !
         ! Read regions information
@@ -113,87 +149,51 @@ module MeshPartitioningPolicies
             write(*,'(A,I0,A,I0)') 'Identified ', ner_ra(ra), ' elements of region ', ra
             end do
         end if
-
-        allocate(ndom_ra(nra)) ! For each region (ra), the number of domains this region should be decomposed into
-        if (controlVariables % containsKey(partitioningRegionsPolicy_KEY)) then
-            r_value = controlVariables % StringValueForKey(partitioningRegionsPolicy_KEY, requestedLength=LINE_LENGTH)
-            call toLower(r_value)
-            select case (r_value)
-            case (partitioningRegionsPolicyFixedRatio_KEY)
-                partitioningRegionsPolicyType = partitioningRegionsPolicyFixedRatioType
-            case (partitioningRegionsPolicyProportional_KEY)
-                partitioningRegionsPolicyType = partitioningRegionsPolicyProportionalType
-            case (partitioningRegionsPolicyShared_KEY)
-                partitioningRegionsPolicyType = partitioningRegionsPolicySharedType
-            case (partitioningRegionsPolicyCustom_KEY)
-                partitioningRegionsPolicyType = partitioningRegionsPolicyCustomType
-            case default
-                print *, "Unknown partition policy: ", r_value
-                print *, "Implemeted policies are:"
-                print *, "* ", partitioningRegionsPolicyFixedRatio_KEY
-                print *, "* ", partitioningRegionsPolicyProportional_KEY
-                print *, "* ", partitioningRegionsPolicyShared_KEY
-                print *, "* ", partitioningRegionsPolicyCustom_KEY
-                errorMessage(STD_OUT)
-                error stop
-            end select
-        else
-            ! Default is proportional
-            partitioningRegionsPolicyType = partitioningRegionsPolicyProportionalType
-        end if
-        if (partitioningRegionsPolicyType == partitioningRegionsPolicyCustomType) then
-            ! AJRTODO: Test
-            if (.not. associated(userDefinedMeshPartitioning)) then
-                print *, "userDefinedMeshPartitioning pointer has not been associated. Associate it in the UserDefinedStartup subroutine of the ProblemFile."
-                print *, "See an example in the documentation: AJRTODO."
+        
+        allocate(ndr_ra(nra)) ! For each region (ra), the number of domains this region should be decomposed into (ndr)
+        select case (partitioningRegionsPolicyType)
+        case (partitioningRegionsPolicyFixedRatioType)
+            rat_ra = getRealArrayFromString(controlVariables % stringValueForKey(partitioningRegionsRatio_KEY, requestedLength=LINE_LENGTH))
+            if (size(rat_ra) .ne. nra) then
+                print *, "The size of the vector of ratios does not match the number of regions."
+                print *, "Number of regions: ", nra
+                print *, "Size of vector of ratios: ", size(rat_ra)
                 errorMessage(STD_OUT)
                 error stop
             end if
-            call userDefinedMeshPartitioning(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
-        else
-            allocate(ndr_ra(nra))
-            select case (partitioningRegionsPolicyType)
-            case (partitioningRegionsPolicyFixedRatioType)
-                ! AJRTODO: Test
-                rat_ra = getIntArrayFromString(controlVariables % stringValueForKey(partitioningRegionsRatio_KEY, requestedLength=LINE_LENGTH))
-                if (size(rat_ra) .ne. nra) then
-                    print *, "The size of the vector of ratios does not match the number of regions."
-                    print *, "Number of regions: ", nra
-                    print *, "Size of vector of ratios: ", size(rat_ra)
-                    errorMessage(STD_OUT)
-                    error stop
-                end if
-                call compute_fixed_ratio_partition(nra, no_of_domains, rat_ra, ndr_ra)
-            case (partitioningRegionsPolicyProportionalType)
-                call compute_proportional_partition(nra, no_of_domains, ner_ra, ndr_ra)
-            case (partitioningRegionsPolicySharedType)
-                do ra = 1, nra
-                    ndr_ra(ra) = no_of_domains
-                end do
-            end select
-            ! Partition the elements in each region
-            print *, "ndr_ra: ", ndr_ra
-            elementsDomain = -1
+            call compute_fixed_ratio_partition(nra, no_of_domains, rat_ra, ndr_ra)
+        case (partitioningRegionsPolicyProportionalType)
+            call compute_proportional_partition(nra, no_of_domains, ner_ra, ndr_ra)
+        case (partitioningRegionsPolicySharedType)
             do ra = 1, nra
-                call partition_region_METIS(mesh, ra, ra_ea, ner_ra(ra), ndr_ra(ra), elementsDomain)
+                ndr_ra(ra) = no_of_domains
             end do
-            if (any(elementsDomain == -1)) then
-                print *, "Some elements have not been assigned to a MPI domain."
-                errorMessage(STD_OUT)
-                error stop
+        end select
+        ! Partition the elements in each region
+        elementsDomain = -1
+        offset = 0
+        do ra = 1, nra
+            call partition_region_METIS(mesh, ra, ra_ea, ner_ra(ra), ndr_ra(ra), offset, elementsDomain)
+            if ((partitioningRegionsPolicyType == partitioningRegionsPolicyFixedRatioType) .or. (partitioningRegionsPolicyType == partitioningRegionsPolicyProportionalType)) then
+                offset = offset + ndr_ra(ra)
             end if
-            ! Assign the nodes to each MPI domain
-            nodesDomain = -1
-            do ea = 1, nea
-                do pe = 1, npe
-                    nodesDomain(mesh % elements(ea) % nodeIDs(pe)) = elementsDomain(ea)
-                end do
+        end do
+        if (any(elementsDomain == -1)) then
+            print *, "Some elements have not been assigned to a MPI domain."
+            errorMessage(STD_OUT)
+            error stop
+        end if
+        ! Assign the nodes to each MPI domain
+        nodesDomain = -1
+        do ea = 1, nea
+            do pe = 1, npe
+                nodesDomain(mesh % elements(ea) % nodeIDs(pe)) = elementsDomain(ea)
             end do
-            if (any(nodesDomain == -1)) then
-                print *, "Some nodes have not been assigned to a MPI domain."
-                errorMessage(STD_OUT)
-                error stop
-            end if
+        end do
+        if (any(nodesDomain == -1)) then
+            print *, "Some nodes have not been assigned to a MPI domain."
+            errorMessage(STD_OUT)
+            error stop
         end if
 
     end subroutine GetMETISElementsPartitionByPolicy
@@ -295,40 +295,6 @@ module MeshPartitioningPolicies
     end subroutine apportion_ranks_from_weights
 
     !====================================================================
-    ! Evenly distribute a set of identical items among a fixed number of
-    ! bins.
-    !
-    ! The allocation is as balanced as possible: the number of items
-    ! assigned to any two bins differs by at most one. If the items cannot
-    ! be divided exactly, the first bins receive one additional item.
-    !
-    ! Examples:
-    !   10 items, 4 bins -> [3,3,2,2]
-    !    3 items, 5 bins -> [1,1,1,0,0]
-    !====================================================================
-    subroutine apportion_items(n_items, n_bins, items_per_bin)
-
-    implicit none
-
-    integer, intent(in)  :: n_items
-    integer, intent(in)  :: n_bins
-    integer, intent(out) :: items_per_bin(n_bins)
-
-    integer :: q
-    integer :: r
-
-    q = n_items / n_bins
-    r = mod(n_items, n_bins)
-
-    items_per_bin = q
-
-    if (r > 0) then
-        items_per_bin(1:r) = items_per_bin(1:r) + 1
-    end if
-
-    end subroutine
-
-    !====================================================================
     ! FixedRatio policy.
     !====================================================================
     subroutine compute_fixed_ratio_partition(nra, nda, rat_ra, ndr_ra)
@@ -389,38 +355,9 @@ module MeshPartitioningPolicies
     end subroutine compute_proportional_partition
 
     !====================================================================
-    ! Shared policy. !AJRTODO: Delete?
-    !====================================================================
-    subroutine compute_shared_partition(nra, nda, ner_ra, ne_ra_da)
-
-    implicit none
-
-    integer, intent(in)  :: nra ! Number of regions (nra)
-    integer, intent(in)  :: nda ! Number of total MPI domains (nda)
-    integer, intent(in)  :: ner_ra(nra) ! For each region (ra), the number of elements in such region (ner)
-    integer, intent(out) :: ne_ra_da(nra,nda) ! The number of elements (ne) assigned from each region (ra) to each MPI domain (da)
-
-    integer :: ra
-
-    if (any(ner_ra < 0)) then
-        error stop "Shared: negative element counts."
-    end if
-
-    do ra = 1, nra
-
-        call apportion_items( &
-            ner_ra(ra), &
-            nda, &
-            ne_ra_da(ra,:))
-
-    end do
-
-    end subroutine
-
-    !====================================================================
     ! Partition element list with METIS
     !====================================================================
-    subroutine partition_region_METIS(mesh, ra, ra_ea, ner, ndr, da_ea)
+    subroutine partition_region_METIS(mesh, ra, ra_ea, ner, ndr, offset, da_ea)
         use HexMeshClass
         use SMConstants
         implicit none
@@ -429,6 +366,7 @@ module MeshPartitioningPolicies
         integer, intent(in) :: ra_ea(mesh % no_of_elements) ! For each element (ea), the region it belongs to (ra)
         integer, intent(in) :: ner ! The number of elements in the current region
         integer, intent(in) :: ndr ! The number of MPI domains that this region should be divided into
+        integer, intent(in) :: offset
         integer, intent(out) :: da_ea(mesh % no_of_elements) ! For each element (ea), the MPI domain it belongs to (da)
 
         ! Local variables
@@ -468,15 +406,19 @@ module MeshPartitioningPolicies
         
         ! Partition subset
         allocate(da_er(ner), da_pa(npa)) ! The domain (da) for each element of the region (er) or mesh node (pa)
-        call METIS_PartMeshDual(ner, npa, eptr, eind, vwgt, vsize, &
-                            ncommon, ndr, tpwgt, opts, objval, da_er, da_pa)
+        if (ndr == 1) then ! This is needed because there is a bug in METIS: https://github.com/KarypisLab/METIS/pull/120
+            da_er = 0
+        else
+            call METIS_PartMeshDual(ner, npa, eptr, eind, vwgt, vsize, &
+                                ncommon, ndr, tpwgt, opts, objval, da_er, da_pa)
+        end if
         
         
         ! Assign to domain in the global list of elements
         elemind = 1
         do ea = 1, nea
             if (ra_ea(ea) == ra) then ! If the element belongs to the current region
-                da_ea(ea) = da_er(elemind) + 1 ! METIS starts with 0
+                da_ea(ea) = offset + da_er(elemind) + 1 ! METIS starts with 0
                 elemind = elemind + 1
             end if
         end do
