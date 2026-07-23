@@ -117,6 +117,7 @@
 #if defined(ACOUSTIC)
             procedure   :: AdaptBaseSolutionToFace       => Face_AdaptBaseSolutionToFace
             procedure   :: AdaptBaseSolutionToMortarFace => Face_AdaptBaseSolutionToMortarFace
+            procedure   :: Interpolatebig2smallacoustic  => Face_Interpolatebig2smallacoustic
 #endif
             procedure   :: copy           => Face_Assign
             generic     :: assignment(=)  => copy
@@ -1622,22 +1623,23 @@
          end associate 
          end select 
       else 
-         associate(Qf => fma % storage(1) % Q)
-            Qfm=Qf
-            Qf=0.0_RP
+            associate(Qf => fma % storage(1) % Q)
+               Qfm=Qf
+               Qf=0.0_RP
 
-            tmp = 0.0_RP
-            do l = 0, fma % NfLeft(2) ; do i = 0, fma % Nf(1) ; do m = 0, fma % NfLeft(1)
-               tmp(:,i,l) = tmp(:,i,l) + MIntXi(i,m) * Qfm(:,m,l)
-            end do ; end do ; end do
+               tmp = 0.0_RP
+               do l = 0, fma % NfLeft(2) ; do i = 0, fma % Nf(1) ; do m = 0, fma % NfLeft(1)
+                  tmp(:,i,l) = tmp(:,i,l) + MIntXi(i,m) * Qfm(:,m,l)
+               end do ; end do ; end do
 
-            do j = 0, fma % Nf(2) ; do i = 0, fma % Nf(1) ; do l = 0, fma % NfLeft(2)
-               Qf(:,i,j) = Qf(:,i,j) + MIntEta(j,l) * tmp(:,i,l)
-            end do ; end do ; end do
+               do j = 0, fma % Nf(2) ; do i = 0, fma % Nf(1) ; do l = 0, fma % NfLeft(2)
+                  Qf(:,i,j) = Qf(:,i,j) + MIntEta(j,l) * tmp(:,i,l)
+               end do ; end do ; end do
 
-         end associate 
+            end associate 
 
       end if 
+
 #endif
    end subroutine Face_Interpolatebig2small
 !
@@ -2079,6 +2081,43 @@
       end associate
 
    end subroutine Face_AdaptBaseSolutionToMortarFace
+
+   subroutine Face_Interpolatebig2smallacoustic(self, nEqn, fma)
+      use MappedGeometryClass
+      implicit none
+      CLASS(Face),   intent(inout)              :: self
+      integer,       intent(in)                 :: nEqn
+      type(Face), intent(inout)                 ::fma
+
+#ifdef _HAS_MPI_
+
+      integer       :: i, j, l, m
+      real(kind=RP) :: Qfm(1:nEqn, 0:fma%Nf(1), 0:fma%Nf(2))
+
+      real(kind=RP) :: MIntXi(0:fma%Nf(1), 0:fma%NfLeft(1))
+      real(kind=RP) :: MIntEta(0:fma%Nf(2), 0:fma%NfLeft(2))
+
+      real(kind=RP) :: tmp(1:nEqn, 0:fma%Nf(1), 0:fma%NfLeft(2))
+
+      call GetMortarMInt(fma, MIntXi, MIntEta)
+
+      associate(Qf => fma % storage(1) % Qbase)
+         Qfm=Qf
+         Qf=0.0_RP
+
+         tmp = 0.0_RP
+         do l = 0, fma % NfLeft(2) ; do i = 0, fma % Nf(1) ; do m = 0, fma % NfLeft(1)
+            tmp(:,i,l) = tmp(:,i,l) + MIntXi(i,m) * Qfm(:,m,l)
+         end do ; end do ; end do
+
+         do j = 0, fma % Nf(2) ; do i = 0, fma % Nf(1) ; do l = 0, fma % NfLeft(2)
+            Qf(:,i,j) = Qf(:,i,j) + MIntEta(j,l) * tmp(:,i,l)
+         end do ; end do ; end do
+
+      end associate 
+
+#endif
+   end subroutine Face_Interpolatebig2smallacoustic
 #endif
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
