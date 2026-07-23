@@ -175,11 +175,15 @@ MODULE HexMeshClass
             procedure :: UpdateMPIFacesAviscflux       => HexMesh_UpdateMPIFacesAviscflux
             procedure :: UpdateMPIFacesMortarflux      => HexMesh_UpdateMPIFacesMortarflux
             procedure :: UpdateMPIFacesGradMortarflux  => HexMesh_UpdateMPIFacesGradMortarflux
+            procedure :: UpdateMPIFacesMortarfluxJac   => HexMesh_UpdateMPIFacesMortarfluxJac 
+            procedure :: UpdateMPIFacesGradMortarfluxJac  => HexMesh_UpdateMPIFacesGradMortarfluxJac 
             procedure :: GatherMPIFacesSolution        => HexMesh_GatherMPIFacesSolution
             procedure :: GatherMPIFacesGradients       => HexMesh_GatherMPIFacesGradients
             procedure :: GatherMPIFacesAviscFlux       => HexMesh_GatherMPIFacesAviscFlux
             procedure :: GatherMPIFacesMortarFlux      => HexMesh_GatherMPIFacesMortarFlux
             procedure :: GatherMPIFacesGradMortarFlux  => HexMesh_GatherMPIFacesGradMortarFlux
+            procedure :: GatherMPIFacesMortarFluxJac   => HexMesh_GatherMPIFacesMortarFluxJac 
+            procedure :: GatherMPIFacesGradMortarFluxJac  => HexMesh_GatherMPIFacesGradMortarFluxJac 
             procedure :: FindPointWithCoords           => HexMesh_FindPointWithCoords
             procedure :: FindPointWithCoordsInNeighbors=> HexMesh_FindPointWithCoordsInNeighbors
             procedure :: ComputeWallDistances          => HexMesh_ComputeWallDistances
@@ -2215,6 +2219,158 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
 !
 !////////////////////////////////////////////////////////////////////////
 !
+subroutine HexMesh_UpdateMPIFacesMortarFluxJac(self, nEqn)
+         use MPI_Face_Class
+         implicit none
+         class(HexMesh)         :: self
+         integer,    intent(in) :: nEqn
+#ifdef _HAS_MPI_
+#ifdef NAVIERSTOKES
+         integer            :: mpifID, fID, thisSide, domain
+         integer            :: i, j, counter, k, ierr
+         integer            :: nShared, nreqs, idx_send
+         integer, allocatable :: all_reqs(:)
+
+         if ( .not. MPI_Process % doMPIAction ) return
+
+         nShared = self % MPIfaces % nDomainShared
+         if (nShared <= 0) return
+
+         associate (MPIfaces => self % MPIfaces)
+
+         nreqs = 2 * nShared
+         allocate(all_reqs(nreqs))
+         all_reqs = MPI_REQUEST_NULL
+!
+!        Receive
+!
+         do k = 1, nShared
+            domain = MPIfaces % listDomain(k)
+            if (MPIfaces % faces(domain) % no_of_faces > 0) then
+               call MPIfaces % faces(domain) % RecvMortarFluxJac(domain, nEqn, all_reqs(k))
+            end if
+         end do
+!
+!        Send
+!
+         idx_send = nShared + 1
+         do k = 1, nShared
+            domain = MPIfaces % listDomain(k)
+            if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+               idx_send = idx_send + 1
+               cycle
+            end if
+
+            counter = 1
+            do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+               fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+               thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+               associate(f => self % faces(fID))
+               if (f % MortarType == MORTAR_SMALL4) then
+                  do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                     MPIfaces % faces(domain) % FluxJac_M_Send(counter:counter+nEqn*nEqn-1) = &
+                         reshape( f % storage(1) % MortarFlux_J(:,:,i,j), [nEqn*nEqn] )
+                     counter = counter + nEqn*nEqn
+                  end do               ; end do
+               end if
+               end associate
+            end do
+
+            call MPIfaces % faces(domain) % SendMortarFluxJac(domain, nEqn, all_reqs(idx_send))
+            idx_send = idx_send + 1
+         end do
+
+         call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+         deallocate(all_reqs)
+         end associate
+#endif
+#endif 
+end subroutine HexMesh_UpdateMPIFacesMortarFluxJac
+!
+!////////////////////////////////////////////////////////////////////////
+!
+subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac(self, nEqn)
+   use MPI_Face_Class
+   implicit none
+   class(HexMesh)         :: self
+   integer,    intent(in) :: nEqn
+#ifdef _HAS_MPI_
+#ifdef NAVIERSTOKES
+   integer            :: mpifID, fID, thisSide, domain
+   integer            :: i, j, counter, k, ierr
+   integer            :: nShared, nreqs, idx_send
+   integer, allocatable :: all_reqs(:)
+
+   if ( .not. MPI_Process % doMPIAction ) return
+
+   nShared = self % MPIfaces % nDomainShared
+   if (nShared <= 0) return
+
+   associate (MPIfaces => self % MPIfaces)
+
+   nreqs = 2 * nShared
+   allocate(all_reqs(nreqs))
+   all_reqs = MPI_REQUEST_NULL
+!
+!        Receive
+!
+   do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces > 0) then
+         call MPIfaces % faces(domain) % RecvMortarGradFluxJac(domain, nEqn, all_reqs(k))
+      end if
+   end do
+!
+!        Send
+!
+   idx_send = nShared + 1
+   do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+         idx_send = idx_send + 1
+         cycle
+      end if
+
+      counter = 1
+      do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+         fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+         thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+         associate(f => self % faces(fID))
+         if (f % MortarType == MORTAR_SMALL4) then
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFluxJac_M_Send(counter:counter+nEqn*nEqn-1) = &
+                  reshape( f % storage(1) % GradMortarFlux_J(:,:,1,i,j), [nEqn*nEqn] )
+               counter = counter + nEqn*nEqn
+            end do               ; end do
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFluxJac_M_Send(counter:counter+nEqn*nEqn-1) = &
+                  reshape( f % storage(1) % GradMortarFlux_J(:,:,2,i,j), [nEqn*nEqn] )
+               counter = counter + nEqn*nEqn
+            end do               ; end do
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFluxJac_M_Send(counter:counter+nEqn*nEqn-1) = &
+                  reshape( f % storage(1) % GradMortarFlux_J(:,:,3,i,j), [nEqn*nEqn] )
+               counter = counter + nEqn*nEqn
+            end do               ; end do
+         end if
+         end associate
+      end do
+
+      call MPIfaces % faces(domain) % SendMortarGradFluxJac(domain, nEqn, all_reqs(idx_send))
+      idx_send = idx_send + 1
+   end do
+
+   call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+
+   deallocate(all_reqs)
+   
+   end associate
+#endif
+#endif 
+end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
+!
+!////////////////////////////////////////////////////////////////////////
+!
 !     --------------------------------------------------------------------------------
 !     Subroutine to gather the MPIFaces solution Q (From MPI Storage to Faces Storage)
 !     --------------------------------------------------------------------------------
@@ -2517,6 +2673,112 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
       call MPI_Barrier(MPI_COMM_WORLD, ierr)
 #endif
    end subroutine HexMesh_GatherMPIFacesGradMortarFlux
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   subroutine HexMesh_GatherMPIFacesMortarFluxJac(self, nEqn)
+      implicit none
+      class(HexMesh)      :: self
+      integer, intent(in) :: nEqn
+#ifdef _HAS_MPI_
+#ifdef NAVIERSTOKES
+   !
+   !        ---------------
+   !        Local variables
+   !        ---------------
+   !
+      integer            :: mpifID, fID, thisSide, domain
+      integer            :: i, j, counter,p, ierr, k
+      integer, parameter :: otherSide(2) = [2, 1]
+   
+      if ( .not. MPI_Process % doMPIAction ) return
+   !
+   !        ***************
+   !        Gather solution
+   !        ***************
+   !
+      do k = 1, self % MPIfaces % nDomainShared
+         domain = self % MPIfaces % listDomain(k)
+         if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle
+         counter = 1
+   
+         do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+            fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            associate(f => self % faces(fID))
+               if (f%MortarType == MORTAR_BIG) then 
+                  associate(dFStar_dqEl => f % storage(1) % dFStar_dqEl)
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        dFStar_dqEl(:,:,i,j,2) = dFStar_dqEl(:,:,i,j,2) + reshape( &
+                             self % MPIfaces % faces(domain) % FluxJac_M_Recv(counter:counter+nEqn*nEqn-1), &
+                             [nEqn,nEqn] )
+                        counter = counter + nEqn*nEqn
+                     end do               ; end do
+                  end associate
+               end if 
+            end associate
+         end do
+   
+      end do
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+   
+#endif
+#endif 
+   end subroutine HexMesh_GatherMPIFacesMortarFluxJac
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   subroutine HexMesh_GatherMPIFacesGradMortarFluxJac(self, nEqn)
+      implicit none
+      class(HexMesh)      :: self
+      integer, intent(in) :: nEqn
+#ifdef _HAS_MPI_
+#ifdef NAVIERSTOKES
+      integer            :: mpifID, fID, thisSide, domain
+      integer            :: i, j, counter, d, ierr, k
+      integer, parameter :: otherSide(2) = [2, 1]
+   
+      if ( .not. MPI_Process % doMPIAction ) return
+   
+      do k = 1, self % MPIfaces % nDomainShared
+         domain = self % MPIfaces % listDomain(k)
+         if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle
+   
+         counter = 1
+         do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+            fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            associate(f => self % faces(fID))
+               if (f%MortarType == MORTAR_BIG) then 
+   
+                  associate(dFv_dGradQEl => f % storage(1) % dFv_dGradQEl)
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        dFv_dGradQEl(:,:,1,i,j,2) = dFv_dGradQEl(:,:,1,i,j,2) + reshape( &
+                             self % MPIfaces % faces(domain) % GradFluxJac_M_Recv(counter:counter+nEqn*nEqn-1), &
+                             [nEqn,nEqn] )
+                        counter = counter + nEqn*nEqn
+                     end do               ; end do
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        dFv_dGradQEl(:,:,2,i,j,2) = dFv_dGradQEl(:,:,2,i,j,2) + reshape( &
+                             self % MPIfaces % faces(domain) % GradFluxJac_M_Recv(counter:counter+nEqn*nEqn-1), &
+                             [nEqn,nEqn] )
+                        counter = counter + nEqn*nEqn
+                     end do               ; end do
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        dFv_dGradQEl(:,:,3,i,j,2) = dFv_dGradQEl(:,:,3,i,j,2) + reshape( &
+                             self % MPIfaces % faces(domain) % GradFluxJac_M_Recv(counter:counter+nEqn*nEqn-1), &
+                             [nEqn,nEqn] )
+                        counter = counter + nEqn*nEqn
+                     end do               ; end do
+                  end associate
+               end if 
+            end associate
+         end do
+      end do
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+#endif
+#endif
+   end subroutine HexMesh_GatherMPIFacesGradMortarFluxJac
 !
 !////////////////////////////////////////////////////////////////////////
 !
