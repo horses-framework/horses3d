@@ -207,32 +207,32 @@ all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu
 ./build_ns/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
 	@echo
 	@echo $<
-	$(FC) $(FFLAGS) -fPIC -shared -DNAVIERSTOKES -I./include_ns $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ns $< -o $@ $(MOD_FLAG) ./include_ns
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DNAVIERSTOKES -I./include_ns $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ns $< -o $@ $(MOD_FLAG) ./include_ns
 
 ./build_nssa/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
 	@echo
 	@echo $<
-	$(FC) $(FFLAGS) -fPIC -shared -DNAVIERSTOKES -DSPALARTALMARAS -I./include_nssa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_nssa $< -o $@ $(MOD_FLAG) ./include_nssa
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DNAVIERSTOKES -DSPALARTALMARAS -I./include_nssa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_nssa $< -o $@ $(MOD_FLAG) ./include_nssa
 
 ./build_ins/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
 	@echo
 	@echo $<
-	$(FC) $(FFLAGS) -fPIC -shared -DINCNS -I./include_ins $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ins $< -o $@ $(MOD_FLAG) ./include_ins
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DINCNS -I./include_ins $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ins $< -o $@ $(MOD_FLAG) ./include_ins
 
 ./build_ch/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
 	@echo
 	@echo $<
-	$(FC) $(FFLAGS) -fPIC -shared -DCAHNHILLIARD -I./include_ch $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ch $< -o $@ $(MOD_FLAG) ./include_ch
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DCAHNHILLIARD -I./include_ch $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ch $< -o $@ $(MOD_FLAG) ./include_ch
 
 ./build_mu/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
 	@echo
 	@echo $<
-	$(FC) $(FFLAGS) -fPIC -shared -DMULTIPHASE -DCAHNHILLIARD -I./include_mu $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_mu $< -o $@ $(MOD_FLAG) ./include_mu
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DMULTIPHASE -DCAHNHILLIARD -I./include_mu $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_mu $< -o $@ $(MOD_FLAG) ./include_mu
 
 ./build_caa/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
 	@echo
 	@echo $<
-	$(FC) $(FFLAGS) -fPIC -shared -DACOUSTIC -I./include_caa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_caa $< -o $@ $(MOD_FLAG) ./include_caa
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DACOUSTIC -I./include_caa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_caa $< -o $@ $(MOD_FLAG) ./include_caa
 
 ./build_ns/%.o: %.f90
 	@echo
