@@ -287,13 +287,13 @@ contains
       real(kind=RP)            , intent(in)    :: time
       class(Matrix_t)          , intent(inout) :: Matrix
       !--------------------------------------------
-      integer :: eID, fID
+      integer :: eID, fID, m 
       type(Element), pointer :: e   
       !--------------------------------------------
 !
 !     Project flux Jacobian to corresponding element
 !     ----------------------------------------------
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
       do fID = 1, size(mesh % faces)
          if (mesh % faces(fID)% MortarType == MORTAR_NONE .OR. mesh % faces(fID)% MortarType == MORTAR_SMALL4) then 
 
@@ -301,18 +301,34 @@ contains
             if (.not. (mesh % faces(fID) % faceType == HMESH_BOUNDARY )) call mesh % faces(fID) % ProjectFluxJacobianToElements(nEqn,RIGHT,RIGHT)   ! dF/dQR to the right element
 
          elseif(mesh % faces(fID)% MortarType == MORTAR_BIG) then 
+            associate(dFStar_dqEl=>mesh% faces(fID)%storage(1)%dFStar_dqEl)
+               dFStar_dqEl=0.0_RP
+            end associate
+            associate(dFStar_dqEl=>mesh% faces(fID)%storage(2)%dFStar_dqEl)
+               dFStar_dqEl=0.0_RP
+            end associate
+            do m=1,4
+               if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                  call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(nEqn,LEFT ,LEFT,  mesh % faces(mesh %faces(fID) % Mortar(m)))   
+                  call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(nEqn,RIGHT ,RIGHT,  mesh % faces(mesh %faces(fID) % Mortar(m)))   
 
-            call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(nEqn,LEFT ,LEFT,  mesh % faces(fID+1),mesh % faces(fID+2), &
-            mesh % faces(fID+3), mesh % faces(fID+4))   ! dF/dQL to the left element 
-
+               end if 
+            end do 
          end if 
       end do
 !$omp end do
+
+!$omp single
+      if ( mesh % nonconforming ) then
+         call mesh % UpdateMPIFacesMortarFluxJac(NCONS)
+         call mesh % GatherMPIFacesMortarFluxJac(NCONS)
+      end if
+!$omp end single
 !
 !     Project flux Jacobian with respect to gradients to corresponding elements
 !     -------------------------------------------------------------------------
       if (flowIsNavierStokes) then
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
          do fID = 1, size(mesh % faces)
             if (mesh % faces(fID)% MortarType == MORTAR_NONE .OR. mesh % faces(fID)% MortarType == MORTAR_SMALL4) then 
 
@@ -320,14 +336,30 @@ contains
                if (.not. (mesh % faces(fID) % faceType == HMESH_BOUNDARY)) call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,RIGHT)   ! dF/dQR to the right element
 
             elseif(mesh % faces(fID)% MortarType == MORTAR_BIG) then 
+               associate(dFv_dGradQEl=>mesh% faces(fID)%storage(1)%dFv_dGradQEl)
+                  dFv_dGradQEl=0.0_RP
+               end associate
+               associate(dFv_dGradQEl=>mesh% faces(fID)%storage(2)%dFv_dGradQEl)
+                  dFv_dGradQEl=0.0_RP
+               end associate
+               do m=1,4
+                  if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                     call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,LEFT, mesh % faces(mesh % faces(fID) % Mortar(m)))   ! dF/dQL to the left element 
+                     call mesh % faces(fID) % ProjectMortarGradJacobianToElements(RIGHT ,RIGHT, mesh % faces(mesh % faces(fID) % Mortar(m)))   ! dF/dQL to the left element 
 
-               call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,LEFT,  mesh % faces(fID+1),mesh % faces(fID+2), &
-               mesh % faces(fID+3), mesh % faces(fID+4))   ! dF/dQL to the left element 
-
+                  end if 
+               end do 
             end if 
          end do
 !$omp end do
       end if
+
+!$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % UpdateMPIFacesGradMortarfluxJac(NCONS)
+            call mesh % GatherMPIFacesGradMortarFluxJac(NCONS)
+         end if
+!$omp end single     
 !
 !     Compute each element's diagonal block
 !     -------------------------------------
@@ -361,7 +393,7 @@ contains
       type(HexMesh), target    , intent(inout) :: mesh
       class(Matrix_t)          , intent(inout) :: Matrix
       !--------------------------------------------
-      integer :: eID, fID, elSide, side
+      integer :: eID, fID, elSide, side, m 
       type(Element), pointer :: e_plus
       type(Face)   , pointer :: f
       !--------------------------------------------
@@ -369,7 +401,7 @@ contains
 !
 !     Project flux Jacobian to opposed elements (RIGHT to LEFT and LEFT to RIGHT)
 !     ---------------------------------------------------------------------------
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
       do fID = 1, size(mesh % faces)
          if (mesh % faces(fID) % faceType /= HMESH_BOUNDARY) then
             if (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
@@ -379,12 +411,21 @@ contains
 
             elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
 
+               call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, LEFT ,RIGHT)   ! dF/dQR to the left element
                call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, RIGHT,LEFT )   ! dF/dQL to the right element 
 
             elseif (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
-
-               call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(NCONS, LEFT ,RIGHT, mesh % faces(fID+1), mesh % faces(fID+2), &
-               mesh % faces(fID+3), mesh % faces(fID+4))   ! dF/dQR to the left element
+               associate(dFStar_dqEl=>mesh% faces(fID)%storage(1)%dFStar_dqEl)
+                  dFStar_dqEl=0.0_RP
+               end associate
+               associate(dFStar_dqEl=>mesh% faces(fID)%storage(2)%dFStar_dqEl)
+                  dFStar_dqEl=0.0_RP
+               end associate
+               do m=1,4
+                  if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                     call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(NCONS, LEFT ,RIGHT, mesh % faces(mesh % faces(fID) % Mortar(m)))   ! dF/dQR to the left element
+                  end if 
+               end do 
 
             end if 
          end if
@@ -395,7 +436,7 @@ contains
 !     Project flux Jacobian with respect to gradients to opposed elements (RIGHT to LEFT and LEFT to RIGHT)
 !     -----------------------------------------------------------------------------------------------------
       if (flowIsNavierStokes) then
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
          do fID = 1, size(mesh % faces)
             if (mesh % faces(fID) % faceType /= HMESH_BOUNDARY) then
                if (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
@@ -405,13 +446,22 @@ contains
 
                elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
 
+                  call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT,RIGHT ) 
                   call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,LEFT ) 
 
                elseif (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
+                  associate(dFStar_dqEl=>mesh% faces(fID)%storage(1)%dFStar_dqEl)
+                     dFStar_dqEl=0.0_RP
+                  end associate
+                  associate(dFStar_dqEl=>mesh% faces(fID)%storage(2)%dFStar_dqEl)
+                     dFStar_dqEl=0.0_RP
+                  end associate
+                  do m=1,4
+                     if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                        call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,RIGHT, mesh % faces(mesh % faces(fID) % Mortar(m)))
+                     end if 
+                  end do 
 
-                  call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,RIGHT, mesh % faces(fID+1), mesh % faces(fID+2), &
-                  mesh % faces(fID+3), mesh % faces(fID+4))
-                  
                end if 
             end if
          end do
@@ -454,21 +504,24 @@ contains
       integer,       intent(in)       :: nEqn
       real(kind=RP), intent(in)       :: time
       !--------------------------------------------
-      integer :: fID, ierr
+      integer :: fID, ierr, m
       !--------------------------------------------
 !
 !     Compute the non-shared faces
 !     ----------------------------
 !
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
       do fID = 1, size(mesh % faces)
          select case (mesh % faces(fID) % faceType)
             case (HMESH_INTERIOR)
                if (mesh % faces(fID)% MortarType == MORTAR_NONE) then 
                   call ComputeInterfaceFluxJacobian(mesh % faces(fID))
                elseif (mesh % faces(fID)%MortarType == MORTAR_BIG) then 
-                  call  ComputeInterfaceMortarFluxJacobian(mesh % faces(fID), mesh % faces(fID+1), mesh % faces(fID+2), &
-                  mesh % faces(fID+3), mesh % faces(fID+4))
+                  do m=1,4
+                     if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                        call  ComputeInterfaceFluxJacobian(mesh % faces(mesh % faces (fID) % Mortar(m)))
+                     end if 
+                  end do 
                end if 
             case (HMESH_BOUNDARY)
                call ComputeBoundaryFluxJacobian(mesh % faces(fID),time)
@@ -491,14 +544,30 @@ contains
             call mesh % GatherMPIFacesSolution(NCONS)
          end if
 !$omp end single
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private (m)
          do fID = 1, size(mesh % faces)
             select case (mesh % faces(fID) % faceType)
                case (HMESH_MPI)
-                  call ComputeInterfaceFluxJacobian(mesh % faces(fID))
+                  if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
+                     do m=1,4
+                        if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                           call ComputeInterfaceFluxJacobian(mesh % faces(mesh % faces(fID) % Mortar(m)))
+                        end if 
+                     end do 
+                  elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
+
+                     call ComputeInterfaceFluxJacobian(mesh % faces(mesh % faces(fID) % Mortar(m)), mortar_mpi=.TRUE. )
+                     
+                  elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
+
+                     call ComputeInterfaceFluxJacobian(mesh % faces(fID))
+                  end if
+
             end select
          end do
 !$omp end do
+
+         !TODO HTMKS: MPI communicatin for 4:1 mortars
 !
 !        Add an MPI Barrier
 !        ------------------
@@ -509,115 +578,6 @@ contains
 #endif
    end subroutine ComputeNumericalFluxJacobian
 
-   subroutine ComputeInterfaceMortarFluxJacobian(f, fma, fmb, fmc, fmd ) 
-      implicit none
-      !--------------------------------------------
-      type(Face), intent(inout) :: f
-      type(Face), intent(inout) :: fma
-      type(Face), intent(inout) :: fmb 
-      type(Face), intent(inout) :: fmc 
-      type(Face), intent(inout) :: fmd 
-      !--------------------------------------------
-      integer :: i,j, lm 
-      integer :: Nfm(4,2) 
-
-      Nfm(1,:)=fma % Nf
-      Nfm(2,:)=fmb % Nf
-      Nfm(3,:)=fmc % Nf
-      Nfm(4,:)=fmd % Nf
-      !--------------------------------------------
-      
-     do lm=1,4 
-      do j = 0, Nfm(lm,2) ; do i = 0, Nfm(lm,1)
-!
-!        Get numerical flux jacobian on the face point (i,j)
-!        ---------------------------------------------------
-        select case(lm)
-        case(1)
-         
-         call RiemannSolver_dFdQ(ql   = fma % storage(LEFT)  % Q(:,i,j), &
-                                 qr   = fma % storage(RIGHT) % Q(:,i,j), &
-                                 nHat = fma % geom % normal (:,i,j)    , &
-                                 dfdq_num = fma % storage(LEFT) % dFStar_dqF (:,:,i,j), & ! this is dFStar/dqL
-                                 side = LEFT)
-         call RiemannSolver_dFdQ(ql   = fma % storage(LEFT)  % Q(:,i,j), &
-                                 qr   = fma % storage(RIGHT) % Q(:,i,j), &
-                                 nHat = fma % geom % normal (:,i,j)    , &
-                                 dfdq_num = fma % storage(RIGHT) % dFStar_dqF (:,:,i,j), & ! this is dFStar/dqR
-                                 side = RIGHT)
-!
-!        Scale with the mapping Jacobian
-!        -------------------------------
-         fma % storage(LEFT ) % dFStar_dqF (:,:,i,j) = fma % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fma % geom % jacobian(i,j)
-         fma % storage(RIGHT) % dFStar_dqF (:,:,i,j) = fma % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fma % geom % jacobian(i,j)
-
-        case(2) 
-
-        call RiemannSolver_dFdQ(ql   = fmb % storage(LEFT)  % Q(:,i,j), &
-                                 qr   = fmb % storage(RIGHT) % Q(:,i,j), &
-                                 nHat = fmb % geom % normal (:,i,j)    , &
-                                 dfdq_num = fmb % storage(LEFT) % dFStar_dqF (:,:,i,j), & ! this is dFStar/dqL
-                                 side = LEFT)
-        call RiemannSolver_dFdQ(ql   = fmb % storage(LEFT)  % Q(:,i,j), &
-                                 qr   = fmb % storage(RIGHT) % Q(:,i,j), &
-                                 nHat = fmb % geom % normal (:,i,j)    , &
-                                 dfdq_num = fmb % storage(RIGHT) % dFStar_dqF (:,:,i,j), & ! this is dFStar/dqR
-                                 side = RIGHT)
-!
-!        Scale with the mapping Jacobian
-!        -------------------------------
-         fmb % storage(LEFT ) % dFStar_dqF (:,:,i,j) = fmb % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmb % geom % jacobian(i,j)
-         fmb % storage(RIGHT) % dFStar_dqF (:,:,i,j) = fmb % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmb % geom % jacobian(i,j)
-
-        case(3)
-        
-        call RiemannSolver_dFdQ(ql   = fmc % storage(LEFT)  % Q(:,i,j), &
-                                 qr   = fmc % storage(RIGHT) % Q(:,i,j), &
-                                 nHat = fmc % geom % normal (:,i,j)    , &
-                                 dfdq_num = fmc % storage(LEFT) % dFStar_dqF (:,:,i,j), & ! this is dFStar/dqL
-                                 side = LEFT)
-        call RiemannSolver_dFdQ(ql   = fmc % storage(LEFT)  % Q(:,i,j), &
-                                 qr   = fmc % storage(RIGHT) % Q(:,i,j), &
-                                 nHat = fmc % geom % normal (:,i,j)    , &
-                                 dfdq_num = fmc % storage(RIGHT) % dFStar_dqF (:,:,i,j), & ! this is dFStar/dqR
-                                 side = RIGHT)
-!
-!        Scale with the mapping Jacobian
-!        -------------------------------
-         fmc % storage(LEFT ) % dFStar_dqF (:,:,i,j) = fmc % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmc % geom % jacobian(i,j)
-         fmc % storage(RIGHT) % dFStar_dqF (:,:,i,j) = fmc % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmc % geom % jacobian(i,j)
-
-        case(4)
-
-        call RiemannSolver_dFdQ(ql   = fmd % storage(LEFT)  % Q(:,i,j), &
-                                 qr   = fmd % storage(RIGHT) % Q(:,i,j), &
-                                 nHat = fmd % geom % normal (:,i,j)    , &
-                                 dfdq_num = fmd % storage(LEFT) % dFStar_dqF (:,:,i,j), & ! this is dFStar/dqL
-                                 side = LEFT)
-        call RiemannSolver_dFdQ(ql   = fmd % storage(LEFT)  % Q(:,i,j), &
-                                 qr   = fmd % storage(RIGHT) % Q(:,i,j), &
-                                 nHat = fmd % geom % normal (:,i,j)    , &
-                                 dfdq_num = fmd % storage(RIGHT) % dFStar_dqF (:,:,i,j), & ! this is dFStar/dqR
-                                 side = RIGHT)
-!
-!        Scale with the mapping Jacobian
-!        -------------------------------
-         fmd % storage(LEFT ) % dFStar_dqF (:,:,i,j) = fmd % storage(LEFT  ) % dFStar_dqF (:,:,i,j) * fmd % geom % jacobian(i,j)
-         fmd % storage(RIGHT) % dFStar_dqF (:,:,i,j) = fmd % storage(RIGHT ) % dFStar_dqF (:,:,i,j) * fmd % geom % jacobian(i,j)
-        end select 
-      end do             ; end do
-#ifndef SPALARTALMARAS
-      if (flowIsNavierStokes)  then 
-      if (lm==1) call ViscousDiscretization % RiemannSolver_Jacobians(fma)
-      if (lm==2) call ViscousDiscretization % RiemannSolver_Jacobians(fmb)
-      if (lm==3) call ViscousDiscretization % RiemannSolver_Jacobians(fmc)
-      if (lm==4) call ViscousDiscretization % RiemannSolver_Jacobians(fmd)
-      end if 
-#endif
-
-    end do 
-
-   end subroutine ComputeInterfaceMortarFluxJacobian
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -747,10 +707,11 @@ contains
 !           dFStar/dqL = ---------------         dFStar/dqR = ---------------
 !                          dQ⁺                                  dQ⁻         
 !  -----------------------------------------------------------------------------------------------
-   subroutine ComputeInterfaceFluxJacobian(f)
+   subroutine ComputeInterfaceFluxJacobian(f, mortar_mpi)
       implicit none
       !--------------------------------------------
       type(Face), intent(inout) :: f
+      logical, optional, intent(in) :: mortar_mpi 
       !--------------------------------------------
       integer :: i,j
       !--------------------------------------------
@@ -781,6 +742,9 @@ contains
       if (flowIsNavierStokes) call ViscousDiscretization % RiemannSolver_Jacobians(f)
 #endif
 
+      if (f % MortarType == MORTAR_SMALL4  .and. present(mortar_mpi)) then 
+         call f % Interpolatesmall2big (nEqn = NCONS, anJacobian = .true. )
+      end if 
    end subroutine ComputeInterfaceFluxJacobian
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
