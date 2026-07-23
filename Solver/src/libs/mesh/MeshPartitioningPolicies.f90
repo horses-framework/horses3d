@@ -6,7 +6,8 @@ module MeshPartitioningPolicies
     private
     public GetMETISElementsPartitionByPolicy
     public partitioningNumberOfRegions_KEY
-    public setPointerRegion
+    public setPointerGetRegion
+    public setPointerUserDefinedMeshPartitioning
 
     character(len=LINE_LENGTH), parameter :: partitioningNumberOfRegions_KEY = "partitioning regions"
     character(len=LINE_LENGTH), parameter :: partitioningRegionsPolicy_KEY = "partitioning regions policy"
@@ -19,6 +20,7 @@ module MeshPartitioningPolicies
     integer, parameter :: partitioningRegionsPolicyProportionalType = 2
     integer, parameter :: partitioningRegionsPolicySharedType = 3
     integer, parameter :: partitioningRegionsPolicyCustomType = 4
+    character(len=LINE_LENGTH), parameter :: partitioningRegionsRatio_KEY = "partitioning regions ratio"
 
     abstract interface
         pure integer function getRegion_f(e)
@@ -28,14 +30,33 @@ module MeshPartitioningPolicies
         end function getRegion_f
     end interface
 
-    procedure(getRegion_f), pointer :: getRegion
-    ! AJRTODO: Inside folder needed?
+    abstract interface
+        subroutine userDefinedMeshPartitioning_f(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
+            use HexMeshClass
+            use FTValueDictionaryClass
+            implicit none
+            type(HexMesh), intent(in)              :: mesh
+            integer,       intent(in)              :: no_of_domains
+            integer,       intent(out)             :: elementsDomain(mesh % no_of_elements)
+            integer,       intent(out)             :: nodesDomain(size(mesh % nodes))
+            type(FTValueDictionary), intent(in)    :: controlVariables
+        end subroutine userDefinedMeshPartitioning_f
+    end interface
+
+    procedure(getRegion_f), pointer :: getRegion => null()
+    procedure(userDefinedMeshPartitioning_f), pointer :: userDefinedMeshPartitioning => null()
+    
     contains
 
-    subroutine setPointerRegion(user_func)
+    subroutine setPointerGetRegion(user_func)
         procedure(getRegion_f) :: user_func
         getRegion => user_func
-    end subroutine setPointerRegion
+    end subroutine setPointerGetRegion
+
+    subroutine setPointerUserDefinedMeshPartitioning(user_func)
+        procedure(userDefinedMeshPartitioning_f) :: user_func
+        userDefinedMeshPartitioning => user_func
+    end subroutine setPointerUserDefinedMeshPartitioning
 
     subroutine GetMETISElementsPartitionByPolicy(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
         use HexMeshClass
@@ -43,7 +64,7 @@ module MeshPartitioningPolicies
         use MPI_Process_Info
         use FTValueDictionaryClass
         use Utilities                   , only : toLower
-        use FileReadingUtilities        , only : GetIntValue
+        use FileReadingUtilities        , only : getIntArrayFromString
         implicit none
         type(HexMesh), intent(in)              :: mesh
         integer,       intent(in)              :: no_of_domains
@@ -68,8 +89,15 @@ module MeshPartitioningPolicies
         !
         ! Read regions information
         !
+        ! Check that getRegion pointer has been associated
+        if (.not. associated(getRegion)) then
+            print *, "getRegion pointer has not been associated. Associate it in the UserDefinedStartup subroutine of the ProblemFile."
+            print *, "See an example in the documentation: AJRTODO."
+            errorMessage(STD_OUT)
+            error stop
+        end if
         ! Get the number of regions
-        nra = GetIntValue(controlVariables % StringValueForKey(partitioningNumberOfRegions_KEY, requestedLength=LINE_LENGTH))
+        nra = controlVariables % integerValueForKey(partitioningNumberOfRegions_KEY)
         allocate(ner_ra(nra)) ! For each region (ra), the number of elements in such region (ner)
         allocate(ra_ea(nea)) ! Stores, for each global element (ea), its region (ra)
         ner_ra = 0
@@ -84,7 +112,6 @@ module MeshPartitioningPolicies
             do ra = 1, nra
             write(*,'(A,I0,A,I0)') 'Identified ', ner_ra(ra), ' elements of region ', ra
             end do
-            error stop
         end if
 
         allocate(ndom_ra(nra)) ! For each region (ra), the number of domains this region should be decomposed into
@@ -115,13 +142,27 @@ module MeshPartitioningPolicies
             partitioningRegionsPolicyType = partitioningRegionsPolicyProportionalType
         end if
         if (partitioningRegionsPolicyType == partitioningRegionsPolicyCustomType) then
-            ! AJRTODO
+            ! AJRTODO: Test
+            if (.not. associated(userDefinedMeshPartitioning)) then
+                print *, "userDefinedMeshPartitioning pointer has not been associated. Associate it in the UserDefinedStartup subroutine of the ProblemFile."
+                print *, "See an example in the documentation: AJRTODO."
+                errorMessage(STD_OUT)
+                error stop
+            end if
+            call userDefinedMeshPartitioning(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
         else
             allocate(ndr_ra(nra))
             select case (partitioningRegionsPolicyType)
             case (partitioningRegionsPolicyFixedRatioType)
-                ! AJRTODO: Read rat_ra from control file
-                allocate(rat_ra(nra))
+                ! AJRTODO: Test
+                rat_ra = getIntArrayFromString(controlVariables % stringValueForKey(partitioningRegionsRatio_KEY, requestedLength=LINE_LENGTH))
+                if (size(rat_ra) .ne. nra) then
+                    print *, "The size of the vector of ratios does not match the number of regions."
+                    print *, "Number of regions: ", nra
+                    print *, "Size of vector of ratios: ", size(rat_ra)
+                    errorMessage(STD_OUT)
+                    error stop
+                end if
                 call compute_fixed_ratio_partition(nra, no_of_domains, rat_ra, ndr_ra)
             case (partitioningRegionsPolicyProportionalType)
                 call compute_proportional_partition(nra, no_of_domains, ner_ra, ndr_ra)
@@ -131,6 +172,7 @@ module MeshPartitioningPolicies
                 end do
             end select
             ! Partition the elements in each region
+            print *, "ndr_ra: ", ndr_ra
             elementsDomain = -1
             do ra = 1, nra
                 call partition_region_METIS(mesh, ra, ra_ea, ner_ra(ra), ndr_ra(ra), elementsDomain)
@@ -434,7 +476,7 @@ module MeshPartitioningPolicies
         elemind = 1
         do ea = 1, nea
             if (ra_ea(ea) == ra) then ! If the element belongs to the current region
-                da_ea(ea) = da_er(elemind)
+                da_ea(ea) = da_er(elemind) + 1 ! METIS starts with 0
                 elemind = elemind + 1
             end if
         end do
