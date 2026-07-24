@@ -40,7 +40,7 @@ end interface
 ```
 This pure function, given an element of the mesh, returns the region to which this element is assigned to. The return value is an integer in the set \( \lbrace 1, ..., N_r \rbrace \), where \( N_r \) is the number of different regions in the domain.
 
-An example of this policy can be found in the test AJRTODO. 
+An example of this policy can be found in the test `test/Multiphase/MeshPartitioningPolicies/FixedRatio`. 
 
 ## Proportional partitioning policy
 
@@ -64,7 +64,7 @@ end interface
 ```
 This pure function, given an element of the mesh, returns the region to which this element is assigned to. The return value is an integer in the set \( \lbrace 1, ..., N_r \rbrace \), where \( N_r \) is the number of different regions in the domain.
 
-An example of this policy can be found in the test AJRTODO. 
+An example of this policy can be found in the test `test/Multiphase/MeshPartitioningPolicies/Proportional`. 
 
 ## Shared partitioning policy
 
@@ -88,7 +88,7 @@ end interface
 ```
 This pure function, given an element of the mesh, returns the region to which this element is assigned to. The return value is an integer in the set \( \lbrace 1, ..., N_r \rbrace \), where \( N_r \) is the number of different regions in the domain.
 
-An example of this policy can be found in the test AJRTODO. 
+An example of this policy can be found in the test `test/Multiphase/MeshPartitioningPolicies/Shared`. 
 
 ## Custom partitioning policy
 
@@ -113,4 +113,4 @@ In this subroutine, the variables `elementsDomain` and `nodesDomain` have to be 
 
 Moreover, in the `UserDefinedStartup` function of the `ProblemFile.f90`, a function pointer has to be set through a call to the subroutine `setPointerUserDefinedMeshPartitioning`.
 
-An example of this policy can be found in the test AJRTODO. 
+An example of this policy can be found in the test `test/Multiphase/MeshPartitioningPolicies/Custom`. 

@@ -114,7 +114,7 @@ module MeshPartitioningPolicies
         if (partitioningRegionsPolicyType == partitioningRegionsPolicyCustomType) then
             if (.not. associated(userDefinedMeshPartitioning)) then
                 print *, "userDefinedMeshPartitioning pointer has not been associated. Associate it in the UserDefinedStartup subroutine of the ProblemFile."
-                print *, "See an example in the documentation: AJRTODO."
+                print *, "See an example in the documentation: test/Multiphase/MeshPartitioningPolicies/Custom."
                 errorMessage(STD_OUT)
                 error stop
             end if
@@ -128,7 +128,9 @@ module MeshPartitioningPolicies
         ! Check that getRegion pointer has been associated
         if (.not. associated(getRegion)) then
             print *, "getRegion pointer has not been associated. Associate it in the UserDefinedStartup subroutine of the ProblemFile."
-            print *, "See an example in the documentation: AJRTODO."
+            if (partitioningRegionsPolicyType == partitioningRegionsPolicyFixedRatioType) print *, "See an example in the documentation: test/Multiphase/MeshPartitioningPolicies/FixedRatio."
+            if (partitioningRegionsPolicyType == partitioningRegionsPolicyProportionalType) print *, "See an example in the documentation: test/Multiphase/MeshPartitioningPolicies/Proportional."
+            if (partitioningRegionsPolicyType == partitioningRegionsPolicySharedType) print *, "See an example in the documentation: test/Multiphase/MeshPartitioningPolicies/Shared."
             errorMessage(STD_OUT)
             error stop
         end if
