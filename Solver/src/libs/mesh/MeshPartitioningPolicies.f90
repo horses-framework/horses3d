@@ -374,7 +374,8 @@ module MeshPartitioningPolicies
         real(kind=RP), pointer :: tpwgt(:) => null()
         real(kind=rp) :: objval
         integer :: nvertex = 8, ncommon = 4
-        integer, allocatable :: eptr(:), eind(:), opts(:), w_ea(:)
+        integer, allocatable :: eptr(:), eind(:), opts(:)
+        integer, target, allocatable :: w_ea(:)
         integer :: ea, nea, npa, elemind, nodeind
         integer, allocatable :: da_er(:), da_pa(:)
 
