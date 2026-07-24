@@ -58,7 +58,7 @@ module MeshPartitioningPolicies
         userDefinedMeshPartitioning => user_func
     end subroutine setPointerUserDefinedMeshPartitioning
 
-    subroutine GetMETISElementsPartitionByPolicy(mesh, no_of_domains, elementsDomain, nodesDomain, controlVariables)
+    subroutine GetMETISElementsPartitionByPolicy(mesh, no_of_domains, useWeights, controlVariables, elementsDomain, nodesDomain)
         use HexMeshClass
         use SMConstants
         use MPI_Process_Info
@@ -68,13 +68,10 @@ module MeshPartitioningPolicies
         implicit none
         type(HexMesh), intent(in)              :: mesh
         integer,       intent(in)              :: no_of_domains
+        logical,       intent(in)              :: useWeights
+        type(FTValueDictionary), intent(in)    :: controlVariables
         integer,       intent(out)             :: elementsDomain(mesh % no_of_elements)
         integer,       intent(out)             :: nodesDomain(size(mesh % nodes))
-        ! logical,       intent(in)              :: useWeights
-        type(FTValueDictionary), intent(in)    :: controlVariables
-        ! integer,       intent(in)              :: nLevel 
-        ! integer,       intent(in)      	     :: eID_Order(mesh % no_of_elements) !AJRTODO
-        ! integer,       intent(in)      	     :: nElementLevel(nLevel)
 
         ! Local variables
         integer, allocatable :: r_arrayPartMat(:)
@@ -175,7 +172,7 @@ module MeshPartitioningPolicies
         elementsDomain = -1
         offset = 0
         do ra = 1, nra
-            call partition_region_METIS(mesh, ra, ra_ea, ner_ra(ra), ndr_ra(ra), offset, elementsDomain)
+            call partition_region_METIS(mesh, ra, ra_ea, ner_ra(ra), ndr_ra(ra), offset, useWeights, elementsDomain)
             if ((partitioningRegionsPolicyType == partitioningRegionsPolicyFixedRatioType) .or. (partitioningRegionsPolicyType == partitioningRegionsPolicyProportionalType)) then
                 offset = offset + ndr_ra(ra)
             end if
@@ -359,7 +356,7 @@ module MeshPartitioningPolicies
     !====================================================================
     ! Partition element list with METIS
     !====================================================================
-    subroutine partition_region_METIS(mesh, ra, ra_ea, ner, ndr, offset, da_ea)
+    subroutine partition_region_METIS(mesh, ra, ra_ea, ner, ndr, offset, useWeights, da_ea)
         use HexMeshClass
         use SMConstants
         implicit none
@@ -369,6 +366,7 @@ module MeshPartitioningPolicies
         integer, intent(in) :: ner ! The number of elements in the current region
         integer, intent(in) :: ndr ! The number of MPI domains that this region should be divided into
         integer, intent(in) :: offset
+        logical, intent(in) :: useWeights
         integer, intent(out) :: da_ea(mesh % no_of_elements) ! For each element (ea), the MPI domain it belongs to (da)
 
         ! Local variables
@@ -376,7 +374,7 @@ module MeshPartitioningPolicies
         real(kind=RP), pointer :: tpwgt(:) => null()
         real(kind=rp) :: objval
         integer :: nvertex = 8, ncommon = 4
-        integer, allocatable :: eptr(:), eind(:), opts(:)
+        integer, allocatable :: eptr(:), eind(:), opts(:), w_ea(:)
         integer :: ea, nea, npa, elemind, nodeind
         integer, allocatable :: da_er(:), da_pa(:)
 
@@ -398,6 +396,18 @@ module MeshPartitioningPolicies
             end if
         end do
         eptr(elemind) = nodeind - 1
+
+        ! Calculate weights based on NDOF
+        if (useWeights) then
+            allocate(w_ea(nea))
+            do ea = 1, nea
+                ! Base weight from polynomial order
+                w_ea(ea) = product(mesh % elements(ea) % Nxyz + 1)
+            end do
+            if (maxval(w_ea) .ne. minval(w_ea)) then
+                vwgt => w_ea
+            endif
+        end if 
 
         
         ! METIS options
@@ -425,6 +435,8 @@ module MeshPartitioningPolicies
             end if
         end do
         deallocate(eptr, eind, opts, da_er, da_pa)
+        safedeallocate(w_ea)
+        if (associated(vwgt)) nullify(vwgt)
     end subroutine partition_region_METIS
 
 end module MeshPartitioningPolicies
