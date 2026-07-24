@@ -105,6 +105,10 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./Multiphase/Pipe \
             ./Multiphase/Monopole_pAdaptationRL \
             ./Multiphase/ActuatorLineInterpolation \
+            ./Multiphase/MeshPartitioningPolicies/Custom \
+            ./Multiphase/MeshPartitioningPolicies/FixedRatio \
+            ./Multiphase/MeshPartitioningPolicies/Proportional \
+            ./Multiphase/MeshPartitioningPolicies/Shared \
             ./Particles/FreeFall \
             ./Particles/RadiationHeat \
             ./Particles/Pouransari \
