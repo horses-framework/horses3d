@@ -54,13 +54,16 @@ MODULE SlidingMeshClass
       integer,                   allocatable :: rotmortars(:)
       integer                                :: numBFacePoints
       integer                                :: numSlidingElements
-      integer                                :: numSlidingInterfaceElements 
+      integer                                :: numSlidingInterfaceElements
       integer                                :: currentSectorID
       real(KIND=RP)                          :: center(2)
       real(KIND=RP)                          :: radius 
       real(KIND=RP)                          :: theta        ! rotation angle
       real(KIND=RP)                          :: omega
       real(KIND=RP)                          :: localAngle
+      real(KIND=RP)                          :: angularVelocity = 0.0_RP ! rad per (nondimensional) time unit; magnitude of the
+                                                                         ! rotation rate actually applied to the geometry. Must be
+                                                                         ! kept equal to theta/dt by whoever advances the mesh.
       integer                                :: rotationAxis
       logical                                :: initialized=.false.
       logical                                :: conforming=.false.
@@ -71,7 +74,11 @@ MODULE SlidingMeshClass
         procedure :: GetInfo                                => SlidingMesh_GetInfo
         procedure :: Initialize                         => SlidingMesh_Initialize
         procedure :: Destruct                           => SlidingMesh_Destruct
-      
+        procedure :: OmegaVector                        => SlidingMesh_OmegaVector
+        procedure :: RotationCenter3D                   => SlidingMesh_RotationCenter3D
+        procedure :: GridVelocityAt                     => SlidingMesh_GridVelocityAt
+        procedure :: PlaneCoords                        => SlidingMesh_PlaneCoords
+
     end type
 
 !     ========
@@ -163,7 +170,8 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
         print *, "Unrecognized rotation axis value. Possible values are: x, y, z."
         errorMessage(STD_OUT)
         error stop
-    end select   
+    end select
+
     
     self % isConfigured = .true.
 
@@ -319,5 +327,104 @@ logical function SlidingMeshIsDefined()
     close(fID)                             
 
 end function SlidingMeshIsDefined
+
+!  -----------------------------------------------------------------------
+!  Angular velocity vector of the sliding region, in the same sign
+!  convention as the rotation matrices applied by RotateSlidingRegion:
+!  a positive control-file angle corresponds to R_x(+theta), R_z(+theta)
+!  and R_y(-theta) per step. Any grid-velocity user must go through this
+!  function so that flux and geometry can never disagree on the direction.
+!  -----------------------------------------------------------------------
+pure function SlidingMesh_OmegaVector(self) result(omg)
+    implicit none
+    class(SlidingMesh), intent(in) :: self
+    real(kind=RP)                  :: omg(3)
+
+    omg = 0.0_RP
+    select case (self % rotationAxis)
+    case (rotationAxis_X)
+        omg(1) =  self % angularVelocity
+    case (rotationAxis_Y)
+        omg(2) = -self % angularVelocity
+    case (rotationAxis_Z)
+        omg(3) =  self % angularVelocity
+    end select
+
+end function SlidingMesh_OmegaVector
+
+!  -----------------------------------------------------------------------
+!  The two control-file center coordinates live in the plane normal to the
+!  rotation axis. NOTE: RotateSlidingRegion currently rotates about the
+!  origin (no center offset), so only center = (0,0) is consistent with
+!  the geometry update; this mapping exists so the fluxes stay correct the
+!  day the rotation itself honors the center.
+!  -----------------------------------------------------------------------
+pure function SlidingMesh_RotationCenter3D(self) result(xc)
+    implicit none
+    class(SlidingMesh), intent(in) :: self
+    real(kind=RP)                  :: xc(3)
+
+    xc = 0.0_RP
+    select case (self % rotationAxis)
+    case (rotationAxis_X)      ! rotation plane (y,z)
+        xc(2) = self % center(1)
+        xc(3) = self % center(2)
+    case (rotationAxis_Y)      ! rotation plane (x,z)
+        xc(1) = self % center(1)
+        xc(3) = self % center(2)
+    case (rotationAxis_Z)      ! rotation plane (x,y)
+        xc(1) = self % center(1)
+        xc(2) = self % center(2)
+    end select
+
+end function SlidingMesh_RotationCenter3D
+
+!  -----------------------------------------------------------------------
+!  In-plane coordinate indices (horizontal ih, vertical iv) of the rotation
+!  plane. All three rotation matrices in RotateSlidingRegion act as the SAME
+!  counterclockwise rotation when expressed in these (h,v) coordinates
+!  (R_x(+theta) in (y,z), R_y(-theta) in (x,z), R_z(+theta) in (x,y)), so the
+!  direction-sensitive sliding connectivity logic written for the y-axis
+!  case generalizes to any principal axis by pure index substitution. The
+!  control-file center maps as center(1) <-> X(ih), center(2) <-> X(iv),
+!  consistent with RotationCenter3D.
+!  -----------------------------------------------------------------------
+pure subroutine SlidingMesh_PlaneCoords(self, ih, iv)
+    implicit none
+    class(SlidingMesh), intent(in)  :: self
+    integer,            intent(out) :: ih, iv
+
+    select case (self % rotationAxis)
+    case (rotationAxis_X)
+        ih = 2 ; iv = 3
+    case (rotationAxis_Y)
+        ih = 1 ; iv = 3
+    case (rotationAxis_Z)
+        ih = 1 ; iv = 2
+    case default
+        ih = 1 ; iv = 3
+    end select
+
+end subroutine SlidingMesh_PlaneCoords
+
+!  -----------------------------------------------------------------------
+!  Grid velocity v_g = Omega x (x - xc) at a physical point x
+!  -----------------------------------------------------------------------
+pure function SlidingMesh_GridVelocityAt(self, x) result(vg)
+    implicit none
+    class(SlidingMesh), intent(in) :: self
+    real(kind=RP),      intent(in) :: x(3)
+    real(kind=RP)                  :: vg(3)
+
+    real(kind=RP) :: omg(3), r(3)
+
+    omg = self % OmegaVector()
+    r   = x - self % RotationCenter3D()
+
+    vg(1) = omg(2)*r(3) - omg(3)*r(2)
+    vg(2) = omg(3)*r(1) - omg(1)*r(3)
+    vg(3) = omg(1)*r(2) - omg(2)*r(1)
+
+end function SlidingMesh_GridVelocityAt
 
 END MODULE SlidingMeshClass

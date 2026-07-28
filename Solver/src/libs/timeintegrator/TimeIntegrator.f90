@@ -792,6 +792,23 @@ DO k = sem  % numberOfTimeSteps, self % initial_iter + self % numTimeSteps-1
          call LambInterpolation % interpolate(sem % mesh, t)
 #endif
 !
+!        Sliding mesh: arm the ALE fluxes for this step. The grid angular speed
+!        is exactly the angle the geometry advances per step divided by the
+!        step size, so flux and mesh motion cannot drift apart even with a
+!        CFL-based (varying) dt. The geometry itself is advanced inside the
+!        RK3 stepper, once per stage, so every stage residual is evaluated at
+!        its own stage position. Other integrators are not wired yet and run
+!        with a frozen mesh and inertial fluxes.
+!        ----------------------------------------------------------------------
+   if ( sem % mesh % SlidingMesh % active .and. &
+        self % integratorType == TIME_ACCURATE .and. &
+        self % integration_method == EXPLICIT_SOLVER .and. &
+        (.not. self % adaptive_dt) .and. &
+        self % RKStep_key == RK3_KEY ) then
+      sem % mesh % SlidingMesh % angularVelocity = sem % mesh % SlidingMesh % theta / dt
+      sem % mesh % slidingflux = .true.
+   end if
+!
 !        Perform time step
 !        -----------------
          SELECT CASE (self % integration_method)

@@ -486,15 +486,29 @@ module SpatialDiscretization
                      call computeElementInterfaceFlux(masterFace1=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
                   end if 
                end do 
-            elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
-               call computeElementInterfaceFlux(f=mesh % faces(fID))
-   
-            end if 
+            elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then
+!
+!              Faces interior to the rotating region move rigidly with it and
+!              need the grid-velocity term in the Riemann flux. The gate must
+!              match the volumetric one (mesh % slidingflux .and. e % sliding).
+!              ----------------------------------------------------------------
+               if ( mesh % slidingflux ) then
+                  if ( mesh % elements(mesh % faces(fID) % elementIDs(1)) % sliding .and. &
+                       mesh % elements(mesh % faces(fID) % elementIDs(2)) % sliding ) then
+                     call computeElementInterfaceFlux(f=mesh % faces(fID), SM=mesh % SlidingMesh)
+                  else
+                     call computeElementInterfaceFlux(f=mesh % faces(fID))
+                  end if
+               else
+                  call computeElementInterfaceFlux(f=mesh % faces(fID))
+               end if
+
+            end if
          end do
 !$omp end do nowait
 
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-         if (mesh % SlidingMesh % active) then 
+         if (mesh % SlidingMesh % active) then
 !$omp do schedule(runtime) private(fID)
             do iFace = 1, size(mesh % mortar_faces)
                fID = mesh % mortar_faces(iFace)%ID
@@ -519,11 +533,16 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(fID)
             do iFace = 1, size(mesh % mortar_faces)
                fID = mesh % mortar_faces(iFace)%ID
-               call computeElementInterfaceFlux(masterFace1=mesh % faces(mesh % mortar_faces(fID)%Mortar(1)), masterFace2=mesh % faces(mesh % mortar_faces(fID)%Mortar(2)), &
-               f=mesh % mortar_faces(iFace), sliding=.true.)
-            end do 
+               if ( mesh % slidingflux ) then
+                  call computeElementInterfaceFlux(masterFace1=mesh % faces(mesh % mortar_faces(fID)%Mortar(1)), masterFace2=mesh % faces(mesh % mortar_faces(fID)%Mortar(2)), &
+                  f=mesh % mortar_faces(iFace), sliding=.true., SM=mesh % SlidingMesh)
+               else
+                  call computeElementInterfaceFlux(masterFace1=mesh % faces(mesh % mortar_faces(fID)%Mortar(1)), masterFace2=mesh % faces(mesh % mortar_faces(fID)%Mortar(2)), &
+                  f=mesh % mortar_faces(iFace), sliding=.true.)
+               end if
+            end do
 !$omp end do nowait
-         end if 
+         end if
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_boundary)
             fID = mesh % faces_boundary(iFace)
@@ -1660,14 +1679,11 @@ module SpatialDiscretization
 !
 !        Compute inviscid contravariant flux
 !        -----------------------------------
-          if (mesh%slidingflux .and. e%sliding) then 
-!         call SlidingMeshFluxCalculation(e, SlidingMeshFlux)
-          call contravariantSMFlux ( e , inviscidContravariantFlux )
-            ! print*, SlidingMeshFlux/inviscidContravariantFlux 
-!            inviscidContravariantFlux = inviscidContravariantFlux - SlidingMeshFlux
-         else 
+          if (mesh%slidingflux .and. e%sliding) then
+          call contravariantSMFlux ( e , mesh % SlidingMesh, inviscidContravariantFlux )
+         else
             call HyperbolicDiscretization % ComputeInnerFluxes ( e , EulerFlux, inviscidContravariantFlux )
-         end if 
+         end if
         !
 !        Compute viscous contravariant flux
 !        ----------------------------------
@@ -1706,6 +1722,13 @@ module SpatialDiscretization
             e % storage % QDot = ScalarStrongIntegrals % StdVolumeGreen ( e , NCONS, contravariantFlux )
 
          type is (SplitDG_t)
+!
+!           The two-point fluxes have no grid-velocity term, so feeding them the
+!           ALE volume flux would silently mix moving- and fixed-mesh operators
+!           ---------------------------------------------------------------------
+            if (mesh % slidingflux .and. e % sliding) then
+               error stop "Sliding-mesh ALE fluxes are only implemented for standard DG: use a non-split hyperbolic discretization."
+            end if
 !
 !           Compute sharp fluxes for skew-symmetric approximations
 !           ------------------------------------------------------
@@ -1753,16 +1776,12 @@ module SpatialDiscretization
 !
 !        Compute inviscid contravariant flux
 !        -----------------------------------
-!         call HyperbolicDiscretization % ComputeInnerFluxes ( e , EulerFlux, inviscidContravariantFlux )
-         if (mesh%slidingflux .and. e%sliding) then 
-!         call SlidingMeshFluxCalculation(e, SlidingMeshFlux)
-          call contravariantSMFlux ( e , inviscidContravariantFlux )
-            ! print*, SlidingMeshFlux/inviscidContravariantFlux 
-!            inviscidContravariantFlux = inviscidContravariantFlux - SlidingMeshFlux
-         else 
+         if (mesh%slidingflux .and. e%sliding) then
+          call contravariantSMFlux ( e , mesh % SlidingMesh, inviscidContravariantFlux )
+         else
             call HyperbolicDiscretization % ComputeInnerFluxes ( e , EulerFlux, inviscidContravariantFlux )
-         end if 
-        
+         end if
+
 !
 !        Compute viscous contravariant flux
 !        ----------------------------------
@@ -1801,6 +1820,13 @@ module SpatialDiscretization
             e % storage % QDot = ScalarWeakIntegrals % StdVolumeGreen ( e, NCONS, contravariantFlux )
 
          type is (SplitDG_t)
+!
+!           The two-point fluxes have no grid-velocity term, so feeding them the
+!           ALE volume flux would silently mix moving- and fixed-mesh operators
+!           ---------------------------------------------------------------------
+            if (mesh % slidingflux .and. e % sliding) then
+               error stop "Sliding-mesh ALE fluxes are only implemented for standard DG: use a non-split hyperbolic discretization."
+            end if
 !
 !           Compute sharp fluxes for skew-symmetric approximations
 !           ------------------------------------------------------
@@ -1842,14 +1868,16 @@ module SpatialDiscretization
 !
 !/////////////////////////////////////////////////////////////////////////////////////////////
 !
-      subroutine computeElementInterfaceFlux(f, masterFace1, masterFace2, sliding )
+      subroutine computeElementInterfaceFlux(f, masterFace1, masterFace2, sliding, SM )
         use FaceClass
         use RiemannSolvers_NS
+        use SlidingMeshClass, only: SlidingMesh
         implicit none
         type(Face)   , intent(inout) :: f
-        type(Face), optional, intent(inout) :: masterFace1 
+        type(Face), optional, intent(inout) :: masterFace1
         type(Face), optional, intent(inout) :: masterFace2
         logical, optional , intent(in) :: sliding
+        type(SlidingMesh), optional, intent(in) :: SM  ! present => ALE correction with this rotation (face moves rigidly with the rotor)
 
 
         integer       :: i, j
@@ -1917,12 +1945,25 @@ module SpatialDiscretization
   !              --------------
   !   
                
-                 call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
-                                   QRight = f % storage(2) % Q(:,i,j), &
-                                   nHat   = f % geom % normal(:,i,j), &
-                                   t1     = f % geom % t1(:,i,j), &
-                                   t2     = f % geom % t2(:,i,j), &
-                                   flux   = inv_flux(:,i,j) )
+  !              Faces interior to the sliding region (SM present, not a mortar)
+  !              move rigidly with it: both elements get the ALE Lax-Friedrichs
+  !              flux. On sliding mortar faces the shared/static-side flux stays
+  !              inertial; the rotor side is rebuilt below before projection.
+  !              ----------------------------------------------------------------
+                 if ( present(SM) .and. .not. present(sliding) ) then
+                    call ALE_LxF_Flux(QLeft  = f % storage(1) % Q(:,i,j), &
+                                      QRight = f % storage(2) % Q(:,i,j), &
+                                      nHat   = f % geom % normal(:,i,j), &
+                                      vg     = SM % GridVelocityAt(f % geom % x(:,i,j)), &
+                                      flux   = inv_flux(:,i,j) )
+                 else
+                    call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
+                                      QRight = f % storage(2) % Q(:,i,j), &
+                                      nHat   = f % geom % normal(:,i,j), &
+                                      t1     = f % geom % t1(:,i,j), &
+                                      t2     = f % geom % t2(:,i,j), &
+                                      flux   = inv_flux(:,i,j) )
+                 end if
   !
   !              Multiply by the Jacobian
   !              ------------------------
@@ -1935,27 +1976,50 @@ module SpatialDiscretization
   !        Return the flux to elements
   !        ---------------------------
   !
-      if (.not.present(sliding)) then     
-         if (f % MortarType == MORTAR_NONE) then 
+      if (.not.present(sliding)) then
+         if (f % MortarType == MORTAR_NONE) then
             Sidearray = (/1,2/)
             call f % ProjectFluxToElements(NCONS, flux, Sidearray)
-         end if 
-         if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace1)) then 
+         end if
+         if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace1)) then
             Sidearray = (/1,0/)
             call masterFace1 % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
                slaveFace=f, MortarFlux=flux)
                Sidearray = (/0,2/)
                call f % ProjectFluxToElements(NCONS, flux, Sidearray)
          end if 
-      else 
-
+      else
+!
+!        Sliding interface: side 1 is the static element and side 2 the rotating
+!        one (by construction in ConstructSlidingMortars). The static side takes
+!        the inertial flux. The rotor side's facets move with nonzero normal
+!        speed whenever the discrete interface is not exactly a surface of
+!        revolution, so its projection is rebuilt with the ALE Lax-Friedrichs
+!        flux (grid-speed term + moving-frame upwinding); omitting it breaks the
+!        rotor elements' volume/surface cancellation by O(facet angle * omega).
+!        The two sides then differ by O(s [[Q]]), which vanishes for smooth
+!        solutions under refinement.
+!        -----------------------------------------------------------------------
          Sidearray = (/1,0/)
          call masterFace1 % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
-         slaveFace=f, MortarFlux=flux, sliding= .true.) 
+         slaveFace=f, MortarFlux=flux, sliding= .true.)
+
+         if ( present(SM) ) then
+            do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
+               call ALE_LxF_Flux(QLeft  = f % storage(1) % Q(:,i,j), &
+                                 QRight = f % storage(2) % Q(:,i,j), &
+                                 nHat   = f % geom % normal(:,i,j), &
+                                 vg     = SM % GridVelocityAt(f % geom % x(:,i,j)), &
+                                 flux   = inv_flux(:,i,j) )
+               flux(:,i,j) = ( inv_flux(:,i,j) - visc_flux(:,i,j) ) * f % geom % jacobian(i,j) &
+                             - Avisc_flux(:,i,j)
+            end do ; end do
+         end if
+
          Sidearray = (/2,0/)
          call masterFace2 % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
-         slaveFace=f, MortarFlux=flux,  sliding=.true.) 
-     end if 
+         slaveFace=f, MortarFlux=flux,  sliding=.true.)
+     end if
 
      end subroutine computeElementInterfaceFlux
 
@@ -2191,25 +2255,72 @@ module SpatialDiscretization
       call f % ProjectFluxToElements(NCONS, fStar, Sidearray)
 
       end subroutine computeBoundaryFlux
-      subroutine contravariantSMFlux(e, contravariantFlux)
+!
+!     -------------------------------------------------------------------------
+!     ALE Lax-Friedrichs flux for faces that move rigidly with the sliding
+!     region: H = {{F.n}} - (v_g.n){{Q}} - lambda/2 [[Q]], with the dissipation
+!     upwinded in the moving frame, lambda = max |u.n - v_g.n| + a. Reduces to
+!     the standard Lax-Friedrichs/Rusanov flux when the grid velocity vanishes.
+!     -------------------------------------------------------------------------
+      subroutine ALE_LxF_Flux(QLeft, QRight, nHat, vg, flux)
          implicit none
-         type(element), intent(in)  :: e
+         real(kind=RP), intent(in)  :: QLeft(NCONS), QRight(NCONS)
+         real(kind=RP), intent(in)  :: nHat(NDIM), vg(NDIM)
+         real(kind=RP), intent(out) :: flux(NCONS)
+
+         real(kind=RP) :: s, lambda
+         real(kind=RP) :: invRhoL, uL, vL, wL, unL, pL, aL, FnL(NCONS)
+         real(kind=RP) :: invRhoR, uR, vR, wR, unR, pR, aR, FnR(NCONS)
+
+         s = vg(IX)*nHat(IX) + vg(IY)*nHat(IY) + vg(IZ)*nHat(IZ)
+
+         invRhoL = 1.0_RP / QLeft(IRHO)
+         uL = QLeft(IRHOU)*invRhoL ; vL = QLeft(IRHOV)*invRhoL ; wL = QLeft(IRHOW)*invRhoL
+         unL = uL*nHat(IX) + vL*nHat(IY) + wL*nHat(IZ)
+         pL = thermodynamics % gammaMinus1 * ( QLeft(IRHOE) &
+              - 0.5_RP*(QLeft(IRHOU)*uL + QLeft(IRHOV)*vL + QLeft(IRHOW)*wL) )
+         aL = sqrt(thermodynamics % gamma * pL * invRhoL)
+         FnL(IRHO)  = QLeft(IRHO) * unL
+         FnL(IRHOU) = QLeft(IRHOU)*unL + pL*nHat(IX)
+         FnL(IRHOV) = QLeft(IRHOV)*unL + pL*nHat(IY)
+         FnL(IRHOW) = QLeft(IRHOW)*unL + pL*nHat(IZ)
+         FnL(IRHOE) = (QLeft(IRHOE) + pL) * unL
+
+         invRhoR = 1.0_RP / QRight(IRHO)
+         uR = QRight(IRHOU)*invRhoR ; vR = QRight(IRHOV)*invRhoR ; wR = QRight(IRHOW)*invRhoR
+         unR = uR*nHat(IX) + vR*nHat(IY) + wR*nHat(IZ)
+         pR = thermodynamics % gammaMinus1 * ( QRight(IRHOE) &
+              - 0.5_RP*(QRight(IRHOU)*uR + QRight(IRHOV)*vR + QRight(IRHOW)*wR) )
+         aR = sqrt(thermodynamics % gamma * pR * invRhoR)
+         FnR(IRHO)  = QRight(IRHO) * unR
+         FnR(IRHOU) = QRight(IRHOU)*unR + pR*nHat(IX)
+         FnR(IRHOV) = QRight(IRHOV)*unR + pR*nHat(IY)
+         FnR(IRHOW) = QRight(IRHOW)*unR + pR*nHat(IZ)
+         FnR(IRHOE) = (QRight(IRHOE) + pR) * unR
+
+         lambda = max( abs(unL - s) + aL, abs(unR - s) + aR )
+
+         flux = 0.5_RP*(FnL + FnR) - 0.5_RP*s*(QLeft + QRight) - 0.5_RP*lambda*(QRight - QLeft)
+
+      end subroutine ALE_LxF_Flux
+
+      subroutine contravariantSMFlux(e, SM, contravariantFlux)
+         use SlidingMeshClass, only: SlidingMesh
+         implicit none
+         type(element),     intent(in)  :: e
+         type(SlidingMesh), intent(in)  :: SM
          real(kind=RP), intent(out) :: contravariantFlux(1:NCONS, 0:e%Nxyz(1), 0:e%Nxyz(2), 0:e%Nxyz(3), 1:NDIM )
-         real(kind=RP)              :: omega(IX:IZ), u_mesh, v_mesh, w_mesh, u, v, w, p
+         real(kind=RP)              :: vg(IX:IZ), u_mesh, v_mesh, w_mesh, u, v, w, p
          real(kind=RP)              :: F(1:NCONS,IX:IZ)
-         
+
          integer :: i,j,k
-            ! define angular velocity
-            omega(1) = 0.0_RP
-            omega(2) = PI/20.0_RP
-      !     omega(2) = 0.0_RP
-            omega(3) = 0.0_RP
-            ! loop inside the element 
+            ! loop inside the element
          do k = 0, e%Nxyz(3)   ; do j = 0, e%Nxyz(2)    ; do i = 0, e%Nxyz(1)
-         ! compute the velocity of the mesh 
-            u_mesh = (e % geom % x(IZ,i,j,k)*omega(2)-omega(3)*e % geom % x(IY,i,j,k))
-            v_mesh = (e % geom % x(IX,i,j,k)*omega(3)-omega(1)*e % geom % x(IZ,i,j,k))
-            w_mesh = (e % geom % x(IY,i,j,k)*omega(1)-omega(2)*e % geom % x(IX,i,j,k))
+         ! compute the velocity of the mesh
+            vg = SM % GridVelocityAt(e % geom % x(:,i,j,k))
+            u_mesh = vg(IX)
+            v_mesh = vg(IY)
+            w_mesh = vg(IZ)
 
             u = e % storage % Q(IRHOU,i,j,k) / e % storage % Q(IRHO,i,j,k)
             v = e % storage % Q(IRHOV,i,j,k) / e % storage % Q(IRHO,i,j,k)
@@ -2257,64 +2368,6 @@ module SpatialDiscretization
 
         end subroutine contravariantSMFlux
 
-        subroutine SlidingMeshFluxCalculation(e,  contravariantFlux)
-         type(element), intent(in)  :: e
-         real(kind=RP), intent(out) :: contravariantFlux(1:NCONS, 0:e%Nxyz(1), 0:e%Nxyz(2), 0:e%Nxyz(3), 1:NDIM )
-         real(kind=RP)              :: u_g, v_g, w_g, omega(3), F(NCONS,NDIM)
-         integer :: i,j,k
-         ! define angular velocity
-         omega(1) = 0.0_RP
-         omega(2) = PI/20.0_RP
-    !     omega(2) = 0.0_RP
-         omega(3) = 0.0_RP
-         ! loop inside the element 
-         do k = 0, e%Nxyz(3)   ; do j = 0, e%Nxyz(2)    ; do i = 0, e%Nxyz(1)
-         ! compute the velocity of the grid (adimensional)
-            u_g = (e % geom % x(IZ,i,j,k)*omega(2)-omega(3)*e % geom % x(IY,i,j,k))!/refValues%V
-            v_g = (e % geom % x(IX,i,j,k)*omega(3)-omega(1)*e % geom % x(IZ,i,j,k))!/refValues%V
-            w_g = (e % geom % x(IY,i,j,k)*omega(1)-omega(2)*e % geom % x(IX,i,j,k))!/refValues%V
-         ! compute cartesian fluxes due to mesh movement
-         ! print*, i,j,k,e % geom % x(:,i,j,k) , omega , u_g,v_g,w_g
-         !  X-Flux
-         !  ------   
-            F(IRHO , IX) = e % storage % Q(IRHO,i,j,k)  * u_g
-            F(IRHOU, IX) = e % storage % Q(IRHOU,i,j,k) * u_g 
-            F(IRHOV, IX) = e % storage % Q(IRHOV,i,j,k) * u_g
-            F(IRHOW, IX) = e % storage % Q(IRHOW,i,j,k) * u_g
-            F(IRHOE, IX) = e % storage % Q(IRHOE,i,j,k) * u_g
-         
-         !  Y-Flux
-         !  ------
-            F(IRHO , IY) = e % storage % Q(IRHO,i,j,k)  * v_g
-            F(IRHOU, IY) = e % storage % Q(IRHOU,i,j,k) * v_g
-            F(IRHOV, IY) = e % storage % Q(IRHOV,i,j,k) * v_g
-            F(IRHOW, IY) = e % storage % Q(IRHOW,i,j,k) * v_g
-            F(IRHOE, IY) = e % storage % Q(IRHOE,i,j,k) * v_g
-         
-         !  Z-Flux
-         !  ------
-            F(IRHO , IZ) = e % storage % Q(IRHO,i,j,k)  * w_g
-            F(IRHOU, IZ) = e % storage % Q(IRHOU,i,j,k) * w_g
-            F(IRHOV, IZ) = e % storage % Q(IRHOV,i,j,k) * w_g
-            F(IRHOW, IZ) = e % storage % Q(IRHOW,i,j,k) * w_g
-            F(IRHOE, IZ) = e % storage % Q(IRHOE,i,j,k) * w_g
-   !        
-         !  Contravariant flux computation 
-   
-            contravariantFlux(:,i,j,k,IX) =    F(:,IX) * e % geom % jGradXi(IX,i,j,k)   &
-                                             + F(:,IY) * e % geom % jGradXi(IY,i,j,k)   &
-                                             + F(:,IZ) * e % geom % jGradXi(IZ,i,j,k)
-   
-            contravariantFlux(:,i,j,k,IY) =    F(:,IX) * e % geom % jGradEta(IX,i,j,k)  &
-                                             + F(:,IY) * e % geom % jGradEta(IY,i,j,k)  &
-                                             + F(:,IZ) * e % geom % jGradEta(IZ,i,j,k)
-   
-            contravariantFlux(:,i,j,k,IZ) =    F(:,IX) * e % geom % jGradZeta(IX,i,j,k) &
-                                             + F(:,IY) * e % geom % jGradZeta(IY,i,j,k) &
-                                             + F(:,IZ) * e % geom % jGradZeta(IZ,i,j,k)
-   
-      enddo;enddo;enddo
-      end subroutine SlidingMeshFluxCalculation
 
       
 

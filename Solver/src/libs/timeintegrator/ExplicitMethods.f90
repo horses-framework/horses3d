@@ -698,12 +698,10 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
       REAL(KIND=RP), DIMENSION(3) :: a = (/0.0_RP       , -5.0_RP /9.0_RP , -153.0_RP/128.0_RP/)
       REAL(KIND=RP), DIMENSION(3) :: b = (/0.0_RP       ,  1.0_RP /3.0_RP ,    3.0_RP/4.0_RP  /)
       REAL(KIND=RP), DIMENSION(3) :: c = (/1.0_RP/3.0_RP,  15.0_RP/16.0_RP,    8.0_RP/15.0_RP /)
+!     Stage-to-stage rotation fractions for the sliding mesh: the geometry must
+!     sit at angle theta(t + b(k)*dt) when stage k's QDot is evaluated, so after
+!     stage k it advances by (b(k+1)-b(k))*theta, and by (1-b(3))*theta at the end
       REAL(KIND=RP), DIMENSION(3) :: auxiliar = (/1.0_RP/3.0_RP, (3.0_RP/4.0_RP-1.0_RP/3.0_RP) , 1.0_RP/4.0_RP /)
-      real(kind=RP) :: center(2)
-      real(kind=RP), DIMENSION(3) :: omega = (/0.0_RP, PI/20_RP, 0.0_RP/)
-      real(kind=RP) :: rad, angle
-      integer :: NB = 7
-
 
       INTEGER :: i, j, k, id
       logical :: updateQLowRK
@@ -719,14 +717,6 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
          do k = 1,3
             tk = t + b(k)*deltaT
             call ComputeTimeDerivative( mesh, particles, tk, CTD_IGNORE_MODE)
-            !if (mesh % slidingMesh % active .and. mesh % slidingflux) then
-            if (mesh % slidingMesh % active) then
-               center(1)=0.0_RP
-               center(2)=0.0_RP
-               rad=1.01_RP
-               angle=(omega(2)*deltaT) * auxiliar(k)
-               !CALL AdvanceSlidingMesh(mesh=mesh, rotationRadius=mesh % slidingMesh % radius, rotationCenter=mesh % slidingMesh % center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
-            end if
             if ( present(dts) ) then
                if (dts) call ComputePseudoTimeDerivative(mesh, tk, global_dt)
             end if
@@ -762,14 +752,6 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
          do k = 1,3
             tk = t + b(k)*deltaT
             call ComputeTimeDerivative( mesh, particles, tk, CTD_IGNORE_MODE)
-                  !if (mesh % slidingMesh % active .and. mesh % slidingflux) then
-            if (mesh % slidingMesh % active) then
-               center(1)=0.0_RP
-               center(2)=0.0_RP
-               rad=1.01_RP
-               angle=(omega(2)*deltaT) * auxiliar(k)
-               !CALL AdvanceSlidingMesh(mesh=mesh, rotationRadius=rad, rotationCenter=center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
-            end if
             if ( present(dts) ) then
                if (dts) call ComputePseudoTimeDerivative(mesh, tk, global_dt)
             end if
@@ -777,7 +759,7 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
             if (k==1 .and. updateQLowRK) then
 !$omp parallel do schedule(runtime)
                do id = 1, SIZE( mesh % elements )
-#ifdef FLOW 
+#ifdef FLOW
                   mesh % elements(id) % storage % QLowRK = mesh % elements(id) % storage % Q + deltaT*mesh % elements(id) % storage % QDot
 #endif
                end do ! id
@@ -790,16 +772,25 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
                         mesh % elements(id) % storage % G_NS = a(k)* mesh % elements(id) % storage % G_NS  +              mesh % elements(id) % storage % QDot
                         mesh % elements(id) % storage % Q =       mesh % elements(id) % storage % Q  + c(k)*deltaT* mesh % elements(id) % storage % G_NS
 #endif
-       
+
 #if (defined(CAHNHILLIARD)) && (!defined(FLOW))
                         mesh % elements(id) % storage % G_CH = a(k)*mesh % elements(id) % storage % G_CH + mesh % elements(id) % storage % cDot
                         mesh % elements(id) % storage % c    = mesh % elements(id) % storage % c         + c(k)*deltaT* mesh % elements(id) % storage % G_CH
 #endif
                   end do ! id
 !$omp end parallel do
-       
+!
+!           Advance the sliding region to the next stage position
+!           -----------------------------------------------------
+            if ( mesh % SlidingMesh % active .and. mesh % slidingflux ) then
+               call AdvanceSlidingMesh( mesh, mesh % SlidingMesh % radius, mesh % SlidingMesh % center, &
+                                        mesh % numBFacePoints, mesh % nodeType, .FALSE.,               &
+                                        angle = mesh % SlidingMesh % theta * auxiliar(k) )
+               mesh % slidingflux = .true.
+            end if
+
                end do ! k
-       
+
             end if
       !
       !     To obtain the updated residuals

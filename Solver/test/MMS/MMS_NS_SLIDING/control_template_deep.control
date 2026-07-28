@@ -1,0 +1,41 @@
+!
+!  Unsteady-MMS rotating-cylinder flux study (multilayer CYLINDERDEEP mesh).
+!  Whole mesh rotates about z (radius > domain), no hanging nodes.
+!  All boundaries user-defined Dirichlet = exact time-dependent MS.
+!
+Flow equations         = "NS"
+mesh file name         = "{MESH_FILE}"
+Polynomial order       = {P}
+mach number            = 0.3d0
+Reynolds number        = 100000.0d0
+discretization nodes   = Gauss
+riemann solver         = "lax-friedrichs"
+viscous discretization = "BR1"
+time integration       = explicit
+explicit method        = RK3
+simulation type        = time-accurate
+Compute time derivative after timestep = .true.
+dt                     = {DT}
+Number of time steps   = {N_STEPS}
+Output interval        = 1000000
+Convergence tolerance  = 1.0d-12
+solution file name     = "RESULTS/sol.hsol"
+save gradients with solution = .false.
+restart                = .false.
+restart file name      = "RESULTS/sol.hsol"
+periodic relative tolerance = .true.
+
+{SLIDING_BLOCK}
+
+#define boundary SIDEA
+   type = user-defined
+#end
+#define boundary SIDEB
+   type = user-defined
+#end
+#define boundary SIDEC
+   type = user-defined
+#end
+#define boundary SIDED
+   type = user-defined
+#end

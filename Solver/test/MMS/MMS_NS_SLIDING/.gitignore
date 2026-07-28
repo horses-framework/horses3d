@@ -1,0 +1,20 @@
+# build artifacts
+SETUP/*.o
+SETUP/*.mod
+SETUP/*.so
+SETUP/Makefile
+# run artifacts
+CONTROL/
+RESULTS/
+WORK_deep/
+MESH/
+*.log
+*.out
+mms_l2_error.dat
+mms_history.dat
+horses3d.ns*
+# generated plots / results (regenerate from runner)
+*.png
+*.pdf
+errors_*.csv
+convergence_orders.csv
