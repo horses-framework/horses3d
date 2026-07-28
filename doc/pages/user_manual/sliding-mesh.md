@@ -1,6 +1,6 @@
 # Sliding mesh
 
-The sliding mesh feature takes a conforming cylindrical mesh and, if activated, builds a sliding interface at the specified radius. It then performs the prescribed rotation and generates the mortars needed to handle the resulting non-conforming interface between the fixed and rotating regions.
+The sliding mesh feature takes a conforming cylindrical mesh and, if activated, builds a sliding interface at the specified radius. It then performs the prescribed rotation and generates the mortars needed to handle the resulting non-conforming interface between the fixed and rotating regions, for any given angle of rotation, updating connectivity as the interface evolves. At present, the sliding mortars are only functional with the Navier-Stokes solver, using explicit time-stepping and in sequential (non-MPI) execution.
 
 | Keyword               | Description                                                                                                                                                                                              | Default value  |
 |-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------|
