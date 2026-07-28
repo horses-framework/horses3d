@@ -63,6 +63,7 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./NavierStokes/TaylorGreen \
             ./NavierStokes/TaylorGreenKEPEC_IP \
             ./NavierStokes/TaylorGreenKEP_BR2 \
+            ./NavierStokes/TaylorGreenPerformance \
             ./NavierStokes/NACA0012 \
             ./NavierStokes/ForwardFacingStepSVV \
             ./NavierStokes/ForwardFacingStep_SSPRK33 \

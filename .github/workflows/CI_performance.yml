@@ -1,0 +1,187 @@
+# Performance regression workflow.
+#
+# This workflow is NOT run automatically on master: the cases it contains are
+# deliberately much heavier than the ones in CI_parallel.yml / CI_sequential*.yml
+# (which only run a handful of iterations to check residuals), so it is meant to
+# be launched manually from the Actions tab whenever the performance impact of a
+# change has to be measured.
+#
+# The solver already reports, at the end of every run:
+#
+#      ->     Simulation elapsed time:  X.XXXE+00 seconds.
+#      ->         Simulation CPU time:  X.XXXE+00 seconds (ratio is  X.XXXE+00).
+#      ->           Solver efficiency:  X.XXXE+00 seconds/(1 Million DOF*iter).
+#
+# Those lines are collected below and written to the job summary, so the numbers
+# of two runs can be compared without having to open the full log.
+#
+# NOTE: GitHub-hosted runners are shared machines, so absolute timings are noisy
+#       (expect O(10%) run-to-run variation) and the CPU model may change between
+#       runs. Always compare against a baseline measured on the same workflow,
+#       and prefer "Solver efficiency" over raw elapsed time.
+
+name: CI PERFORMANCE (MPI)
+
+########################################################################
+# Controls when the action will run.
+on:
+  # Run on every commit pushed to the performance branch.
+  push:
+    branches: [ PerformanceTest ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+    inputs:
+      mpi_ranks:
+        description: 'Number of MPI ranks used to run the performance cases'
+        required: false
+        default: '2'
+      repetitions:
+        description: 'How many times each case is run (all timings are reported)'
+        required: false
+        default: '1'
+
+jobs:
+  performance:
+    # The type of runner that the job will run on
+    runs-on: ubuntu-latest
+
+    # A single heavy case can take a while
+    timeout-minutes: 240
+
+    # Define strategy matrix
+    # Only RELEASE/gfortran for now:
+    # single combination keeps the runner free for the actual measurement.
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: ['gfortran']
+        mode: ['RELEASE']
+        comm: ['PARALLEL']
+        enable_threads: ['NO']
+
+    env:
+      METIS_HOME: ${{ github.workspace }}/metis-5.1.0/build/Linux-x86_64
+      MPI_RANKS: ${{ github.event.inputs.mpi_ranks || '2' }}
+      REPETITIONS: ${{ github.event.inputs.repetitions || '1' }}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      - uses: actions/checkout@v3
+
+      # Record which machine we ended up on: GitHub rotates between CPU models and
+      # that alone can explain a sizeable difference between two runs.
+      - name: Show runner specs
+        run: |
+          echo "Cores    : $(getconf _NPROCESSORS_ONLN)"
+          echo "MPI ranks: ${MPI_RANKS}"
+          lscpu | grep -E "Model name|Socket|Thread|Core|MHz" || true
+          free -g || true
+
+      - name: Install openmpi
+        run: sudo apt-get install openmpi-bin libopenmpi-dev
+
+      - name: Install METIS (gnu)
+        # wget "http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz" (OLD LINK TO METIS)
+        run: |
+          wget "https://src.fedoraproject.org/lookaside/pkgs/metis/metis-5.1.0.tar.gz/5465e67079419a69e0116de24fce58fe/metis-5.1.0.tar.gz"
+          tar -xvf metis-5.1.0.tar.gz
+          cd metis-5.1.0
+          make config cc=gcc
+          make
+          mv ${{ github.workspace }}/metis-5.1.0/build/Linux-x86_64/libmetis ${{ github.workspace }}/metis-5.1.0/build/Linux-x86_64/lib
+          mv ${{ github.workspace }}/metis-5.1.0/build/Linux-x86_64/programs ${{ github.workspace }}/metis-5.1.0/build/Linux-x86_64/bin
+
+      - name: Check METIS PATH
+        run: echo $METIS_HOME
+
+      - name: Show ${{matrix.compiler}} version
+        run: ${{matrix.compiler}} --version
+
+      - name: Configure
+        working-directory: ./Solver
+        run: ./configure
+
+      - name: Compile horses3d
+        working-directory: ./Solver
+        run: |
+          make allclean MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
+
+########################################################################
+#######                     NAVIER-STOKES                       ########
+########################################################################
+#
+# 1) TAYLOR GREEN VORTEX - SPLIT FORM (Chandrasekar / Gauss-Lobatto / BR1)
+# ------------------------------------------------------------------------
+
+      - name: Build TaylorGreenPerformance
+        working-directory: ./Solver/test/NavierStokes/TaylorGreenPerformance/SETUP
+        run: make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
+        if: '!cancelled()'
+
+      - name: Run TaylorGreenPerformance
+        working-directory: ./Solver/test/NavierStokes/TaylorGreenPerformance
+        run: |
+          set -o pipefail
+          # Pinning the ranks makes the timings far more reproducible, but binding
+          # is not always available on a virtualised runner: probe it first and
+          # fall back to no binding instead of failing the whole run.
+          BIND="--bind-to core"
+          mpirun -n "${MPI_RANKS}" --oversubscribe ${BIND} hostname > /dev/null 2>&1 || BIND="--bind-to none"
+          echo "Using binding: ${BIND}"
+          for i in $(seq 1 "${REPETITIONS}"); do
+            echo "::group::TaylorGreenPerformance - repetition ${i}/${REPETITIONS}"
+            mpirun -n "${MPI_RANKS}" --oversubscribe ${BIND} \
+                   ./horses3d.ns TaylorGreen.control 2>&1 | tee "run_${i}.log"
+            echo "::endgroup::"
+          done
+        if: '!cancelled()'
+
+########################################################################
+#######                        REPORT                           ########
+########################################################################
+
+      - name: Performance summary
+        working-directory: ./Solver/test/NavierStokes/TaylorGreenPerformance
+        run: |
+          shopt -s nullglob
+          logs=(run_*.log)
+          {
+            echo "## TaylorGreenPerformance"
+            echo ""
+            echo "| Setting | Value |"
+            echo "| --- | --- |"
+            echo "| Compiler | ${{ matrix.compiler }} |"
+            echo "| Mode | ${{ matrix.mode }} |"
+            echo "| Comm | ${{ matrix.comm }} |"
+            echo "| MPI ranks | ${MPI_RANKS} |"
+            echo "| Runner cores | $(getconf _NPROCESSORS_ONLN) |"
+            echo "| CPU | $(lscpu | sed -n 's/^Model name: *//p' | head -1) |"
+            echo "| Commit | \`${GITHUB_SHA}\` |"
+            echo ""
+            if [ ${#logs[@]} -eq 0 ]; then
+              echo "The case produced no log: it did not run."
+            fi
+            for log in "${logs[@]}"; do
+              echo "### ${log}"
+              echo ""
+              echo '```'
+              grep -E "elements with polynomial order|Preprocessing time:|Simulation elapsed time:|Simulation CPU time:|Solver efficiency:" "${log}" || \
+                echo "No timing information found in ${log}"
+              echo '```'
+              echo ""
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "----- timings -----"
+          [ ${#logs[@]} -gt 0 ] && grep -hE "Simulation elapsed time:|Simulation CPU time:|Solver efficiency:" "${logs[@]}" || true
+        if: '!cancelled()'
+
+      - name: Upload performance logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: performance-logs-${{ matrix.compiler }}-${{ matrix.mode }}
+          path: ./Solver/test/NavierStokes/TaylorGreenPerformance/run_*.log
+          if-no-files-found: warn
+        if: '!cancelled()'
