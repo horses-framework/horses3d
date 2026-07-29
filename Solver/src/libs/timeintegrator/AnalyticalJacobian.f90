@@ -556,7 +556,7 @@ contains
                      end do 
                   elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
 
-                     call ComputeInterfaceFluxJacobian(mesh % faces(mesh % faces(fID) % Mortar(m)), mortar_mpi=.TRUE. )
+                     call ComputeInterfaceFluxJacobian(mesh % faces(fID), mortar_mpi=.TRUE. )
                      
                   elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
 
