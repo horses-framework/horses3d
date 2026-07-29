@@ -902,6 +902,10 @@ Module DGSEMClass
       real(kind=RP)                 :: lamcsi_v, lamzet_v, lameta_v     ! Diffusive eigenvalues in the three reference directions
       real(kind=RP)                 :: jac, mu, T                       ! Mapping Jacobian, viscosity and temperature
       real(kind=RP)                 :: kinematicviscocity, musa, etasa
+#ifdef TRANSPORT
+      real(kind=RP)                 :: transportVelocity(NDIM)
+      real(kind=RP)                 :: transportD(1:NDIM, 1:NDIM)
+#endif
       real(kind=RP)                 :: Q(NCONS)                           ! The solution in a node
       real(kind=RP)                 :: TimeStep_Conv, TimeStep_Visc     ! Time-step for convective and diffusive terms
       real(kind=RP)                 :: localMax_dt_v, localMax_dt_a     ! Time step to perform MPI reduction
@@ -1018,6 +1022,36 @@ Module DGSEMClass
             end if
 #else
             TimeStep_Visc = huge(1.0_RP)
+#endif
+
+#ifdef TRANSPORT
+            ! Convective part: eigenvalues are given by the transport velocity (no sound velocity)
+            call self % mesh % elements(eID) % getTransportVelocity(i, j, k, transportVelocity)
+            eValues(IX) = transportVelocity(IX)
+            eValues(IY) = transportVelocity(IY)
+            eValues(IZ) = transportVelocity(IZ)
+            lamcsi_a =abs( self % mesh % elements(eID) % geom % jGradXi(IX,i,j,k)   * eValues(IX) + &
+                           self % mesh % elements(eID) % geom % jGradXi(IY,i,j,k)   * eValues(IY) + &
+                           self % mesh % elements(eID) % geom % jGradXi(IZ,i,j,k)   * eValues(IZ) ) * dcsi
+
+            lameta_a =abs( self % mesh % elements(eID) % geom % jGradEta(IX,i,j,k)  * eValues(IX) + &
+                           self % mesh % elements(eID) % geom % jGradEta(IY,i,j,k)  * eValues(IY) + &
+                           self % mesh % elements(eID) % geom % jGradEta(IZ,i,j,k)  * eValues(IZ) ) * deta
+
+            lamzet_a =abs( self % mesh % elements(eID) % geom % jGradZeta(IX,i,j,k) * eValues(IX) + &
+                           self % mesh % elements(eID) % geom % jGradZeta(IY,i,j,k) * eValues(IY) + &
+                           self % mesh % elements(eID) % geom % jGradZeta(IZ,i,j,k) * eValues(IZ) ) * dzet
+
+            TimeStep_Conv = min( TimeStep_Conv, cfl*abs(jac)/(lamcsi_a+lameta_a+lamzet_a) )
+            if (present(MaxDtVec)) MaxDtVec(eID) = min( MaxDtVec(eID), cfl*abs(jac)/(lamcsi_a+lameta_a+lamzet_a) )
+            ! Diffusive part: use D instead of mu
+            call self % mesh % elements(eID) % getTransportDiffusion(i, j, k, transportD)
+            lamcsi_v = maxval(transportD) * dcsi2 * abs(sum(self % mesh % elements(eID) % geom % jGradXi  (:,i,j,k)))
+            lameta_v = maxval(transportD) * deta2 * abs(sum(self % mesh % elements(eID) % geom % jGradEta (:,i,j,k)))
+            lamzet_v = maxval(transportD) * dzet2 * abs(sum(self % mesh % elements(eID) % geom % jGradZeta(:,i,j,k)))
+            TimeStep_Visc = min( TimeStep_Visc, dcfl*abs(jac)/(lamcsi_v+lameta_v+lamzet_v) )
+            if (present(MaxDtVec)) MaxDtVec(eID) = min( MaxDtVec(eID), &
+                                                   dcfl*abs(jac)/(lamcsi_v+lameta_v+lamzet_v)  )
 #endif
 
          end do ; end do ; end do
