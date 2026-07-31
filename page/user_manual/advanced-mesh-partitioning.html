@@ -1,0 +1,255 @@
+<!-- -*- mode: jinja2 -*- -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+      <meta name="description" content="Documentation for HORSES3D">
+    <meta name="author" content="HORSES3D developers" >
+    <link rel="icon" href="../../favicon.png">
+
+    <title>Advanced mesh partitioning &ndash; HORSES3D</title>
+
+    <!-- Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"
+          integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+            integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
+    <!-- Font Awesome -->
+    <link href="../../css/fontawesome.min.css" rel="stylesheet">
+    <link href="../../css/brands.min.css" rel="stylesheet">
+    <link href="../../css/regular.min.css" rel="stylesheet">
+    <link href="../../css/solid.min.css" rel="stylesheet">
+    <link href="../../css/v4-font-face.min.css" rel="stylesheet">
+    <link href="../../css/v4-shims.min.css" rel="stylesheet">
+    <!-- MathJax -->
+    <script type="text/x-mathjax-config">
+      MathJax.Hub.Config({
+        TeX: { equationNumbers: { autoNumber: "AMS" } }
+      });
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@2.7.9/MathJax.js?config=TeX-AMS-MML_HTMLorMML" async
+            integrity="sha256-DViIOMYdwlM/axqoGDPeUyf0urLoHMN4QACBKyB58Uw=" crossorigin="anonymous"></script>
+    <!-- Other scripts and stylesheets -->
+    <link href="../../css/local.css" rel="stylesheet">
+    <link href="../../css/pygments.css" rel="stylesheet">
+    <script src="../../js/svg-pan-zoom.min.js"></script>
+  </head>
+
+  <body>
+
+    <!-- Fixed navbar -->
+    <div class="container-fluid mb-sm-4 mb-xl-2">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+          <a class="navbar-brand" href="../../index.html">HORSES3D </a>
+          <button type="button" class="navbar-toggler" data-bs-toggle="collapse" data-bs-target="#navbar"
+                  aria-expanded="false" aria-controls="navbar" aria-label="Toggle navigation">
+                  <span class="navbar-toggler-icon">
+          </button>
+
+          <div id="navbar" class="navbar-collapse collapse">
+            <ul class="navbar-nav">
+                <li class="nav-item"><a class="nav-link" href="../index.html">Documentation</a></li>
+                  <li class="nav-item">
+                    <a class="nav-link" href="../../lists/files.html">Source Files</a>
+                  </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../../lists/modules.html">Modules</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../../lists/procedures.html">Procedures</a>
+                </li>
+                <li class="nav-item">
+                  <a class="nav-link" href="../../lists/types.html">Derived Types</a>
+                </li>
+            </ul>
+              <div class="d-flex align-items-end flex-grow-1">
+                <form action="../../search.html" role="search" class="ms-auto">
+                  <input type="text" class="form-control" aria-label="Search" placeholder="Search" name="q" id="tipue_search_input" autocomplete="off" required>
+                </form>
+              </div>
+          </div><!--/.nav-collapse -->
+        </div>
+      </nav>
+    </div>
+
+    <div class="container">
+  <div class="row">
+    <h1>Advanced mesh partitioning</h1>
+    <div class="container p-2 mb-4 bg-light border rounded-3">
+      <div class="row align-items-center justify-content-between">
+        <div class="col">
+          <ul class="list-inline" style="margin-bottom:0px; display:inline">
+          </ul>
+        </div>
+        <div class="col">
+          <nav aria-label="breadcrumb">
+            <ol class="breadcrumb justify-content-end mb-0">
+                <li class="breadcrumb-item"><a href='../index.html'>Documentation</a></li>
+                <li class="breadcrumb-item"><a href='index.html'>User Manual</a></li>
+              <li class="breadcrumb-item active" aria-current="page">Advanced mesh partitioning</li>
+            </ol>
+          </nav>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+      <div class="col-3">
+        <div class="card card-body bg-light" id="sidebar-toc">
+          <ul class="nav flex-column align-items">
+            <li class="nav-item">
+              <a class="nav-link" href="../index.html">Documentation</a>
+            </li>
+          </ul>
+          <hr>
+          <nav class="nav nav-pills flex-column">
+              <a class="nav-link" href="index.html">User Manual</a>
+                <nav class="nav nav-pills flex-column">
+                                <a class="nav-link" href="input-and-output-files.html">Input and Output Files</a>
+              <a class="nav-link" href="running-a-simulation.html">Running a Simulation</a>
+              <a class="nav-link" href="spatial-discretization.html">Spatial Discretization</a>
+              <a class="nav-link" href="physics-related-keyword.html">Physics related keywords</a>
+              <a class="nav-link" href="implicit-solvers-with-newton-linearization.html">Implicit Solvers with Newton Linearization</a>
+              <a class="nav-link" href="explicit-solvers.html">Explicit Solvers</a>
+              <a class="nav-link" href="a-nonlinear-p-multigrid-FAS.html">Nonlinear p-Multigrid solver (FAS)</a>
+              <a class="nav-link" href="a-p-adaptation-methods.html">p-adaptation-methods</a>
+              <a class="nav-link active disabled" href="advanced-mesh-partitioning.html">Advanced mesh partitioning</a>
+              <a class="nav-link" href="b-immersed-boundary-method.html">Immersed Boundary Method</a>
+              <a class="nav-link" href="monitors.html">Monitors</a>
+              <a class="nav-link" href="s-advanced-user-setup.html">Advanced User Setup</a>
+              <a class="nav-link" href="s-postprocessing.html">Postprocessing</a>
+              <a class="nav-link" href="t-appendix.html">Appendix</a>
+              <a class="nav-link" href="tools.html">Tools</a>
+
+                </nav>
+          </nav>
+        </div>
+      </div>
+
+    <div class="col-9" id='text'>
+      <p>It is possible to decide the partitioning method with a keyword specified in the control file, see <a href="running-a-simulation.html">Running a simulation</a>. However, sometimes it is better to have more control over the how the domain is partiotioned into the different MPI domains. For instance, in multi-phase simulations, it might be advantegous to decompose each phase separately. Another example might be simulations featuring sliding meshes, where a MPI domain does not contain elements from the static and the sliding regions.</p>
+<p>To give full control to the user of the mesh partitioning, it is possible to define regions in the computational domain. Each element is assigned to a region (a phase in a multi-phase simulation or sliding/static part) and each region is partitioned according to some policy.</p>
+<p>The implemented policies, controlled with the keyword <code>partitioning regions policy</code>, are:</p>
+<ul>
+<li>
+<p>Fixed-ratio: the user sets in the control file the percentage of MPI domains assigned to each region.</p>
+</li>
+<li>
+<p>Proportional: the number of MPI domains assigned to each region is determined by the number of elements of each region.</p>
+</li>
+<li>
+<p>Shared: each region is partitioned into the total number of MPI domains. This is what @AbbBallout implemented for water and air.</p>
+</li>
+<li>
+<p>Custom: the user has full control and sets for each element which MPI domain it belongs to.</p>
+</li>
+</ul>
+<p>To implement this, the user has to code one function in the <code>ProblemFile.f90</code> of the simulation case. For fixed-ratio, proportional and shared policies, the user should implement a function to assign each element to a region. For the custom policy, the user should implement the full element-to-domain mapping.</p>
+<h2 id="fixed-ratio-partitioning-policy">Fixed-ratio partitioning policy</h2>
+<p>When using this policy, the number of MPI domains assigned to a region is determined with a user-defined parameter setting the percentage of MPI domains. It is guaranteed that all the regions get at least one MPI domain.</p>
+<p>This policy is executed when the keyword <code>partitioning regions policy</code> is set to <code>fixed-ratio</code> in the control file. The user should also specify the number of different regions present in the domain with the keyword <code>partitioning regions</code>. Additionally, the user should also specify the percentage of MPI domains assigned to each region with the keyword <code>partitioning regions ratio</code>. For instance, in a domain with two regions, and giving 30% of the MPI domains to the first regions and 70% to the second, the keywords would be</p>
+<div class="codehilite"><pre><span></span><code><span class="n">partitioning</span><span class="w"> </span><span class="n">regions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">2</span>
+<span class="n">partitioning</span><span class="w"> </span><span class="n">regions</span><span class="w"> </span><span class="n">policy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">fixed</span><span class="o">-</span><span class="n">ratio</span>
+<span class="n">partitioning</span><span class="w"> </span><span class="n">regions</span><span class="w"> </span><span class="n">ratio</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mf">0.3</span><span class="p">,</span><span class="w"> </span><span class="mf">0.7</span><span class="p">]</span>
+</code></pre></div>
+
+<p>Moreover, the user has to implement a function inside the <code>ProblemFile.f90</code> of the simulation case according to the following interface:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">abstract interface</span>
+<span class="k">    pure </span><span class="kt">integer </span><span class="k">function </span><span class="n">getRegion_f</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<span class="w">        </span><span class="k">use </span><span class="n">ElementClass</span>
+<span class="w">        </span><span class="k">implicit none</span>
+<span class="k">        type</span><span class="p">(</span><span class="n">Element</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">e</span>
+<span class="w">    </span><span class="k">end function </span><span class="n">getRegion_f</span>
+<span class="k">end interface</span>
+</code></pre></div>
+
+<p>This pure function, given an element of the mesh, returns the region to which this element is assigned to. The return value is an integer in the set <script type="math/tex"> \lbrace 1, ..., N_r \rbrace </script>, where <script type="math/tex"> N_r </script> is the number of different regions in the domain.</p>
+<p>An example of this policy can be found in the test <code>test/Multiphase/MeshPartitioningPolicies/FixedRatio</code>. </p>
+<h2 id="proportional-partitioning-policy">Proportional partitioning policy</h2>
+<p>When using this policy, the number of MPI domains assigned to a region is computed as <script type="math/tex"> \frac{\text{# elements in the region}}{\text{total number of elements}} </script>. It is guaranteed that all the regions get at least one MPI domain.</p>
+<p>This policy is executed when the keyword <code>partitioning regions policy</code> is set to <code>proportional</code> in the control file. The user should also specify the number of different regions present in the domain with the keyword <code>partitioning regions</code>. For instance, in a domain with three regions, the keywords would be</p>
+<div class="codehilite"><pre><span></span><code><span class="n">partitioning</span><span class="w"> </span><span class="n">regions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">3</span>
+<span class="n">partitioning</span><span class="w"> </span><span class="n">regions</span><span class="w"> </span><span class="n">policy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">proportional</span>
+</code></pre></div>
+
+<p>Moreover, the user has to implement a function inside the <code>ProblemFile.f90</code> of the simulation case according to the following interface:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">abstract interface</span>
+<span class="k">    pure </span><span class="kt">integer </span><span class="k">function </span><span class="n">getRegion_f</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<span class="w">        </span><span class="k">use </span><span class="n">ElementClass</span>
+<span class="w">        </span><span class="k">implicit none</span>
+<span class="k">        type</span><span class="p">(</span><span class="n">Element</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">e</span>
+<span class="w">    </span><span class="k">end function </span><span class="n">getRegion_f</span>
+<span class="k">end interface</span>
+</code></pre></div>
+
+<p>This pure function, given an element of the mesh, returns the region to which this element is assigned to. The return value is an integer in the set <script type="math/tex"> \lbrace 1, ..., N_r \rbrace </script>, where <script type="math/tex"> N_r </script> is the number of different regions in the domain.</p>
+<p>An example of this policy can be found in the test <code>test/Multiphase/MeshPartitioningPolicies/Proportional</code>. </p>
+<h2 id="shared-partitioning-policy">Shared partitioning policy</h2>
+<p>When using this policy, each region is partitioned across all the available MPI domains. </p>
+<p>This policy is executed when the keyword <code>partitioning regions policy</code> is set to <code>shared</code> in the control file. The user should also specify the number of different regions present in the domain with the keyword <code>partitioning regions</code>. For instance, in a domain with three regions, the keywords would be</p>
+<div class="codehilite"><pre><span></span><code><span class="n">partitioning</span><span class="w"> </span><span class="n">regions</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mh">3</span>
+<span class="n">partitioning</span><span class="w"> </span><span class="n">regions</span><span class="w"> </span><span class="n">policy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">shared</span>
+</code></pre></div>
+
+<p>Moreover, the user has to implement a function inside the <code>ProblemFile.f90</code> of the simulation case according to the following interface:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">abstract interface</span>
+<span class="k">    pure </span><span class="kt">integer </span><span class="k">function </span><span class="n">getRegion_f</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+<span class="w">        </span><span class="k">use </span><span class="n">ElementClass</span>
+<span class="w">        </span><span class="k">implicit none</span>
+<span class="k">        type</span><span class="p">(</span><span class="n">Element</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w"> </span><span class="kd">::</span><span class="w"> </span><span class="n">e</span>
+<span class="w">    </span><span class="k">end function </span><span class="n">getRegion_f</span>
+<span class="k">end interface</span>
+</code></pre></div>
+
+<p>This pure function, given an element of the mesh, returns the region to which this element is assigned to. The return value is an integer in the set <script type="math/tex"> \lbrace 1, ..., N_r \rbrace </script>, where <script type="math/tex"> N_r </script> is the number of different regions in the domain.</p>
+<p>An example of this policy can be found in the test <code>test/Multiphase/MeshPartitioningPolicies/Shared</code>. </p>
+<h2 id="custom-partitioning-policy">Custom partitioning policy</h2>
+<p>This policy is executed when the keyword <code>partitioning regions policy</code> is set to <code>custom</code> in the control file. </p>
+<p>The user has to implement a subroutine inside the <code>ProblemFile.f90</code> of the simulation case according to the following interface:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">abstract interface</span>
+<span class="k">    subroutine </span><span class="n">userDefinedMeshPartitioning_f</span><span class="p">(</span><span class="n">mesh</span><span class="p">,</span><span class="w"> </span><span class="n">no_of_domains</span><span class="p">,</span><span class="w"> </span><span class="n">elementsDomain</span><span class="p">,</span><span class="w"> </span><span class="n">nodesDomain</span><span class="p">,</span><span class="w"> </span><span class="n">controlVariables</span><span class="p">)</span>
+<span class="w">        </span><span class="k">use </span><span class="n">HexMeshClass</span>
+<span class="w">        </span><span class="k">use </span><span class="n">FTValueDictionaryClass</span>
+<span class="w">        </span><span class="k">implicit none</span>
+<span class="k">        type</span><span class="p">(</span><span class="n">HexMesh</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w">              </span><span class="kd">::</span><span class="w"> </span><span class="n">mesh</span>
+<span class="w">        </span><span class="kt">integer</span><span class="p">,</span><span class="w">       </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w">              </span><span class="kd">::</span><span class="w"> </span><span class="n">no_of_domains</span>
+<span class="w">        </span><span class="kt">integer</span><span class="p">,</span><span class="w">       </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w">             </span><span class="kd">::</span><span class="w"> </span><span class="n">elementsDomain</span><span class="p">(</span><span class="n">mesh</span><span class="w"> </span><span class="p">%</span><span class="w"> </span><span class="n">no_of_elements</span><span class="p">)</span>
+<span class="w">        </span><span class="kt">integer</span><span class="p">,</span><span class="w">       </span><span class="k">intent</span><span class="p">(</span><span class="n">out</span><span class="p">)</span><span class="w">             </span><span class="kd">::</span><span class="w"> </span><span class="n">nodesDomain</span><span class="p">(</span><span class="n">size</span><span class="p">(</span><span class="n">mesh</span><span class="w"> </span><span class="p">%</span><span class="w"> </span><span class="n">nodes</span><span class="p">))</span>
+<span class="w">        </span><span class="k">type</span><span class="p">(</span><span class="n">FTValueDictionary</span><span class="p">),</span><span class="w"> </span><span class="k">intent</span><span class="p">(</span><span class="n">in</span><span class="p">)</span><span class="w">    </span><span class="kd">::</span><span class="w"> </span><span class="n">controlVariables</span>
+<span class="w">    </span><span class="k">end subroutine </span><span class="n">userDefinedMeshPartitioning_f</span>
+<span class="k">end interface</span>
+</code></pre></div>
+
+<p>In this subroutine, the variables <code>elementsDomain</code> and <code>nodesDomain</code> have to be filled in. The variable <code>elementsDomain</code> specifies, for each element of the mesh, the MPI domain it belongs to. Similarly, the variable <code>nodesDomain</code> specifies, for each node of the mesh, the MPI domain it belongs to. </p>
+<p>Moreover, in the <code>UserDefinedStartup</code> function of the <code>ProblemFile.f90</code>, a function pointer has to be set through a call to the subroutine <code>setPointerUserDefinedMeshPartitioning</code>.</p>
+<p>An example of this policy can be found in the test <code>test/Multiphase/MeshPartitioningPolicies/Custom</code>. </p>
+    </div>
+  </div>
+      <hr>
+    </div> <!-- /container -->
+    <footer>
+      <div class="container">
+        <div class="row justify-content-between">
+          <div class="col">
+            <p>
+              HORSES3D
+ was developed by HORSES3D developers<br>              &copy; 2026 <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc/4.0/80x15.png" /></a>
+</p>
+          </div>
+          <div class="col">
+            <p class="text-end">
+              Documentation generated by
+              <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
+ on 2026-07-31 08:52 +0000             </p>
+          </div>
+        </div>
+        <br>
+      </div> <!-- /container -->
+    </footer>
+  </body>
+</html>
