@@ -135,6 +135,84 @@ jobs:
          make allclean MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
 
+########################################################################
+#######                         COMPONENTS                      ########
+########################################################################
+#
+# 0.1) MESH PARTITIONING POLICY: CUSTOM
+# ---------------
+
+      - name: Build MeshPartitioningPolicyCustom
+        working-directory: ./Solver/test/Multiphase/MeshPartitioningPolicies/Custom/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
+        if: '!cancelled()'
+
+      - name: Run MeshPartitioningPolicyCustom
+        working-directory: ./Solver/test/Multiphase/MeshPartitioningPolicies/Custom
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 10 ./horses3d.mu mixedRK.control
+          diff -q MESH/reference_N50.txt MESH/N50.pmesh
+        if: '!cancelled()'
+
+#
+# 0.2) MESH PARTITIONING POLICY: FIXED-RATIO
+# ---------------
+
+      - name: Build MeshPartitioningPolicyFixedRatio
+        working-directory: ./Solver/test/Multiphase/MeshPartitioningPolicies/FixedRatio/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
+        if: '!cancelled()'
+
+      - name: Run MeshPartitioningPolicyFixedRatio
+        working-directory: ./Solver/test/Multiphase/MeshPartitioningPolicies/FixedRatio
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 10 ./horses3d.mu mixedRK.control
+          diff -q MESH/reference_N50.txt MESH/N50.pmesh
+        if: '!cancelled()'
+
+#
+# 0.3) MESH PARTITIONING POLICY: PROPORTIONAL
+# ---------------
+
+      - name: Build MeshPartitioningPolicyProportional
+        working-directory: ./Solver/test/Multiphase/MeshPartitioningPolicies/Proportional/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
+        if: '!cancelled()'
+
+      - name: Run MeshPartitioningPolicyProportional
+        working-directory: ./Solver/test/Multiphase/MeshPartitioningPolicies/Proportional
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 10 ./horses3d.mu mixedRK.control
+          diff -q MESH/reference_N50.txt MESH/N50.pmesh
+        if: '!cancelled()'
+
+#
+# 0.4) MESH PARTITIONING POLICY: SHARED
+# ---------------
+
+      - name: Build MeshPartitioningPolicyShared
+        working-directory: ./Solver/test/Multiphase/MeshPartitioningPolicies/Shared/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES
+        if: '!cancelled()'
+
+      - name: Run MeshPartitioningPolicyShared
+        working-directory: ./Solver/test/Multiphase/MeshPartitioningPolicies/Shared
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 10 ./horses3d.mu mixedRK.control
+          diff -q MESH/reference_N50.txt MESH/N50.pmesh
+        if: '!cancelled()'
 
 ########################################################################
 #######                         EULER                           ########

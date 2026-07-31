@@ -27,6 +27,7 @@ LIBOBJS_NS = 	./build_ns/ConnectivityClass.o \
 		./build_ns/IBMClass.o \
 		./build_ns/HexMesh.o \
 		./build_ns/MeshPartitioning.o \
+		./build_ns/MeshPartitioningPolicies.so \
 		./build_ns/SurfaceMesh.o \
 		./build_ns/Read_HDF5Mesh_HOPR.o \
 		./build_ns/Read_SpecMesh.o \
@@ -52,6 +53,7 @@ LIBOBJS_NSSA = 	./build_nssa/ConnectivityClass.o \
 		./build_nssa/IBMClass.o \
 		./build_nssa/HexMesh.o \
 		./build_nssa/MeshPartitioning.o \
+		./build_nssa/MeshPartitioningPolicies.so \
 		./build_nssa/SurfaceMesh.o \
 		./build_nssa/Read_HDF5Mesh_HOPR.o \
 		./build_nssa/Read_SpecMesh.o \
@@ -77,6 +79,7 @@ LIBOBJS_iNS = 	./build_ins/ConnectivityClass.o \
 		./build_ins/IBMClass.o \
 		./build_ins/HexMesh.o \
 		./build_ins/MeshPartitioning.o \
+		./build_ins/MeshPartitioningPolicies.so \
 		./build_ins/SurfaceMesh.o \
 		./build_ins/Read_HDF5Mesh_HOPR.o \
 		./build_ins/Read_SpecMesh.o \
@@ -103,6 +106,7 @@ LIBOBJS_CH = 	./build_ch/ConnectivityClass.o \
 		./build_ch/IBMClass.o \
 		./build_ch/HexMesh.o \
 		./build_ch/MeshPartitioning.o \
+		./build_ch/MeshPartitioningPolicies.so \
 		./build_ch/SurfaceMesh.o \
 		./build_ch/Read_HDF5Mesh_HOPR.o \
 		./build_ch/Read_SpecMesh.o \
@@ -128,6 +132,7 @@ LIBOBJS_MU =  ./build_mu/ConnectivityClass.o \
 		./build_mu/IBMClass.o \
 		./build_mu/HexMesh.o \
 		./build_mu/MeshPartitioning.o \
+		./build_mu/MeshPartitioningPolicies.so \
 		./build_mu/SurfaceMesh.o \
 		./build_mu/Read_HDF5Mesh_HOPR.o \
 		./build_mu/Read_SpecMesh.o \
@@ -153,6 +158,7 @@ LIBOBJS_CAA =  ./build_caa/ConnectivityClass.o \
 		./build_caa/IBMClass.o \
 		./build_caa/HexMesh.o \
 		./build_caa/MeshPartitioning.o \
+		./build_caa/MeshPartitioningPolicies.so \
 		./build_caa/SurfaceMesh.o \
 		./build_caa/Read_HDF5Mesh_HOPR.o \
 		./build_caa/Read_SpecMesh.o \
@@ -197,6 +203,36 @@ all: lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu
 	@echo
 	@echo $<
 	$(FC) -cpp -O2 -ffree-line-length-0 -DACOUSTIC -I./include_caa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_caa -c $< -o $@ $(MOD_FLAG) ./include_caa
+
+./build_ns/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
+	@echo
+	@echo $<
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DNAVIERSTOKES -I./include_ns $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ns $< -o $@ $(MOD_FLAG) ./include_ns
+
+./build_nssa/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
+	@echo
+	@echo $<
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DNAVIERSTOKES -DSPALARTALMARAS -I./include_nssa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_nssa $< -o $@ $(MOD_FLAG) ./include_nssa
+
+./build_ins/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
+	@echo
+	@echo $<
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DINCNS -I./include_ins $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ins $< -o $@ $(MOD_FLAG) ./include_ins
+
+./build_ch/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
+	@echo
+	@echo $<
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DCAHNHILLIARD -I./include_ch $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_ch $< -o $@ $(MOD_FLAG) ./include_ch
+
+./build_mu/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
+	@echo
+	@echo $<
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DMULTIPHASE -DCAHNHILLIARD -I./include_mu $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_mu $< -o $@ $(MOD_FLAG) ./include_mu
+
+./build_caa/MeshPartitioningPolicies.so: ./MeshPartitioningPolicies.f90
+	@echo
+	@echo $<
+	$(FC) -cpp -O2 -ffree-line-length-0 -fPIC -shared -DACOUSTIC -I./include_caa $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDEO) $(INCLUDE)_caa $< -o $@ $(MOD_FLAG) ./include_caa
 
 ./build_ns/%.o: %.f90
 	@echo
@@ -341,12 +377,12 @@ mkdirs: FORCE
 
 clean: FORCE
 	$(RM) lib$(LIB)_ns.a lib$(LIB)_nssa.a lib$(LIB)_ins.a lib$(LIB)_ch.a lib$(LIB)_mu.a lib$(LIB)_caa.a
-	$(RM) ./build_ns/*.o ./include_ns/*.mod 
-	$(RM) ./build_nssa/*.o ./include_nssa/*.mod 
-	$(RM) ./build_ins/*.o ./include_ins/*.mod 
-	$(RM) ./build_ch/*.o ./include_ch/*.mod
-	$(RM) ./build_mu/*.o ./include_mu/*.mod
-	$(RM) ./build_caa/*.o ./include_caa/*.mod
+	$(RM) ./build_ns/*.o ./build_ns/*.so ./include_ns/*.mod 
+	$(RM) ./build_nssa/*.o ./build_nssa/*.so ./include_nssa/*.mod 
+	$(RM) ./build_ins/*.o ./build_ins/*.so ./include_ins/*.mod 
+	$(RM) ./build_ch/*.o ./build_ch/*.so ./include_ch/*.mod
+	$(RM) ./build_mu/*.o ./build_mu/*.so ./include_mu/*.mod
+	$(RM) ./build_caa/*.o ./build_caa/*.so ./include_caa/*.mod
 
 #############################################
 #	Dummy procedure to force a rule     #

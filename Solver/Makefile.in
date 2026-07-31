@@ -38,19 +38,19 @@ EXTLIB_INC =
 # 3.- User defined compilation flags 
 ########################################
 GNU_HPC_FLAGS= -cpp -fallow-argument-mismatch -std=legacy -ffree-line-length-0 -O3 -ftree-vectorize \
-		   -ftree-vectorizer-verbose=0 -fbackslash -D_has_Quad -march=znver3 -funroll-loops
+		   -ftree-vectorizer-verbose=0 -fbackslash -D_has_Quad -march=znver3 -funroll-loops -fPIC
 GNU_RELEASE_FLAGS= -cpp -ffree-line-length-0 -O3 -ftree-vectorize  -ftree-vectorizer-verbose=0 \
-		   -fbackslash -D_has_Quad
+		   -fbackslash -D_has_Quad -fPIC
 GNU_DEBUG_FLAGS=  -ffree-line-length-0 -cpp -O0 -frecursive -g -fcheck=all -Wno-unused-variable \
 		  -fbacktrace -fbounds-check -finit-real=snan -Wall \
 		  -ffpe-trap=invalid,zero,overflow -fcheck-array-temporaries \
-		  -fbackslash -fcheck=pointer -D_has_Quad
-INTEL_HPC_FLAGS= -cpp -Ofast -msse4.2 -axAVX,CORE-AVX2 -assume bscc -D_has_Quad  -fp-model=fast=2 -ipo
-INTEL_RELEASE_FLAGS= -cpp -O3 -assume bscc -D_has_Quad -fp-model precise
+		  -fbackslash -fcheck=pointer -D_has_Quad -fPIC
+INTEL_HPC_FLAGS= -cpp -Ofast -msse4.2 -axAVX,CORE-AVX2 -assume bscc -D_has_Quad  -fp-model=fast=2 -ipo -fPIC
+INTEL_RELEASE_FLAGS= -cpp -O3 -assume bscc -D_has_Quad -fp-model precise -fPIC
 INTEL_DEBUG_FLAGS= -cpp -O0 -g -warn all -fpscomp logicals -traceback \
 		   -check bounds -check uninit -ftrapuv -debug all \
 		   -ftrace=full -ftz -fp-model precise \
-		   -fp-speculation=off -assume bscc -D_has_Quad
+		   -fp-speculation=off -assume bscc -D_has_Quad -fPIC
 ARFLAGS=crv
 
 
@@ -58,19 +58,19 @@ ARFLAGS=crv
 ## Select platform
 ##########################################
 ifeq ($(PLATFORM),MACOSX)
-   PROBLEM_LIB_NS=$(HOME_DIR)/lib/libproblemfile_ns.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
-   PROBLEM_LIB_NSSA=$(HOME_DIR)/lib/libproblemfile_nssa.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
-   PROBLEM_LIB_iNS=$(HOME_DIR)/lib/libproblemfile_ins.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
-   PROBLEM_LIB_CH=$(HOME_DIR)/lib/libproblemfile_ch.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
-   PROBLEM_LIB_MU=$(HOME_DIR)/lib/libproblemfile_mu.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
-   PROBLEM_LIB_CAA=$(HOME_DIR)/lib/libproblemfile_caa.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib
+   PROBLEM_LIB_NS=$(HOME_DIR)/lib/libproblemfile_ns.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_ns
+   PROBLEM_LIB_NSSA=$(HOME_DIR)/lib/libproblemfile_nssa.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_nssa
+   PROBLEM_LIB_iNS=$(HOME_DIR)/lib/libproblemfile_ins.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_ins
+   PROBLEM_LIB_CH=$(HOME_DIR)/lib/libproblemfile_ch.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_ch
+   PROBLEM_LIB_MU=$(HOME_DIR)/lib/libproblemfile_mu.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_mu
+   PROBLEM_LIB_CAA=$(HOME_DIR)/lib/libproblemfile_caa.dylib -Wl,-rpath,./SETUP,-rpath,$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_caa
 else ifeq ($(PLATFORM),LINUX)
-   PROBLEM_LIB_NS=-L$(HOME_DIR)/lib -lproblemfile_ns -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
-   PROBLEM_LIB_NSSA=-L$(HOME_DIR)/lib -lproblemfile_nssa -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
-   PROBLEM_LIB_iNS=-L$(HOME_DIR)/lib -lproblemfile_ins -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
-   PROBLEM_LIB_CH=-L$(HOME_DIR)/lib -lproblemfile_ch -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
-   PROBLEM_LIB_MU=-L$(HOME_DIR)/lib -lproblemfile_mu -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
-   PROBLEM_LIB_CAA=-L$(HOME_DIR)/lib -lproblemfile_caa -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib
+   PROBLEM_LIB_NS=-L$(HOME_DIR)/lib -lproblemfile_ns -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_ns
+   PROBLEM_LIB_NSSA=-L$(HOME_DIR)/lib -lproblemfile_nssa -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_nssa
+   PROBLEM_LIB_iNS=-L$(HOME_DIR)/lib -lproblemfile_ins -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_ins
+   PROBLEM_LIB_CH=-L$(HOME_DIR)/lib -lproblemfile_ch -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_ch
+   PROBLEM_LIB_MU=-L$(HOME_DIR)/lib -lproblemfile_mu -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_mu
+   PROBLEM_LIB_CAA=-L$(HOME_DIR)/lib -lproblemfile_caa -Wl,-rpath=./SETUP,-rpath=$(HOME_DIR)/lib,-rpath=$(HOME_DIR)/src/libs/mesh/build_caa
 endif
 
 ##########################################
