@@ -76,8 +76,8 @@
          integer                         :: elementSide(2)
          integer                         :: projectionType(2)
          CHARACTER(LEN=BC_STRING_LENGTH) :: boundaryName
-         type(MappedGeometryFace)        :: geom
-         type(FaceStorage_t)             :: storage(2)
+         type(MappedGeometryFace), pointer :: geom => Null()
+         type(FaceStorage_t), pointer      :: storage(:) => Null()
          contains
             procedure   :: Construct                     => ConstructFace
             procedure   :: Destruct                      => DestructFace
@@ -98,6 +98,7 @@
 #endif
             procedure   :: copy           => Face_Assign
             generic     :: assignment(=)  => copy
+            final       :: FinalizeFace
       end type Face
 !
 !     ========
@@ -143,9 +144,17 @@
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      elemental SUBROUTINE DestructFace( self )
+      SUBROUTINE DestructFace( self )
          IMPLICIT NONE 
          class(Face), intent(inout) :: self
+         call FinalizeFace( self )
+      end SUBROUTINE DestructFace
+!
+!////////////////////////////////////////////////////////////////////////
+!
+      SUBROUTINE FinalizeFace( self )
+         IMPLICIT NONE 
+         type(Face), intent(inout) :: self
          
          self % ID = -1
          self % FaceType = HMESH_NONE
@@ -161,10 +170,18 @@
          self % projectionType = -1
          self % boundaryName = ""
          
-         call self % geom % Destruct
-         call self % storage % Destruct
+         if (associated(self % geom)) then
+            call self % geom % destruct
+            deallocate(self % geom)
+            nullify(self % geom)
+         end if
+         if (associated(self % storage)) then
+            call self % storage % destruct
+            deallocate(self % storage)
+            nullify(self % storage)
+         end if
 
-      end SUBROUTINE DestructFace
+      end SUBROUTINE FinalizeFace
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -1204,7 +1221,7 @@
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      elemental subroutine Face_Assign(to,from)
+      subroutine Face_Assign(to,from)
          implicit none
          class(Face), intent(inout) :: to
          class(Face), intent(in)    :: from
@@ -1225,7 +1242,17 @@
          to % elementSide = from % elementSide
          to % projectionType = from % projectionType
          to % boundaryName = from % boundaryName
-         to % geom = from % geom
-         to % storage = from % storage
+         if (associated(from % geom)) then
+            if (.not. associated(to % geom)) then
+               allocate(to % geom)
+               to % geom => from % geom
+            end if
+         end if
+         if (associated(from % storage)) then
+            if (.not. associated(to % storage)) then
+               allocate(to % storage(2))
+               to % storage => from % storage
+            end if
+         end if
       end subroutine Face_Assign
 end Module FaceClass
