@@ -699,9 +699,8 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
       REAL(KIND=RP), DIMENSION(3) :: b = (/0.0_RP       ,  1.0_RP /3.0_RP ,    3.0_RP/4.0_RP  /)
       REAL(KIND=RP), DIMENSION(3) :: c = (/1.0_RP/3.0_RP,  15.0_RP/16.0_RP,    8.0_RP/15.0_RP /)
       REAL(KIND=RP), DIMENSION(3) :: auxiliar = (/1.0_RP/3.0_RP, (3.0_RP/4.0_RP-1.0_RP/3.0_RP) , 1.0_RP/4.0_RP /)
-      real(kind=RP) :: center(2)
       real(kind=RP), DIMENSION(3) :: omega = (/0.0_RP, PI/20_RP, 0.0_RP/)
-      real(kind=RP) :: rad, angle
+      real(kind=RP) ::  angle
       integer :: NB = 7
 
 
@@ -721,11 +720,9 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
             call ComputeTimeDerivative( mesh, particles, tk, CTD_IGNORE_MODE)
             !if (mesh % slidingMesh % active .and. mesh % slidingflux) then
             if (mesh % slidingMesh % active) then
-               center(1)=0.0_RP
-               center(2)=0.0_RP
-               rad=1.01_RP
+
                angle=(omega(2)*deltaT) * auxiliar(k)
-               !CALL AdvanceSlidingMesh(mesh=mesh, rotationRadius=mesh % slidingMesh % radius, rotationCenter=mesh % slidingMesh % center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
+               !CALL AdvanceSlidingMesh(mesh=mesh, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
             end if
             if ( present(dts) ) then
                if (dts) call ComputePseudoTimeDerivative(mesh, tk, global_dt)
@@ -764,11 +761,9 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
             call ComputeTimeDerivative( mesh, particles, tk, CTD_IGNORE_MODE)
                   !if (mesh % slidingMesh % active .and. mesh % slidingflux) then
             if (mesh % slidingMesh % active) then
-               center(1)=0.0_RP
-               center(2)=0.0_RP
-               rad=1.01_RP
+
                angle=(omega(2)*deltaT) * auxiliar(k)
-               !CALL AdvanceSlidingMesh(mesh=mesh, rotationRadius=rad, rotationCenter=center, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
+               !CALL AdvanceSlidingMesh(mesh=mesh, numBFacePoints=NB, nodes=mesh%nodeType, useMPI=.FALSE. , angle = angle)
             end if
             if ( present(dts) ) then
                if (dts) call ComputePseudoTimeDerivative(mesh, tk, global_dt)

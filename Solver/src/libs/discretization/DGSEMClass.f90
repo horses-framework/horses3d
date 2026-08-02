@@ -342,8 +342,7 @@ Module DGSEMClass
 
       if (self% mesh% SlidingMesh% isConfigured) then 
 
-         call AdvanceSlidingMesh(self% mesh, self% mesh% SlidingMesh% radius, self% mesh% SlidingMesh%center &
-         , self% mesh% numBFacePoints, self% mesh% nodeType, .FALSE.)
+         call AdvanceSlidingMesh(self% mesh, self% mesh% numBFacePoints, self% mesh% nodeType, .FALSE.)
 
       end if 
 !     
