@@ -100,10 +100,6 @@ subroutine SlidingMesh_read_info( self, controlVariables )
         call self % GetInfo( controlVariables )
     end if
 
-    if (.not. self % isConfigured) then
-        write(STD_OUT,'(A)') 'FATAL: #define slidingmesh block missing or incomplete in control file'
-        error stop
-     end if
 end subroutine SlidingMesh_read_info
 
 subroutine SlidingMesh_GetInfo( self, controlVariables )
