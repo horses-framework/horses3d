@@ -55,23 +55,31 @@ MODULE SlidingMeshClass
       integer                                :: numBFacePoints
       integer                                :: numSlidingElements
       integer                                :: numSlidingInterfaceElements 
-      integer                                :: currentSectorID
-      real(KIND=RP)                          :: center(2)
-      real(KIND=RP)                          :: radius 
-      real(KIND=RP)                          :: theta        ! rotation angle
-      real(KIND=RP)                          :: omega
+      integer                                :: currentSectorID = 0
+      real(KIND=RP)                          :: center(2) = 0.0_RP
+      real(KIND=RP)                          :: radius = huge(1.0_RP)
+      real(KIND=RP)                          :: theta = 0.0_RP       ! rotation angle
+      real(KIND=RP)                          :: omega = 0.0_RP
       real(KIND=RP)                          :: localAngle
       integer                                :: rotationAxis
+      integer                                :: iAx = 2 
+      integer                                :: iR1 = 1
+      integer                                :: iR2 = 3
+      integer                                :: numElemsPerLayer = 0
       logical                                :: initialized=.false.
       logical                                :: conforming=.false.
 
     contains
 
-        procedure :: read_info                              => SlidingMesh_read_info
-        procedure :: GetInfo                                => SlidingMesh_GetInfo
+        procedure :: read_info                          => SlidingMesh_read_info
+        procedure :: GetInfo                            => SlidingMesh_GetInfo
         procedure :: Initialize                         => SlidingMesh_Initialize
         procedure :: Destruct                           => SlidingMesh_Destruct
-      
+        procedure :: phi                                => SlidingMesh_phi
+        procedure :: zeta                               => SlidingMesh_zeta
+        procedure :: rad                                => SlidingMesh_rad
+        procedure :: RotatePoint                        => SlidingMesh_RotatePoint
+
     end type
 
 !     ========
@@ -91,7 +99,11 @@ subroutine SlidingMesh_read_info( self, controlVariables )
     if (SlidingMeshIsDefined()) then
         call self % GetInfo( controlVariables )
     end if
-     
+
+    if (.not. self % isConfigured) then
+        write(STD_OUT,'(A)') 'FATAL: #define slidingmesh block missing or incomplete in control file'
+        error stop
+     end if
 end subroutine SlidingMesh_read_info
 
 subroutine SlidingMesh_GetInfo( self, controlVariables )
@@ -155,16 +167,21 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     select case (trim(rotAxis))
     case ("x")
         self % rotationAxis = rotationAxis_X
+        self % iAx = 1
     case ("y")
         self % rotationAxis = rotationAxis_Y
+        self % iAx = 2
     case ("z")
         self % rotationAxis = rotationAxis_Z
+        self % iAx = 3
     case default
         print *, "Unrecognized rotation axis value. Possible values are: x, y, z."
         errorMessage(STD_OUT)
         error stop
     end select   
     
+    self % iR1 = mod(self % iAx + 1, 3) + 1
+    self % iR2 = mod(self % iAx, 3) + 1
     self % isConfigured = .true.
 
 end subroutine SlidingMesh_GetInfo
@@ -319,5 +336,46 @@ logical function SlidingMeshIsDefined()
     close(fID)                             
 
 end function SlidingMeshIsDefined
+
+pure function SlidingMesh_phi(self, x) result(p)
+   class(SlidingMesh), intent(in) :: self
+   real(kind=RP),      intent(in) :: x(3)
+   real(kind=RP) :: p
+
+   p = atan2( x(self % iR2) - self % center(2), x(self % iR1) - self % center(1) )
+
+end function
+
+pure function SlidingMesh_zeta(self, x) result(z)
+   class(SlidingMesh), intent(in) :: self
+   real(kind=RP),      intent(in) :: x(3)
+   real(kind=RP) :: z
+
+   z = x(self % iAx)
+
+end function
+
+pure function SlidingMesh_rad(self, x) result(r)
+   class(SlidingMesh), intent(in) :: self
+   real(kind=RP),      intent(in) :: x(3)
+   real(kind=RP) :: r
+
+   r = sqrt( (x(self % iR1) - self % center(1))**2 + (x(self % iR2) - self % center(2))**2 )
+
+end function
+
+pure subroutine SlidingMesh_RotatePoint(self, theta, x)
+   class(SlidingMesh), intent(in)    :: self
+   real(kind=RP),      intent(in)    :: theta
+   real(kind=RP),      intent(inout) :: x(3)
+
+   real(kind=RP) :: u, v, c, s
+
+   c = cos(theta) ; s = sin(theta)
+   u = x(self % iR1) - self % center(1)
+   v = x(self % iR2) - self % center(2)
+   x(self % iR1) = self % center(1) + c*u - s*v
+   x(self % iR2) = self % center(2) + s*u + c*v
+end subroutine
 
 END MODULE SlidingMeshClass
