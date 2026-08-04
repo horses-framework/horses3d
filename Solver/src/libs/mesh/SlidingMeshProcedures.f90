@@ -267,10 +267,7 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
             
          end if
 
-      !===============================================================================
-      ! Create three arrays that contain the fIDs of interior, mpi, and boundary faces
-      !===============================================================================
-
+         ! Create three arrays that contain the fIDs of interior, mpi, and boundary faces
          if (.not. SM  % active ) then 
             mesh % no_of_faces = size(mesh % faces)
 
@@ -467,8 +464,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
 
    end do 
 
-
-
    ! Detect interface (mortar) elements
    elemCount = 0
 
@@ -622,7 +617,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
 
             if ((elemID .NE. SM % slidingMortarConnectivity(i,1)) .AND. (neighborElemID .NE. SM % slidingMortarConnectivity(i,1))) write(*,*) 'problem with (i,4) line 6195'
 
-
             elemID  = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,2))%faceIDs(SM % slidingMortarConnectivity(i,5)))%elementIDs(1)
             neighborElemID = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,2))%faceIDs(SM % slidingMortarConnectivity(i,5)))%elementIDs(2)
 
@@ -694,7 +688,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
          end do
       end do
 
-
       if (MPI_Process % doMPIAction) then
          if (.NOT. mpi_partition % Constructed) then
 
@@ -708,7 +701,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
 
          end if
       end if
-
 
       !  Detect neighboring sliding elements sharing common nodes
       do i = 1, size(SM % slidingMortarElems)
@@ -767,7 +759,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
 
          end do
       end do
-
 
       if (MPI_Process % doMPIAction) then
          if (.NOT. mpi_partition % Constructed) then
@@ -833,11 +824,9 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
          ind3 = 0
 
          do j = 1, size(SM % slidingMortarElems)
-
             if (SM % slidingMortarConnectivity(i,1) == SM % slidingMortarConnectivity(j,1)) ind1 = ind1 + 1
             if (SM % slidingMortarConnectivity(i,2) == SM % slidingMortarConnectivity(j,2)) ind2 = ind2 + 1
             if (SM % slidingMortarConnectivity(i,3) == SM % slidingMortarConnectivity(j,3)) ind3 = ind3 + 1
-
          end do
 
          if (ind1 .NE. 1) write(*,*) 'ind1 .NE 1 problem', ind1
@@ -1029,7 +1018,6 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
          write(*,*) "problem elem slidingMortarElems"
       end if
 
-
       ! Compute rotated coordinates of element nodes
       do j = 1, 8
 
@@ -1148,7 +1136,6 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
 
 end subroutine RotateSlidingRegion
 
-
 subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, offsetParams, scaleParams, originalNodeCount, totalNodeCount)
    IMPLICIT NONE
 
@@ -1166,19 +1153,15 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, offse
    integer                       :: new_nNodes
 
 
-   ! =========================
-   ! Initialization
-   ! =========================
 
+   ! Initialization
    allocate(new_nodes(totalNodeCount))
    new_nNodes = 0
-   
+
    new_nNodes = SIZE(mesh % nodes)
 
-   ! =========================
-   ! Initialize mortar mapping parameters
-   ! =========================
 
+   ! Initialize mortar mapping parameters
    offsetParams = 0.0_RP
    scaleParams = 0.0_RP
 
@@ -1344,10 +1327,8 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
    
    mortarIndex = 1
 
-   ! -------------------------------------------------------------------------
+
    ! Construct first family of mortar interfaces (MortarPos = 0).
-   ! -------------------------------------------------------------------------
-   
    do i = 1, size(slidingMortarElems)
    
       ! Select master element and interface face
@@ -1398,7 +1379,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
       mesh % mortar_faces(mortarIndex) % elementSide(2) = slidingMortarConnectivity(i,5)
       mesh % mortar_faces(mortarIndex) % FaceType       = HMESH_INTERIOR
       
-      
       mesh % elements(masterElementID) % faceSide(masterFaceNumber) = 1
       mesh % elements(slaveElementID) % faceSide(slidingMortarConnectivity(i,5))   = 2
       
@@ -1435,7 +1415,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
       mesh % elements(mortarNeighborElems(i)) % MortarFaces(2) = 3
       
    end do
-   
    
    ! -------------------------------------------------------------------------
    ! Construct second mortar family (MortarPos = 1)
@@ -1518,7 +1497,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
 
    end do
    
-   
    ! -------------------------------------------------------------------------
    ! Link mortar faces with neighboring elements
    ! -------------------------------------------------------------------------
@@ -1536,7 +1514,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
            end associate
        end associate
    end do
-   
    
    ! -------------------------------------------------------------------------
    ! Construct mortar geometrical mappings
@@ -1643,14 +1620,11 @@ subroutine UpdateSlidingMortarsConnectivity(mesh, sectorID)
                   tmp_SlidingMortarConnetion(i,10) = SM % slidingMortarConnectivity(j,10)
 
                end if 
-
             end do 
          end do
 
          SM % slidingMortarConnectivity = tmp_SlidingMortarConnetion
-
       end do 
-      
       deallocate(tmp_SlidingMortarConnetion)
 
    end associate
@@ -1718,7 +1692,6 @@ subroutine BuildAzimuthalConnectivity(mesh)
       nInt = size(SM % slidingMortarElems)
       allocate(phiA(nInt), zetA(nInt), radA(nInt), idx(nInt))
 
-      !collecte : centroïde de la face d'interface (colonne 4)
       do i = 1, nInt
          eID = SM % slidingMortarElems(i)
          fID = mesh % elements(eID) % faceIDs( SM % slidingMortarConnectivity(i,4) )
@@ -1738,11 +1711,10 @@ subroutine BuildAzimuthalConnectivity(mesh)
          error stop
       end if
 
-      !lexicographic sort
       tolz = 1.0e-3_RP * SM % radius
       call SortByLayerAndAngle(idx, zetA, phiA, tolz, nInt)
 
-      !axial groups -> columns 2 and 5
+      !axial groups 
       NgRef = -1 
       gStart = 1
       numLayers = 0
@@ -1799,12 +1771,12 @@ subroutine BuildAzimuthalConnectivity(mesh)
          end do
          
          if ( abs(sumphi - 2.0_RP*PI) > 1.0e-8_RP ) then
-            write(STD_OUT,*) 'sliding C3: ring not closed, sum(dphi) =', sumphi
+            write(STD_OUT,*) 'sliding: ring not closed, sum(dphi) =', sumphi
             error stop
          end if
          
          if ( dmax/dmin - 1.0_RP > 1.0e-2_RP ) then
-            write(STD_OUT,*) 'sliding C4: non-uniform azimuthal spacing, dphi in [', dmin, ',', dmax, ']'
+            write(STD_OUT,*) 'sliding: non-uniform azimuthal spacing, dphi in [', dmin, ',', dmax, ']'
             error stop
          end if
 

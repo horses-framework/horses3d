@@ -529,11 +529,7 @@ contains
       
       call self % ExportBoundaryMesh (trim(fileName))
 
-!
-!     Non-conforming mesh summary
-!     ----------------------------
-
-
+      self % numBFacePoints=numBFacePoints 
 #else
       error stop ':: HDF5 is not linked correctly'
 #endif
@@ -1062,6 +1058,8 @@ subroutine ConstructMeshPartition_FromHDF5File_( self, fileName, nodes, Nx, Ny, 
 !     Prepare mesh for I/O
 !     --------------------
       call self % PrepareForIO
+
+      self % numBFacePoints=numBFacePoints 
 
 #else
       error stop ':: HDF5 is not linked correctly'
