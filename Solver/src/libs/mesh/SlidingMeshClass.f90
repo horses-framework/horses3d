@@ -22,6 +22,7 @@ MODULE SlidingMeshClass
     type SlidingMesh
       logical                                :: active = .false.
       logical                                :: isConfigured = .false.
+      integer                                :: numPureSlidingElems = 0
       integer,                   allocatable :: mortarNeighborElems(:)!associated non-sliding neighbors across the interface (require mortars)
       integer,                   allocatable :: slidingMortarElems(:)!sliding elements at the interface (require mortars)
       integer,                   allocatable :: pureSlidingElems(:)!sliding elements fully inside the region (no mortar)
@@ -68,7 +69,9 @@ MODULE SlidingMeshClass
       integer                                :: numElemsPerLayer = 0
       logical                                :: initialized=.false.
       logical                                :: conforming=.false.
-
+      integer                                :: numDuplicatedNodes = 0
+      integer                                :: numLayers = 0
+      integer, allocatable                   :: layerID(:)
     contains
 
         procedure :: read_info                          => SlidingMesh_read_info
@@ -206,7 +209,7 @@ subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingE
     if (.not. allocated(self % face_othernodes))                 allocate(self % face_othernodes(numSlidingInterfaceElements, 4))
     if (.not. allocated(self % neighborConnectivity))            allocate(self % neighborConnectivity(numSlidingInterfaceElements, 9, 6))
     if (.not. allocated(self % rotmortars))                      allocate(self % rotmortars(2 * numSlidingInterfaceElements))
-    
+    if (.not. allocated(self % layerID))                         allocate(self % layerID(numSlidingInterfaceElements))
     
     !========================
     ! Initialization (first pass only)
@@ -225,44 +228,44 @@ subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingE
        self % numSlidingInterfaceElements = numSlidingInterfaceElements
        self % numSlidingElements          = numSlidingElements
        self % numBFacePoints              = numBFacePoints
-    
+       self % layerID                   = 0
     end if 
 
 end subroutine SlidingMesh_Initialize
 
 subroutine SlidingMesh_Destruct(self)
-   implicit none
+    implicit none
 
-   class(SlidingMesh), intent(inout) :: self
+    class(SlidingMesh), intent(inout) :: self
 
-   ! ---------------------------------------------------------------------
-   ! Deallocate sliding mesh connectivity and mortar storage
-   ! ---------------------------------------------------------------------
-   safedeallocate(self % mortarNeighborElems)
-   safedeallocate(self % slidingMortarElems)
-   safedeallocate(self % pureSlidingElems)
-   safedeallocate(self % mortararr1)
-   safedeallocate(self % mortararr2)
-   safedeallocate(self % face_nodes)
-   safedeallocate(self % face_othernodes)
-   safedeallocate(self % slidingMortarConnectivity)
-   safedeallocate(self % neighborConnectivity)
-   safedeallocate(self % rotmortars)
+    ! ---------------------------------------------------------------------
+    ! Deallocate sliding mesh connectivity and mortar storage
+    ! ---------------------------------------------------------------------
+    safedeallocate(self % mortarNeighborElems)
+    safedeallocate(self % slidingMortarElems)
+    safedeallocate(self % pureSlidingElems)
+    safedeallocate(self % mortararr1)
+    safedeallocate(self % mortararr2)
+    safedeallocate(self % face_nodes)
+    safedeallocate(self % face_othernodes)
+    safedeallocate(self % slidingMortarConnectivity)
+    safedeallocate(self % neighborConnectivity)
+    safedeallocate(self % rotmortars)
+    safedeallocate(self % layerID)
+    ! ---------------------------------------------------------------------
+    ! Reset counters and state variables
+    ! ---------------------------------------------------------------------
 
-   ! ---------------------------------------------------------------------
-   ! Reset counters and state variables
-   ! ---------------------------------------------------------------------
+    self % numSlidingInterfaceElements = 0
+    self % numSlidingElements          = 0
+    self % numBFacePoints              = 0
 
-   self % numSlidingInterfaceElements = 0
-   self % numSlidingElements          = 0
-   self % numBFacePoints              = 0
+    self % omega        = 0.0_RP
+    self % theta        = 0.0_RP
 
-   self % omega        = 0.0_RP
-   self % theta        = 0.0_RP
-
-   self % initialized  = .false.
-   self % conforming   = .false.
-   self % active       = .false.
+    self % initialized  = .false.
+    self % conforming   = .false.
+    self % active       = .false.
 
 end subroutine SlidingMesh_Destruct
 
