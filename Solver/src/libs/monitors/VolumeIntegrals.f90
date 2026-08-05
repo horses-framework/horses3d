@@ -97,10 +97,12 @@ module VolumeIntegrals
          real(kind=RP) :: localVal
          integer       :: eID, ierr
 
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
          if ((integralType .eq. RELATIVE_KINETIC_ENERGY) .or. (integralType .eq. RELATIVE_TOTAL_ENERGY)) then
             val = ScalarVolumeIntegral_RELATIVE(mesh, integralType, time)
             return
          end if
+#endif
 
 !
 !        Initialization
