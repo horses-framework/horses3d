@@ -439,7 +439,7 @@ module MonitorsClass
 !        Update volume monitors
 !        ----------------------
          do i = 1 , self % no_of_volumeMonitors
-            call self % volumeMonitors(i) % Update( mesh , self % bufferLine )
+            call self % volumeMonitors(i) % Update( mesh , self % bufferLine, t )
          end do
 !
 !        Update load balancing monitors

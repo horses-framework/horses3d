@@ -116,6 +116,8 @@ module VolumeMonitorClass
          case ("math entropy")
          case ("artificial dissipation")
          case ("internal energy")
+         case ("relative kinetic energy")
+         case ("relative total energy")
          case ("mean velocity")
          case ("velocity")          ; self % num_of_vars = 3
          case ("momentum")          ; self % num_of_vars = 3
@@ -143,6 +145,8 @@ module VolumeMonitorClass
                print*, "   * Math entropy"
                print*, "   * Artificial dissipation"
                print*, "   * Internal energy"
+               print*, "   * Relative kenetic energy"
+               print*, "   * Relative total energy"
                print*, "   * Mean velocity"
                print*, "   * Velocity"
                print*, "   * Momentum"
@@ -276,7 +280,7 @@ module VolumeMonitorClass
 
       end subroutine VolumeMonitor_Initialization
 
-      subroutine VolumeMonitor_Update ( self , mesh , bufferPosition )
+      subroutine VolumeMonitor_Update ( self , mesh , bufferPosition, time )
 !
 !        *******************************************************************
 !           This subroutine updates the monitor value computing it from
@@ -289,6 +293,7 @@ module VolumeMonitorClass
          class   (  VolumeMonitor_t ) :: self
          class   (  HexMesh       )   :: mesh
          integer                      :: bufferPosition
+         real(kind=rp), intent(in)    :: time
 
          self % bufferLine = bufferPosition
 !
@@ -325,6 +330,12 @@ module VolumeMonitorClass
 
          case ("internal energy")
             self % values(1,bufferPosition) = ScalarVolumeIntegral(mesh, INTERNAL_ENERGY) / ScalarVolumeIntegral(mesh, VOLUME)
+
+         case ("relative kinetic energy")
+            self % values(1,bufferPosition) = ScalarVolumeIntegral(mesh, RELATIVE_KINETIC_ENERGY, time=time) / ScalarVolumeIntegral(mesh, VOLUME)
+         
+         case ("relative total energy")
+            self % values(1,bufferPosition) = ScalarVolumeIntegral(mesh, RELATIVE_TOTAL_ENERGY, time=time) / ScalarVolumeIntegral(mesh, VOLUME)
 
          case ("mean velocity")
             self % values(1,bufferPosition) = ScalarVolumeIntegral(mesh, VELOCITY) / ScalarVolumeIntegral(mesh, VOLUME)

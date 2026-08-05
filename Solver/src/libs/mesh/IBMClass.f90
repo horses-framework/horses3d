@@ -1797,7 +1797,7 @@ module IBMClass
       use OrientedBoundingBox
       implicit none
 
-      class(IBM_type), intent(inout) :: this 
+      class(IBM_type), intent(in) :: this 
       integer,         intent(in)    :: nEqn, STLNum
       real(kind=RP),   intent(in)    :: Q(nEqn), x(NDIM), t
       real(kind=RP)                  :: Q_target(nEqn)

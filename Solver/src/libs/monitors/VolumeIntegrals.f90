@@ -19,6 +19,7 @@ module VolumeIntegrals
 #if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
    public KINETIC_ENERGY, KINETIC_ENERGY_RATE, KINETIC_ENERGY_BALANCE, ENSTROPHY, VELOCITY
    public ENTROPY, ENTROPY_RATE, INTERNAL_ENERGY, MOMENTUM, SOURCE, PSOURCE, ARTIFICIAL_DISSIPATION
+   public RELATIVE_KINETIC_ENERGY, RELATIVE_TOTAL_ENERGY
    public ENTROPY_BALANCE, MATH_ENTROPY
 #endif
 
@@ -47,6 +48,7 @@ module VolumeIntegrals
 #if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
       enumerator :: KINETIC_ENERGY, KINETIC_ENERGY_RATE, KINETIC_ENERGY_BALANCE
       enumerator :: ENSTROPHY, VELOCITY, ENTROPY, ENTROPY_RATE, INTERNAL_ENERGY, MOMENTUM, SOURCE, PSOURCE
+      enumerator :: RELATIVE_KINETIC_ENERGY, RELATIVE_TOTAL_ENERGY ! Relative to the IB velocity
       enumerator :: ARTIFICIAL_DISSIPATION, ENTROPY_BALANCE, MATH_ENTROPY
 #endif
 #if defined(INCNS)
@@ -73,7 +75,7 @@ module VolumeIntegrals
 !
 !////////////////////////////////////////////////////////////////////////////////////////
 !
-      function ScalarVolumeIntegral(mesh, integralType) result(val)
+      function ScalarVolumeIntegral(mesh, integralType, time) result(val)
 !
 !        -----------------------------------------------------------
 !           This function computes scalar integrals, that is, those
@@ -85,6 +87,7 @@ module VolumeIntegrals
          implicit none
          class(HexMesh),      intent(in)  :: mesh
          integer,             intent(in)  :: integralType
+         real(kind=RP), optional, intent(in) :: time
          real(kind=RP)                    :: val
 !
 !        ---------------
@@ -93,6 +96,11 @@ module VolumeIntegrals
 !
          real(kind=RP) :: localVal
          integer       :: eID, ierr
+
+         if ((integralType .eq. RELATIVE_KINETIC_ENERGY) .or. (integralType .eq. RELATIVE_TOTAL_ENERGY)) then
+            val = ScalarVolumeIntegral_RELATIVE(mesh, integralType, time)
+            return
+         end if
 
 !
 !        Initialization
@@ -118,11 +126,62 @@ module VolumeIntegrals
 #endif
 
       end function ScalarVolumeIntegral
+   
+      function ScalarVolumeIntegral_RELATIVE(mesh, integralType, time) result(val)
+!
+!        -----------------------------------------------------------
+!           This function computes scalar integrals, that is, those
+!           in the form:
+!                 val = \int v dx
+!        -----------------------------------------------------------
+!
 
-      function ScalarVolumeIntegral_Local(e, integralType) result(val)
+         implicit none
+         class(HexMesh),      intent(in)  :: mesh
+         integer,             intent(in)  :: integralType
+         real(kind=RP),       intent(in)  :: time
+         real(kind=RP)                    :: val
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+         real(kind=RP) :: localVal
+         integer       :: eID, ierr
+!
+!        Initialization
+!        --------------
+         val = 0.0_RP
+!
+!        Loop the mesh
+!        -------------
+!$omp parallel do reduction(+:val) private(eID) schedule(guided)
+         do eID = 1, mesh % no_of_elements
+!
+!           Compute the integral
+!           --------------------
+            val = val + ScalarVolumeIntegral_Local(mesh % elements(eID), &
+                                                           integralType, &
+                                                           time = time, &
+                                                           IBM = mesh % IBM    )
+
+         end do
+!$omp end parallel do
+
+#ifdef _HAS_MPI_
+            localVal = val
+            call mpi_allreduce(localVal, val, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD, ierr)
+#endif
+
+      end function ScalarVolumeIntegral_RELATIVE
+
+      function ScalarVolumeIntegral_Local(e, integralType, time, IBM) result(val)
+         use IBMClass, only: IBM_type
          implicit none
          class(Element),      target, intent(in)     :: e
          integer,                     intent(in)     :: integralType
+         real(kind=RP), optional, intent(in) :: time
+         class(IBM_type), optional, intent(in) :: IBM
          real(kind=RP)                               :: val
 !
 !        ---------------
@@ -149,6 +208,7 @@ module VolumeIntegrals
          real(kind=RP)           :: free_en, fchem, entr, area, rho , u , v, w, en, thetaeddy
          real(kind=RP)           :: Strain(NDIM,NDIM)
          real(kind=RP)           :: mu
+         real(kind=RP)           :: Q_target(NCONS) ! Used for the IB velocity
 
          Nel = e % Nxyz
 
@@ -383,6 +443,61 @@ module VolumeIntegrals
 
             do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
                val = val + wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * e % storage % Q(IRHOE,i,j,k)
+            end do            ; end do           ; end do
+
+         case ( RELATIVE_KINETIC_ENERGY )
+!
+!           ***********************************
+!              Computes the relative kinetic energy
+!              integral:
+!              K = 1/2 * \int \rho (V-V_s)^2 dV
+!            V: flow velocity
+!            V_s: immersed body velocity
+!            (1/2) * rho * (v-v_s)^2 = (1/2) * rho * v^2 + (1/2) * rho * v_s^2 - rho * v * v_s =
+!               = (1/2) * (1/rho) * (rho*v)^2 + (1/2) * rho * v_s^2 - (rho*v) * v_s
+!               = (1/2) * (1/rho) * (rho*v)^2 + (1/2) * (1/rho) * (rho*v_s)^2 - (1/rho) * (rho*v) * (rho*v_s)
+!           ***********************************
+!
+
+            KinEn =         POW2(e % storage % Q(IRHOU,:,:,:))
+            KinEn = KinEn + POW2( e % storage % Q(IRHOV,:,:,:) )
+            KinEn = KinEn + POW2( e % storage % Q(IRHOW,:,:,:) )
+            KinEn = 0.5_RP * KinEn / e % storage % Q(IRHO,:,:,:)
+
+            do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
+               en = kinEn(i,j,k)
+               if( e % isInsideBody(i,j,k) ) then
+                  if( IBM% stl(e% STL(i,j,k))% move ) then
+                     Q_target = IBM % MaskVelocity( e % storage% Q(:,i,j,k), NCONS, e % STL(i,j,k), e % geom% x(:,i,j,k), time )
+                     en = en + (0.5_rp / e % storage % Q(IRHO,i,j,k)) * (POW2(Q_target(IRHOU)) + POW2(Q_target(IRHOV)) + POW2(Q_target(IRHOW))) - &
+                        - (1.0_rp / e % storage % Q(IRHO,i,j,k)) * (e % storage % Q(IRHOU,i,j,k) * Q_target(IRHOU) + e % storage % Q(IRHOV,i,j,k) * Q_target(IRHOV) + e % storage % Q(IRHOW,i,j,k) * Q_target(IRHOW))
+                  end if
+               end if
+               val = val +   wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * en
+            end do            ; end do           ; end do
+
+         case ( RELATIVE_TOTAL_ENERGY )
+!
+!           ***********************************
+!              Computes the relative total energy
+!              integral:
+!              E_rel =  \int E_rel dV
+!              E_rel = E - v_s * (rho*v) + 0.5 * rho * v_s^2
+!            V: flow velocity
+!            V_s: immersed body velocity
+!           ***********************************
+!
+
+           do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
+               en = e % storage % Q(IRHOE,i,j,k)
+               if( e % isInsideBody(i,j,k) ) then
+                  if( IBM % stl(e % STL(i,j,k)) % move ) then
+                     Q_target = IBM % MaskVelocity( e % storage% Q(:,i,j,k), NCONS, e % STL(i,j,k), e % geom% x(:,i,j,k), time )
+                     en = en + 0.5_rp / Q_target(IRHO) * (POW2(Q_target(IRHOU)) + POW2(Q_target(IRHOV)) + POW2(Q_target(IRHOW))) - &
+                        - (1.0_rp / e % storage % Q(IRHO,i,j,k)) * (e % storage % Q(IRHOU,i,j,k) * Q_target(IRHOU) + e % storage % Q(IRHOV,i,j,k) * Q_target(IRHOV) + e % storage % Q(IRHOW,i,j,k) * Q_target(IRHOW))
+                  end if
+               end if
+               val = val +   wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * en 
             end do            ; end do           ; end do
 #endif
 
