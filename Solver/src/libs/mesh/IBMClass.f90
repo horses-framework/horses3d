@@ -48,6 +48,7 @@ module IBMClass
       real(kind=rp)                           :: eta, BandRegionCoeff, IP_Distance = 0.0_RP, &
                                                  y_plus_target, minCOORDS, maxCOORDS,        &
                                                  penalCoeff
+      real(kind=rp)                           :: thetaEnergySource ! Theta parameter in the energy source term
       real(kind=rp),              allocatable :: penalization(:)
       integer                                 :: KDtree_Min_n_of_Objs, NumOfInterPoints,     &
                                                  n_of_INpoints,  rank, lvl = 0, NumOfSTL,    &
@@ -145,7 +146,7 @@ module IBMClass
                                     BandRegion_in, Distance_in, AAB_in
       real(kind=rp), allocatable :: penalization_in, y_plus_target_in,  &
                                     BandRegionCoeff_in,                 & 
-                                    penalization_coeff_in
+                                    penalization_coeff_in, thetaEnergySource_in
       integer,       allocatable :: n_of_Objs_in, n_of_interpoints_in,  &
                                     Nx_in, Ny_in, Nz_in, Clipaxis_in
       character(len=LINE_LENGTH) :: in_label, paramFile, name_in, tmp,  &
@@ -163,6 +164,7 @@ module IBMClass
       call readValueInRegion( trim( paramFile ), "active",                         active_in,             in_label, "#end" )
       call readValueInRegion( trim( paramFile ), "penalization",                   penalization_in,       in_label, "#end" )   
       call readValueInRegion( trim( paramFile ), "penalization coeff",             penalization_coeff_in, in_label, "#end" )   
+      call readValueInRegion( trim( paramFile ), "theta energy source",            thetaEnergySource_in,  in_label, "#end" )   
       call readValueInRegion( trim( paramFile ), "semi implicit",                  semiImplicit_in,       in_label, "#end" )
       call readValueInRegion( trim( paramFile ), "nx",                             Nx_in,                 in_label, "#end" )
       call readValueInRegion( trim( paramFile ), "ny",                             Ny_in,                 in_label, "#end" )
@@ -239,6 +241,12 @@ module IBMClass
          this% penalCoeff = penalization_coeff_in
       else
          this% penalCoeff = 1.0_RP
+      end if
+
+      if( allocated(thetaEnergySource_in) ) then
+         this % thetaEnergySource = thetaEnergySource_in
+      else
+         this % thetaEnergySource = 0.5_rp
       end if
 
       if( allocated(n_of_Objs_in) ) then
@@ -1741,8 +1749,9 @@ module IBMClass
       Source(IRHOU) = rho*u-rho_s*u_s  
       Source(IRHOV) = rho*v-rho_s*v_s 
       Source(IRHOW) = rho*w-rho_s*w_s
-      Source(IRHOE) = 0.5_RP * rho*( POW2(u) + POW2(v) + POW2(w) )  & 
-                     -0.5_RP * rho_s*( POW2(u_s) + POW2(v_s) + POW2(w_s) )
+      ! Source(IRHOE) = 0.5_RP * rho*( POW2(u) + POW2(v) + POW2(w) )  & 
+      !                -0.5_RP * rho_s*( POW2(u_s) + POW2(v_s) + POW2(w_s) )
+      Source(IRHOE) = rho * (u_s*(u-u_s) + v_s*(v-v_s) + w_s*(w-w_s) + this % thetaEnergySource * (POW2(u-u_s) + POW2(v-v_s) + POW2(w-w_s)))
 #if defined(SPALARTALMARAS)
       theta = Q(IRHOTHETA)/rho
       Source(IRHOTHETA) = rho*theta - rho_s*theta_s
