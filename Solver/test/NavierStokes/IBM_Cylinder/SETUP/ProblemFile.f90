@@ -553,11 +553,15 @@ end module ProblemFileFunctions
 #if defined(NAVIERSTOKES)
             INTEGER                            :: iterations(3:7) = [20, 0, 0, 0, 0]
   
-            real(kind=RP), parameter :: residuals(5) = [ 1.2169683943552828E+02_RP, &
+            real(kind=RP), parameter :: residuals(9) = [ 1.2169683943552828E+02_RP, &
                                                          6.7208958881180490E+02_RP, &
                                                          1.0498496133786432E+02_RP, &
                                                          6.0137943505440568E+01_RP, &
-                                                         6.2739173569848672E+03_RP  ]
+                                                         6.2739173569848672E+03_RP, &
+                                                         0.49933382668460363_RP, & ! Kinetic energy
+                                                         0.49933382668460352_RP, & ! Relative kinetic energy
+                                                         45.142511482040149_RP, &  ! Internal energy (actually it is Q(5)
+                                                         45.142511482040156_RP ]   ! Relative total energy
 
 !
             N = mesh % elements(1) % Nxyz(1) ! This works here because all the elements have the same order in all directions
@@ -589,8 +593,27 @@ end module ProblemFileFunctions
                                actualValue   = monitors % residuals % values(5,1)+1.0_RP, &
                                tol           = 1.d-11, &
                                msg           = "Energy residual")
+ 
+            CALL FTAssertEqual(expectedValue = residuals(6)+1.0_RP, &
+                               actualValue   = monitors % volumeMonitors(1) % values(1,1)+1.0_RP, &
+                               tol           = 1.d-11, &
+                               msg           = "Kinetic energy residual")
 
-            
+            CALL FTAssertEqual(expectedValue = residuals(7)+1.0_RP, &
+                               actualValue   = monitors % volumeMonitors(2) % values(1,1)+1.0_RP, &
+                               tol           = 1.d-11, &
+                               msg           = "Relative kinetic energy residual")
+
+            CALL FTAssertEqual(expectedValue = residuals(8)+1.0_RP, &
+                               actualValue   = monitors % volumeMonitors(3) % values(1,1)+1.0_RP, &
+                               tol           = 1.d-11, &
+                               msg           = "Internal energy residual")
+
+            CALL FTAssertEqual(expectedValue = residuals(9)+1.0_RP, &
+                               actualValue   = monitors % volumeMonitors(4) % values(1,1)+1.0_RP, &
+                               tol           = 1.d-11, &
+                               msg           = "Relative total energy residual")
+
             CALL FTAssertEqual(expectedValue = iterations(N), &
                                actualValue   = iter, &
                                msg           = "Number of time steps to tolerance")

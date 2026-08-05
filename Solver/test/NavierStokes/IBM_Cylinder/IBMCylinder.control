@@ -63,3 +63,23 @@ dcfl                  = 0.1d0
 #define boundary cylinder
   type = NoSlipWall
 #end
+
+#define volume monitor 1
+   Name = KinEn
+   Variable = Kinetic energy
+#end
+
+#define volume monitor 2
+   Name = relKinEn
+   Variable = Relative kinetic energy
+#end
+
+#define volume monitor 3
+   Name = inEn
+   Variable = Internal energy
+#end
+
+#define volume monitor 4
+   Name = relTotEn
+   Variable = Relative total energy
+#end
