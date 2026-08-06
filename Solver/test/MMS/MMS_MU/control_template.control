@@ -1,0 +1,87 @@
+!
+!       ================================================================
+!       MMS Convergence Study — HORSES3D Multiphase (MU)
+!       Control file template
+!
+!       Lines marked with {TOKEN} are filled automatically by
+!       run_convergence_MU.py. Do not edit those lines.
+!       All other lines can be freely edited.
+!       ================================================================
+!
+!-------------------------- Configuration:-
+                          Mesh file name = {MESH_FILE}
+                      Solution file name = {SOLUTION_FILE}
+                                 Restart = .false.
+                       Restart file name = Restart{SOLUTION_FILE}
+!
+!-------------------- Physical parameters:-
+!
+!   These must match the parameters set in generate_problemfile_MU.py:
+!     RHO2  = fluid_2_density / fluid_1_density
+!     eps   = interface width (m)
+!     sigma = interface tension (N/m)
+!     M0 is derived from chem characteristic time: M0 = eps^2 / (sigma * tCH)
+!
+                reference velocity (m/s) = 1.0
+                      velocity direction = [1.0, 0.0, 0.0]
+                  Number of fluids (1/2) = 2
+                fluid 1 density (kg/m^3) = 1.0
+                fluid 2 density (kg/m^3) = 2.0
+                fluid 1 viscosity (Pa.s) = 0.1
+                fluid 2 viscosity (Pa.s) = 0.1
+             chem characteristic time (s) = 100.0
+                      interface width (m) = 0.5
+                  Interface tension (N/m) = 0.01
+        artificial compressibility factor = 1000.0
+!
+!------------------------- Discretization:-
+!
+                        Polynomial order = {P}
+                    Discretization nodes = Gauss-Lobatto !Has to match generate_problemfile_MU.py
+                          Riemann solver = Exact
+                  Viscous discretization = BR1
+            Cahn-Hilliard discretization = BR1
+                       Penalty parameter = 1.0
+!
+!----------------------- Time integration:-
+!
+!   dt is set once in run_convergence_MU.py and kept fixed across all
+!   mesh/P combinations to avoid introducing variability in the errors.
+!   Choose dt conservative enough for your finest mesh and highest P.
+!
+                        Time integration = Explicit
+  Compute time derivative after timestep = .true.
+                                      dt = {DT}
+                    Number of time steps = {N_STEPS}
+                         Output interval = {N_STEPS}
+                         Simulation type = time-accurate
+                 Convergence tolerance = 1.0d-10
+                           Autosave mode = iteration
+                       Autosave interval = 999999999
+!
+!-------------------- Boundary conditions:-
+!
+#define boundary bc_xminus
+   type = periodic
+   coupled boundary = bc_xplus
+#end
+#define boundary bc_xplus
+   type = periodic
+   coupled boundary = bc_xminus
+#end
+#define boundary bc_yminus
+   type = periodic
+   coupled boundary = bc_yplus
+#end
+#define boundary bc_yplus
+   type = periodic
+   coupled boundary = bc_yminus
+#end
+#define boundary bc_zminus
+   type = periodic
+   coupled boundary = bc_zplus
+#end
+#define boundary bc_zplus
+   type = periodic
+   coupled boundary = bc_zminus
+#end
