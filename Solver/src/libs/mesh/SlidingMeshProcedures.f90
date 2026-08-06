@@ -94,6 +94,7 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
    use PartitionedMeshClass
    use MPI_Process_Info
    use Headers
+   use NodeClass
    implicit none 
    ! =========================
    ! Arguments
