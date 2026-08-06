@@ -487,7 +487,7 @@ Module MappedGeometryClass
 !  -----------------------------------------
 !  Computation of the metric terms on a face
 !  -----------------------------------------
-   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, mortar_position,scale)
+   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, mortar_position, scale, slidingDir)
       use PhysicsStorage
       use InterpolationMatrices
       implicit none
@@ -506,12 +506,13 @@ Module MappedGeometryClass
       logical,   optional,       intent(in)     :: sliding 
       integer,   optional,       intent(in)     :: mortar_position 
       real(kind=RP), optional,   intent(in)     :: scale
+      integer, optional,         intent(in)     :: slidingDir
 !
 !     ---------------
 !     Local variables
 !     ---------------
 !
-      integer        :: i, j, k, l, m, ii, jj, p, q
+      integer        :: i, j, k, l, m, ii, jj, p, q, im
       real(kind=RP)  :: xi, eta
       real(kind=RP)  :: dS      (NDIM,0:Nel(1),0:Nel(2))
       real(kind=RP)  :: GradXi  (NDIM,0:Nel(1),0:Nel(2))
@@ -652,7 +653,6 @@ Module MappedGeometryClass
                x = [xi, 1.0_RP, eta]
                self % x(:,i,j) = hexMap % transfiniteMapAt(x)
             end do ; end do
-            !write(*,*)'calculating x,side EBACK',  self % x
 !
 !           Get surface Jacobian and normal vector
 !           --------------------------------------
@@ -669,7 +669,6 @@ Module MappedGeometryClass
 !     ---------------------------------------------------------------------------
       if ( eSide .eq. 2 ) dS = -dS
 
-      !if ( eSide .eq. 2 ) write(*,*) 'eSide=2 line 700 of mappedgeometry'
 !
 !     Perform the rotation
 !     --------------------
@@ -750,7 +749,7 @@ Module MappedGeometryClass
 !     Perform h/p-Adaption if it's a sliding mesh
 !     ------------------------------------------
 
-      if (present(sliding) .and. present(mortar_position) .and. present(scale)) then 
+      if (present(sliding) .and. present(mortar_position) .and. present(scale) .and. present(slidingDir)) then 
          if (sliding) then 
 
             xrot=self % x 
@@ -759,33 +758,29 @@ Module MappedGeometryClass
             self % GradXi   = 0.0_RP
             self % GradEta  = 0.0_RP
             self % GradZeta = 0.0_RP
+            im = merge(3, 1, mortar_position == 1)
 
-            if (mortar_position==1) then 
-               do l = 0, Nelf(2)  ; do j = 0, Nf(2)   ; do i = 0, Nf(1)    
-               ! self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 4, 1) % T(j,l) * xrot(:,i,l)
-                  self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * xrot(:,i,l)
-                  self % normal(:,i,j) = self % normal(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * dSRot(:,i,l)
-                  self % GradXi  (:,i,j) = self % GradXi  (:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * GradXiRot  (:,i,l)
-                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1), Nf(1),3 , 1) % T(j,l) * GradEtaRot (:,i,l)
-                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1), Nf(1), 3, 1) % T(j,l) * GradZetaRot(:,i,l)
-               end do                  ; end do                   ; end do
-               self % GradXi=self % GradXi*scale
-               self % GradEta=self % GradEta *scale
-               self % GradZeta=self % GradZeta*scale
-            else 
-               !do j = 0, Nf(2)  ; do l = 0, Nelf(1)   ; do i = 0, Nf(1)
-               do l = 0, Nelf(2)  ; do j = 0, Nf(2)   ; do i = 0, Nf(1)      
-                  self % x(:,i,j)= self % x(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * xrot(:,i,l)
-                  self % normal(:,i,j) = self % normal(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l)* dSRot(:,i,l)
-                  self % GradXi  (:,i,j) = self % GradXi  (:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradXiRot  (:,i,l)
-                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradEtaRot (:,i,l)
-                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1), Nf(1), 1, 1) % T(j,l) * GradZetaRot(:,i,l)
+            if (slidingDir == 2) then
+               do l = 0, Nelf(2) ; do j = 0, Nf(2) ; do i = 0, Nf(1)
+                  self % x (:,i,j) = self % x (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * xrot (:,i,l)
+                  self % normal (:,i,j) = self % normal (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * dSRot (:,i,l)
+                  self % GradXi (:,i,j) = self % GradXi (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradXiRot (:,i,l)
+                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradEtaRot (:,i,l)
+                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradZetaRot(:,i,l)
+               end do ; end do ; end do
 
-               end do                  ; end do                   ; end do
-               self % GradXi=self % GradXi*scale
-               self % GradEta=self % GradEta *scale
-               self % GradZeta=self % GradZeta*scale
-            end if 
+            else
+               do l = 0, Nelf(1) ; do j = 0, Nf(2) ; do i = 0, Nf(1)
+                  self % x (:,i,j) = self % x (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * xrot (:,l,j)
+                  self % normal (:,i,j) = self % normal (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * dSRot (:,l,j)
+                  self % GradXi (:,i,j) = self % GradXi (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradXiRot (:,l,j)
+                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradEtaRot (:,l,j)
+                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradZetaRot(:,l,j)
+               end do ; end do ; end do
+            end if
+            self % GradXi=self % GradXi*scale
+            self % GradEta=self % GradEta *scale
+            self % GradZeta=self % GradZeta*scale
          end if 
       end if 
 

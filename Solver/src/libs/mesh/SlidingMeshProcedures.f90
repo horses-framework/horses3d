@@ -1,49 +1,103 @@
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+!     SlidingMeshProcedures
+!     ---------------------
+!
+!     Rotates part of the mesh while the solver runs.  The rotating region is a
+!     cylinder given by a radius, a centre and an axis, all read from the control
+!     file into mesh % SlidingMesh.  Elements inside it turn, the rest stay, and the
+!     two sides are joined by mortar faces rebuilt at every step.
+!
+!     Who calls whom
+!     --------------
+!     AdvanceSlidingMesh is the only entry point.  It runs once per time step
+!     and drives everything below.
+!
+!        AdvanceSlidingMesh
+!         |
+!         +-- IdentifySlidingRegion              only on the first step
+!         |     which elements turn, which sit on the interface
+!         |
+!         +-- BuildSlidingMortarConnectivity     only on the first step
+!         |     pairs each interface element with the one facing it
+!         |     +-- BuildAzimuthalConnectivity
+!         |           orders those pairs around the axis
+!         |           +-- SortByLayerAndAngle
+!         |
+!         +-- GetSlidingTopologyState            every step
+!         |     how far we have turned: which sector, and are we conforming
+!         |
+!         +-- InitializeSlidingConnectivity      every step
+!         |     +-- RotateSlidingRegion
+!         |           moves the nodes to their new position
+!         |
+!         +-- UpdateSlidingMortarsConnectivity   only when the sector changes
+!         |     shifts every pair onto its new partner
+!         |
+!         +-- ConstructSlidingMortars            every step
+!               builds the mortar faces and their geometry
+!
+!
+!/////////////////////////////////////////////////////////////////////////
+!
+
 #include "Includes.h"
 
 module SlidingMeshProcedures
-    use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax
-    use HexMeshClass
-    use SlidingMeshClass
-    use SMConstants
-    use MeshTypes
-    use NodeClass
-    use ElementClass
-    use FaceClass
-    use FacePatchClass
-    use TransfiniteMapClass
-    use ElementConnectivityDefinitions
-    use ZoneClass                       , only: Zone_t, ConstructZones, ReassignZones
-    use MPI_Process_Info
-    use MPI_Face_Class
-    use FileReadingUtilities            , only: RemovePath, getFileName
-    use PartitionedMeshClass            , only: mpi_partition
-    use InterpolationMatrices           , only: Tset, TsetM
+   use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax
+   use HexMeshClass
+   use SlidingMeshClass
+   use SMConstants
+   use MeshTypes
+   use NodeClass
+   use ElementClass
+   use FaceClass
+   use FacePatchClass
+   use TransfiniteMapClass
+   use ElementConnectivityDefinitions
+   use ZoneClass                       , only: Zone_t, ConstructZones, ReassignZones
+   use MPI_Process_Info
+   use MPI_Face_Class
+   use FileReadingUtilities            , only: RemovePath, getFileName
+   use PartitionedMeshClass            , only: mpi_partition
+   use InterpolationMatrices           , only: Tset, TsetM
 #ifdef _HAS_MPI_
-    use mpi
+   use mpi
 #endif
-   use Headers
-    implicit none
+use Headers
+   implicit none
 
-    private
+   private
 
-    public :: AdvanceSlidingMesh
-    public :: IdentifySlidingRegion
-    public :: InitializeSlidingConnectivity
-    public :: BuildSlidingMortarConnectivity
-    public :: RotateSlidingRegion
-    public :: ConstructSlidingMortars
-    public :: PrintMortarConnectivity
-    public :: UpdateSlidingMortarsConnectivity
+   public :: AdvanceSlidingMesh
+   public :: IdentifySlidingRegion
+   public :: InitializeSlidingConnectivity
+   public :: BuildSlidingMortarConnectivity
+   public :: RotateSlidingRegion
+   public :: ConstructSlidingMortars
+   public :: PrintMortarConnectivity
+   public :: UpdateSlidingMortarsConnectivity
 
 contains
 
+! ---------------------------------------------------------------------------
+!  AdvanceSlidingMesh
+!
+!  One time step.  On the first call it builds the region and the pairing,
+!  on every call it advances omega by SM % theta (or by the angle argument),
+!  reads off the new topology state, moves the nodes, and rebuilds the mortars
+!  Sets SM % active on the way out so the setup work happens once.
+! ---------------------------------------------------------------------------
 subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotateEntireMesh)
    use Physics
    use PartitionedMeshClass
    use MPI_Process_Info
    use Headers
    implicit none 
-
+   ! =========================
+   ! Arguments
+   ! =========================
    class(HexMesh), intent(inout)        :: mesh
    !integer, intent(inout)              :: dir2D
    integer, intent(inout)               :: numBFacePoints
@@ -51,7 +105,9 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
    logical, intent(in)                  :: useMPI 
    real(kind=RP), intent(in), optional  :: angle
    logical, intent(in), optional        :: rotateEntireMesh
-
+   ! =========================
+   ! Local variables
+   ! =========================
    integer :: numSlidingElements
    integer :: numSlidingInterfaceElements 
    integer :: numDuplicatedNodes, new_nFaces
@@ -152,7 +208,8 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
 
       call GetSlidingTopologyState(SM % omega, SM % numElemsPerLayer, sectorID, isConforming, SM % localAngle)
 
-      call InitializeSlidingConnectivity(mesh, nodes, SM % numSlidingInterfaceElements, offsetParams, scaleParams, originalNodeCount, numberOfNodes )
+      call InitializeSlidingConnectivity(mesh, nodes, SM % numSlidingInterfaceElements, offsetParams, &
+                                          scaleParams, originalNodeCount, numberOfNodes )
 
          if (sectorID .NE. SM % currentSectorID) then 
 
@@ -160,7 +217,6 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
             call UpdateSlidingMortarsConnectivity(mesh, sectorID)
             SM % currentSectorID=sectorID
          end if 
-
 
          if (.not. present(rotateEntireMesh)) then 
             do l = 1, size(SM % slidingMortarElems)
@@ -221,10 +277,11 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
          
          end if
 
-      !if ( dir2D .ne. 0 ) then
-      !   call SetMappingsToCrossProduct
-         !  call mesh % CorrectOrderFor2DMesh(dir2D)
-      !end if
+         !if ( dir2D .ne. 0 ) then
+         !   call SetMappingsToCrossProduct
+            !  call mesh % CorrectOrderFor2DMesh(dir2D)
+         !end if
+
          if (.not. present(rotateEntireMesh)) then 
             do l = 1, size(SM % slidingMortarElems)
                mesh % faces(mesh % elements(SM  % slidingMortarElems(l)) % faceIDs(SM  % mortararr2(l,2))) % MortarType = MORTAR_SLIDING
@@ -260,11 +317,9 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
          
          ! Mortar geometry cleanup 
          if (allocated(mesh % mortar_faces)) then 
-         
             do l = 1, size(mesh % mortar_faces)
                call mesh % mortar_faces(l) % geom % destruct
             end do 
-            
          end if
 
          ! Create three arrays that contain the fIDs of interior, mpi, and boundary faces
@@ -345,8 +400,8 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
          end if 
 
          if (.not. present(rotateEntireMesh)) then
-            call ConstructSlidingMortars(mesh, nodes, SM % numSlidingInterfaceElements, &
-            SM % mortarNeighborElems, SM % slidingMortarElems, SM % slidingMortarConnectivity, offsetParams, scaleParams, isConforming )
+            call ConstructSlidingMortars(mesh, nodes, SM % numSlidingInterfaceElements, SM % mortarNeighborElems, &
+                           SM % slidingMortarElems, SM % slidingMortarConnectivity, offsetParams, scaleParams, isConforming )
          end if
          
          SM  % active     = .true.
@@ -356,14 +411,29 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
 
 end subroutine AdvanceSlidingMesh
 
-
+! ---------------------------------------------------------------------------
+!  IdentifySlidingRegion
+!
+!  Splits the elements into three sets.  An element rotates if all eight corners
+!  satisfy rad(x) <= SM % radius; it is an interface element if some corner are
+!  inside and some are not.  Returns the two counts plus the number of nodes on
+!  the interface, which have to be duplicated since the surface is about to be
+!  cut in two.
+!
+!  First step only.
+! ---------------------------------------------------------------------------
 subroutine IdentifySlidingRegion (mesh, numSlidingElements, numSlidingInterfaceElements, numDuplicatedNodes)
-   IMPLICIT NONE 
+   implicit none 
+   ! =========================
+   ! Arguments
+   ! ========================= 
    class(HexMesh), intent(inout)  :: mesh
    integer, intent(inout) :: numSlidingElements
    integer, intent(inout) :: numSlidingInterfaceElements
    integer, intent(out) :: numDuplicatedNodes
-
+   ! =========================
+   ! Local variables
+   ! =========================
    integer :: elementID, neighborElementID
    integer ::  i, j, numNodesInsideRadius, fID, c
    integer :: new_nFaces
@@ -379,9 +449,7 @@ subroutine IdentifySlidingRegion (mesh, numSlidingElements, numSlidingInterfaceE
 
    ! Detect elements fully contained inside the sliding radius
    do i=1, size(mesh % elements)
-
       numNodesInsideRadius=0
-
       do j=1,8
          if ( mesh % SlidingMesh % rad( mesh % nodes(mesh % elements(i) % nodeIDs(j)) % X ) <= mesh % SlidingMesh % radius ) then
             numNodesInsideRadius = numNodesInsideRadius + 1
@@ -392,7 +460,6 @@ subroutine IdentifySlidingRegion (mesh, numSlidingElements, numSlidingInterfaceE
          mesh % elements(i)%sliding=.true.
          numSlidingElements=numSlidingElements+1
       end if 
-
    end do 
 
    ! Detect sliding interface elements requiring duplicated nodes
@@ -407,7 +474,6 @@ subroutine IdentifySlidingRegion (mesh, numSlidingElements, numSlidingInterfaceE
             end if 
 
             if (neighborElementID .ne. 0) then 
-
                if (mesh % elements(neighborElementID)%sliding) then 
                   cycle
                else 
@@ -418,7 +484,6 @@ subroutine IdentifySlidingRegion (mesh, numSlidingElements, numSlidingInterfaceE
                   do c = 1, 4
                      isInterfaceNode( mesh % faces(fID) % nodeIDs(c) ) = .true.
                   end do
-
                end if 
             end if
          end do
@@ -429,12 +494,27 @@ subroutine IdentifySlidingRegion (mesh, numSlidingElements, numSlidingInterfaceE
    deallocate(isInterfaceNode)
 
 end subroutine IdentifySlidingRegion
-  
+
+! ---------------------------------------------------------------------------
+!  BuildSlidingMortarConnectivity
+!
+!  For each rotating interface element, finds the static element facing it by
+!  shared nodes, and records both element IDs and both local face numbers into
+!  slidingMortarConnectivity.  Also grows mesh % faces, since the interface
+!  faces are about to become two faces instead of one.
+!
+!  First step only.  The pairing it produces is later shifted, never rebuilt
+! ---------------------------------------------------------------------------
 subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
-   IMPLICIT NONE 
+   implicit none 
+   ! =========================
+   ! Arguments
+   ! =========================
    class(HexMesh), intent(inout)  :: mesh
    integer, intent(inout) :: new_nFaces 
-
+   ! =========================
+   ! Local variables
+   ! =========================
    integer :: elemID, neighborElemID, candidateElemID
    integer ::  i, j, faceIdx2, elemCount, nodeIdxA, nodeIdxB,ind1,ind2,ind3, iNode2, iNode3
    integer ::  iNodeCheck, isAlreadyConnected, sharedNodeCounter, nNodesInsideRadius
@@ -444,24 +524,17 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
    elemCount = 0
    new_nFaces = size(mesh % faces)
 
-
    ! Detect sliding elements
    do i = 1, size(mesh % elements)
-
       nNodesInsideRadius = 0
-
       do j = 1, 8
-
          if ( mesh % SlidingMesh % rad( mesh % Nodes(mesh % elements(i) % nodeIDs(j)) % X ) <= mesh % SlidingMesh % radius ) then
                   nNodesInsideRadius = nNodesInsideRadius + 1
          end if 
-
       end do  
-
       if (nNodesInsideRadius == 8) then
         mesh % elements(i) % sliding = .true.
       end if 
-
    end do 
 
    ! Detect interface (mortar) elements
@@ -471,9 +544,7 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
 
       do i = 1, size(mesh % elements)
          if (mesh % elements(i) % sliding) then 
-
             elemID = mesh % elements(i) % eID
-
             do j = 1, 6
                if (mesh % faces(mesh % elements(i) % faceIDs(j)) % elementIDs(1) == elemID) then 
                   neighborElemID = mesh % faces(mesh % elements(i) % faceIDs(j)) % elementIDs(2)
@@ -495,7 +566,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
                   end if 
                end if 
             end do 
-
          end if 
       end do
 
@@ -591,57 +661,20 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
          end do
       end do
 
-      ! --------------------------------------------------
-      ! Consistency checks:
-      ! verify that sliding and mortar connectivity relations
-      ! are correctly defined and physically valid
-      ! --------------------------------------------------
-
+      ! every row must now be complete: neighbour, master, its face
       do i = 1, size(SM % slidingMortarElems)
-
-         if ((SM % slidingMortarConnectivity(i,2) .NE. 0) .AND. (SM % slidingMortarConnectivity(i,3) .NE. 0)) then
-
-            if (.not. mesh % elements(SM % slidingMortarConnectivity(i,1))%sliding_newnodes) write(*,*) 'for i=', i, '(i,1) is not sliding_newnodes'
-            if (.not. mesh % elements(SM % slidingMortarConnectivity(i,2))%sliding_newnodes) write(*,*) 'for i=', i, '(i,2) is not sliding_newnodes'
-            if (mesh % elements(SM % slidingMortarConnectivity(i,3))%sliding_newnodes)       write(*,*) 'for i', i, '(i,3) is sliding_newnodes'
-            if (mesh % elements(SM % slidingMortarConnectivity(i,3))%sliding)                write(*,*) 'for i', i, '(i,3) is sliding'
-
-            elemID  = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,1))%faceIDs(SM % slidingMortarConnectivity(i,4)))%elementIDs(1)
-            neighborElemID = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,1))%faceIDs(SM % slidingMortarConnectivity(i,4)))%elementIDs(2)
-
-            if (elemID == SM % slidingMortarConnectivity(i,1)) then
-               if (mesh % elements(neighborElemID)%sliding) write(*,*) 'problem with (i,4)'
-            else
-               if (mesh % elements(elemID)%sliding) write(*,*) 'problem with (i,4)'
-            end if
-
-            if ((elemID .NE. SM % slidingMortarConnectivity(i,1)) .AND. (neighborElemID .NE. SM % slidingMortarConnectivity(i,1))) write(*,*) 'problem with (i,4) line 6195'
-
-            elemID  = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,2))%faceIDs(SM % slidingMortarConnectivity(i,5)))%elementIDs(1)
-            neighborElemID = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,2))%faceIDs(SM % slidingMortarConnectivity(i,5)))%elementIDs(2)
-
-            if (elemID == SM % slidingMortarConnectivity(i,2)) then
-               if (mesh % elements(neighborElemID)%sliding) write(*,*) 'problem with (i,5)'
-            else
-               if (mesh % elements(elemID)%sliding) write(*,*) 'problem with (i,5)'
-            end if
-
-            if ((elemID .NE. SM % slidingMortarConnectivity(i,2)) .AND. (neighborElemID .NE. SM % slidingMortarConnectivity(i,2))) write(*,*) 'problem with (i,5) line 6203'
-
-
-            elemID  = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,3))%faceIDs(SM% slidingMortarConnectivity(i,6)))%elementIDs(1)
-            neighborElemID = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,3))%faceIDs(SM % slidingMortarConnectivity(i,6)))%elementIDs(2)
-
-            if (elemID == SM % slidingMortarConnectivity(i,3)) then
-               if (.not. mesh % elements(neighborElemID)%sliding) write(*,*) 'problem with (i,6)'
-            else
-               if (.not. mesh % elements(elemID)%sliding) write(*,*) 'problem with (i,6)'
-            end if
-
-            if ((elemID .NE. SM % slidingMortarConnectivity(i,3)) .AND. (neighborElemID .NE. SM % slidingMortarConnectivity(i,3))) write(*,*) 'problem with (i,5) line 6211'
-
+         if (SM % slidingMortarConnectivity(i,2) == 0) then
+            write(STD_OUT,*) 'sliding: element', SM % slidingMortarElems(i), 'has no azimuthal neighbour (row', i, ')'
+            error stop
          end if
-
+         if (SM % slidingMortarConnectivity(i,3) == 0) then
+            write(STD_OUT,*) 'sliding: element', SM % slidingMortarElems(i), 'has no mortar element across the interface (row', i, ')'
+            error stop
+         end if
+         if (SM % slidingMortarConnectivity(i,6) == 0) then
+            write(STD_OUT,*) 'sliding: mortar element',SM % slidingMortarConnectivity(i,3),'has no face onto the interface (row', i, ')'
+            error stop
+         end if
       end do
 
       ! --------------------------------------------------
@@ -672,7 +705,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
                   elemID = mesh % faces(mesh%Elements(SM % slidingMortarConnectivity(i,1))%faceIDs(j))%elementIDs(2)
 
                   if (.NOT. mesh % elements(elemID)%sliding) then
-
                      SM % slidingMortarConnectivity(i,10) = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,1))%faceIDs(j))%elementIDs(2)
                      SM % slidingMortarConnectivity(i,12) = mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,1))%faceIDs(j))%rotation
 
@@ -680,7 +712,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
                         if (mesh % faces(mesh % elements(elemID)%faceIDs(faceIdx2))%elementIDs(1) == SM % slidingMortarConnectivity(i,1)) SM % slidingMortarConnectivity(i,11) = faceIdx2
                         if (mesh % faces(mesh % elements(elemID)%faceIDs(faceIdx2))%elementIDs(2) == SM % slidingMortarConnectivity(i,1)) SM % slidingMortarConnectivity(i,11) = faceIdx2
                      end do
-
                   end if
 
                end if
@@ -688,19 +719,15 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
          end do
       end do
 
-      if (MPI_Process % doMPIAction) then
-         if (.NOT. mpi_partition % Constructed) then
-
-            open(unit=10, file="slidingMortarConnectivity.txt", action="write")
-
-            do i = 1, size(SM % slidingMortarElems)
-               write(10,*) (SM % slidingMortarConnectivity(i,j), j=1,12)
-            end do
-
-            close(10)
-
-         end if
-      end if
+      !if (MPI_Process % doMPIAction) then
+      !   if (.NOT. mpi_partition % Constructed) then
+      !      open(unit=10, file="slidingMortarConnectivity.txt", action="write")
+      !      do i = 1, size(SM % slidingMortarElems)
+      !         write(10,*) (SM % slidingMortarConnectivity(i,j), j=1,12)
+      !      end do
+      !      close(10)
+      !   end if
+      !end if
 
       !  Detect neighboring sliding elements sharing common nodes
       do i = 1, size(SM % slidingMortarElems)
@@ -715,9 +742,7 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
 
                   if ((mesh % elements(SM % slidingMortarElems(i))%nodeIDs(iNode2) == mesh % elements(SM % slidingMortarElems(elemCount))%nodeIDs(iNode3)) .AND. &
                   SM % slidingMortarElems(i) .ne. SM % slidingMortarElems(elemCount)) then
-
                      isAlreadyConnected = 0
-
                      do nodeIdxB = 2, 9
                         if (SM % neighborConnectivity(i,nodeIdxB,1) == SM % slidingMortarElems(elemCount)) then
                            isAlreadyConnected = 1
@@ -730,7 +755,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
                         SM % neighborConnectivity(i,nodeIdxA,2) = elemCount
                         nodeIdxA= nodeIdxA + 1
                      end if
-
                   end if
 
                end do
@@ -760,15 +784,15 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
          end do
       end do
 
-      if (MPI_Process % doMPIAction) then
-         if (.NOT. mpi_partition % Constructed) then
-            open(unit=10, file="neighborConnectivity.txt", action="write")
-            do i = 1, size(SM % slidingMortarElems)
-               write(10,*) (SM % neighborConnectivity(i,:,:))
-            end do
-            close(10)
-         end if
-      end if
+      !if (MPI_Process % doMPIAction) then
+      !   if (.NOT. mpi_partition % Constructed) then
+      !      open(unit=10, file="neighborConnectivity.txt", action="write")
+      !      do i = 1, size(SM % slidingMortarElems)
+      !      write(10,*) (SM % neighborConnectivity(i,:,:))
+      !      end do
+      !      close(10)
+      !   end if
+      !end if
 
       ! --------------------------------------------------
       ! Extract sliding elements that do not require mortars
@@ -784,34 +808,6 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
       end do
       SM % numPureSlidingElems = elemCount 
 
-      do i = 1, size(SM % slidingMortarElems)
-
-         if ((SM % slidingMortarConnectivity(i,2) .NE. 0) .AND. (SM % slidingMortarConnectivity(i,3) .NE. 0)) then
-
-            if (mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,1))%faceIDs(SM % slidingMortarConnectivity(i,4)))%rotation .NE. SM % slidingMortarConnectivity(i,7)) &
-               write(*,*) 'problem with rotation of slidingMortarConnectivity(i7)'
-
-            if ((mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,1))%faceIDs(SM % slidingMortarConnectivity(i,4)))%elementIDs(1) .NE. SM % slidingMortarConnectivity(i,1)) .AND. &
-                  (mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,1))%faceIDs(SM % slidingMortarConnectivity(i,4)))%elementIDs(2) .NE. SM % slidingMortarConnectivity(i,1))) &
-               write(*,*) 'problem with face i1'
-
-            if (mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,2))%faceIDs(SM % slidingMortarConnectivity(i,5)))%rotation .NE. SM %slidingMortarConnectivity(i,8)) &
-               write(*,*) 'problem with rotation of slidingMortarConnectivity(i8)'
-
-            if ((mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,2))%faceIDs(SM % slidingMortarConnectivity(i,5)))%elementIDs(1) .NE. SM % slidingMortarConnectivity(i,2)) .AND. &
-                  (mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,2))%faceIDs(SM % slidingMortarConnectivity(i,5)))%elementIDs(2) .NE. SM % slidingMortarConnectivity(i,2))) &
-               write(*,*) 'problem with face i2'
-
-            if (mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,3))%faceIDs(SM % slidingMortarConnectivity(i,6)))%rotation .NE. SM % slidingMortarConnectivity(i,9)) &
-               write(*,*) 'problem with rotation of slidingMortarConnectivity(i9)'
-
-            if ((mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,3))%faceIDs(SM % slidingMortarConnectivity(i,6)))%elementIDs(1) .NE. SM % slidingMortarConnectivity(i,3)) .AND. &
-                  (mesh % faces(mesh % elements(SM % slidingMortarConnectivity(i,3))%faceIDs(SM % slidingMortarConnectivity(i,6)))%elementIDs(2) .NE. SM % slidingMortarConnectivity(i,3))) &
-               write(*,*) 'problem with face i3'
-
-         end if
-
-      end do
       ! --------------------------------------------------
       ! Ensure uniqueness of connectivity mappings
       ! (no duplicated sliding, neighbor, or mortar assignments)
@@ -829,9 +825,11 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
             if (SM % slidingMortarConnectivity(i,3) == SM % slidingMortarConnectivity(j,3)) ind3 = ind3 + 1
          end do
 
-         if (ind1 .NE. 1) write(*,*) 'ind1 .NE 1 problem', ind1
-         if (ind2 .NE. 1) write(*,*) 'ind2 .NE 1 problem', ind2
-         if (ind3 .NE. 1) write(*,*) 'ind3 .NE 1 problem', ind3
+         if (ind1 /= 1 .or. ind2 /= 1 .or. ind3 /= 1) then
+            write(STD_OUT,*) 'sliding: duplicated connectivity at row', i,'element appears', ind1, 'times, neighbour', ind2, &
+                             'times, master', ind3, 'times; each must appear once'
+            error stop
+         end if
 
       end do
 
@@ -839,6 +837,7 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
       ! Final validation of face connectivity and rotation consistency
       ! across sliding-mortar interfaces
       ! --------------------------------------------------
+      
       do i = 1, size(SM % slidingMortarElems)
 
          if (SM % slidingMortarConnectivity(i,2) .NE. 0) then
@@ -852,34 +851,46 @@ subroutine BuildSlidingMortarConnectivity(mesh, new_nFaces)
    end associate
 end subroutine BuildSlidingMortarConnectivity
 
+! ---------------------------------------------------------------------------
+!  RotateSlidingRegion
+!
+!  Applies the rotation to the nodes of the rotating region and derives the
+!  mortar mapping parameters from mortarShiftParam, the position inside the
+!  current sector expressed in [-1,1].  offsetParams and scaleParams hold the
+!  start and the width of each of the four mortar pieces, two per family, in
+!  reference coordinates.  Those are what TsetM is built from.
+! ---------------------------------------------------------------------------
 subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
                            slidingMortarElems, pureSlidingElems, neighborConnectivity, offsetParams, scaleParams, &
                            mortarFaceNodes, nonMortarFaceNodes, numBFacePoints, originalNodeCount)
-
    implicit none
-
    ! =========================
    ! Arguments
    ! =========================
-
+   ! what turns, and by how much
    class(HexMesh), intent(inout) :: mesh
-   real(KIND=RP), intent(inout)  :: omega        ! cumulative rotation parameter
-   integer, intent(inout)        :: newNodeCount
-   type(Node), intent(inout)     :: new_nodes(newNodeCount)
-   integer, intent(in)    :: slidingMortarElems(:) ! sliding elements at interface (need mortars)
-   integer, intent(in)    :: pureSlidingElems(:) ! sliding elements fully inside region
-   integer, intent(in)    :: neighborConnectivity(:,:,:) ! connectivity graph
-   real(kind=RP), intent(inout) :: offsetParams(4) ! geometric offsets (mortar mapping)
-   real(kind=RP), intent(inout) :: scaleParams(4)  ! geometric scaling (mortar mapping)
-   integer, intent(inout) :: mortarFaceNodes(:,:) ! face nodes (local indexing)
-   integer, intent(inout) :: nonMortarFaceNodes(:,:)  ! complementary face nodes
-   integer, intent(inout) :: numBFacePoints
-   integer, intent(inout) :: originalNodeCount
+   real(kind=RP), intent(inout)  :: omega                        ! cumulative rotation angle, rad
+
+   ! which elements are involved
+   integer,       intent(in)     :: slidingMortarElems(:)        ! interface elements, need mortars
+   integer,       intent(in)     :: pureSlidingElems(:)          ! elements fully inside the region
+   integer,       intent(in)     :: neighborConnectivity(:,:,:)  ! connectivity graph
+
+   ! nodes: the interface splits, so the region gets its own copies
+   integer,       intent(inout)  :: newNodeCount
+   type(Node),    intent(inout)  :: new_nodes(newNodeCount)
+   integer,       intent(inout)  :: originalNodeCount
+   integer,       intent(inout)  :: mortarFaceNodes(:,:)         ! interface face nodes, local index
+   integer,       intent(inout)  :: nonMortarFaceNodes(:,:)      ! the complementary ones
+   integer,       intent(inout)  :: numBFacePoints
+
+   ! produced here, consumed by the mortar projections
+   real(kind=RP), intent(inout)  :: offsetParams(4)              ! start of each mortar piece
+   real(kind=RP), intent(inout)  :: scaleParams(4)               ! width of each mortar piece
 
    ! =========================
    ! Local variables
    ! =========================
-
    real(KIND=RP) :: rotatedNodeCoords(8,3)       ! rotated coordinates of element nodes
    real(KIND=RP) :: nodeCoord(3)                 ! temporary node coordinate
    integer :: i, j, uIdx, vIdx, localNodeIdx, cornerIdx, neighborIdx
@@ -949,11 +960,11 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
    !     * Linear faces (2x2 nodes)
    !     * Curved face patches (high-order surfaces)
    ! =========================
+
    do i = 1, mesh%no_of_elements
       if (.not. mesh % elements(i)%sliding) cycle
       eID = i
    
-
       ! Case 1: Hex8 element (corner-based geometry)
       if (mesh % elements(eID)%SurfInfo%IsHex8) then
          do cornerIdx = 1, 8
@@ -961,7 +972,6 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
                                                    mesh % elements(eID) % SurfInfo % corners(:,cornerIdx) )
          end do
       else
-   
 
          ! Case 2: High-order faces
          do j = 1, 6
@@ -1001,36 +1011,25 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
       end if
    end do ! i
 
-   ! =========================
+   ! ===================================================
    ! Rotate interface sliding elements (with mortars)
    ! - Rotate element nodes
    ! - Update interface nodes
    ! - Duplicate nodes to enforce non-conformity
    ! - Maintain connectivity across mortar interface
-   ! =========================
+   ! ===================================================
 
    newNodeCounter = originalNodeCount + 1
 
    do i = 1, size(slidingMortarElems)
 
-      ! Safety check: ensure element is marked as sliding
-      if (.not. mesh % elements(slidingMortarElems(i)) % sliding) then
-         write(*,*) "problem elem slidingMortarElems"
-      end if
-
       ! Compute rotated coordinates of element nodes
       do j = 1, 8
 
          if (mesh % elements(slidingMortarElems(i)) % nodeIDs(j) .LE. originalNodeCount) then
-
-            if (mesh % elements(slidingMortarElems(i)) % nodeIDs(j) == 0) then
-               write(*,*) 'node ', j, 'of element', i, '=0'
-            end if
-
             nodeCoord = mesh % nodes(mesh % elements(slidingMortarElems(i)) % nodeIDs(j)) % X
             call mesh % SlidingMesh % RotatePoint( mesh % SlidingMesh % theta, nodeCoord )
             rotatedNodeCoords(j,:) = nodeCoord
-
          else
             rotatedNodeCoords(j,:) = 0.0_RP
          end if
@@ -1077,11 +1076,6 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
                            if (mesh % elements(slidingMortarElems(i)) % nodeIDs(mortarFaceNodes(i,j)) == &
                            mesh % elements(eID) % nodeIDs(localNodeIdx)) then
                            mesh % elements(eID) % nodeIDs(localNodeIdx) = nodeRemapLocal(mortarFaceNodes(i,j))
-
-                              if (nodeRemapLocal(mortarFaceNodes(i,j)) == 0) then
-                                 write(*,*) 'element', eID, 'is receiving 0 for node', localNodeIdx
-                              end if
-
                            end if
                         end do !localNodeIdx
                      end if
@@ -1095,8 +1089,9 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
             if ((mesh % elements(slidingMortarElems(i)) % nodeIDs(mortarFaceNodes(i,j))) .LE. originalNodeCount) then
 
                if (nodeRemapLocal(mortarFaceNodes(i,j)) == 0) then
-                  write(*,*) 'element', slidingMortarElems(i), 'is receiving 0 for node 5', &
-                  mesh % elements(slidingMortarElems(i)) % nodeIDs(mortarFaceNodes(i,j))
+                  write(STD_OUT,*) 'sliding: no duplicate was created for element', slidingMortarElems(i), ', local node', &
+                  mortarFaceNodes(i,j) , 'original node', mesh % elements(slidingMortarElems(i)) % nodeIDs(mortarFaceNodes(i,j))
+                  error stop
                end if
 
                mesh % elements(slidingMortarElems(i)) % nodeIDs(mortarFaceNodes(i,j)) = nodeRemapLocal(mortarFaceNodes(i,j))
@@ -1106,18 +1101,13 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
       end if
    end do
 
-   ! =========================
+   ! ===================================================
    ! Rotate interior sliding elements (no mortars)
    ! - Simple rotation of all nodes
    ! - No duplication or connectivity updates
-   ! =========================
+   ! ===================================================
 
    do i = 1, mesh % SlidingMesh % numPureSlidingElems
-      ! Safety check
-      if (.not. (mesh % elements(pureSlidingElems(i)) % sliding)) then
-         write(*,*) "problem elem slidingMortarElems"
-      end if
-
       ! Rotate all nodes
       do j = 1, 8
          nodeCoord = mesh % nodes(mesh % elements(pureSlidingElems(i)) % nodeIDs(j)) % X
@@ -1136,9 +1126,19 @@ subroutine RotateSlidingRegion(mesh, omega, newNodeCount, new_nodes, &
 
 end subroutine RotateSlidingRegion
 
-subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, offsetParams, scaleParams, originalNodeCount, totalNodeCount)
-   IMPLICIT NONE
-
+! ---------------------------------------------------------------------------
+!  InitializeSlidingConnectivity
+!
+!  Prepares the step: allocates the new node array, resets offsetParams and
+!  scaleParams, calls RotateSlidingRegion to place the nodes, and clears the
+!  mortar_faces entries so nothing from the previous step survives.
+! ---------------------------------------------------------------------------
+subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, offsetParams, &
+                                             scaleParams, originalNodeCount, totalNodeCount)
+   implicit none 
+   ! =========================
+   ! Arguments
+   ! =========================
    class(HexMesh), intent(inout) :: mesh
    integer, intent(in)           :: nodes
    integer, intent(in)           :: numElementsPerLayer
@@ -1146,50 +1146,36 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, offse
    real(kind=RP), intent(inout)  :: scaleParams(4)
    integer, intent(inout)        :: originalNodeCount
    integer, intent(in)           :: totalNodeCount
-
+   ! =========================
+   ! Local variables
+   ! =========================
    type(Node), allocatable       :: new_nodes(:)
-   !type(Node), allocatable     :: tmpNodes(:)
    integer                       :: l, i, j
    integer                       :: new_nNodes
 
-
-
    ! Initialization
    allocate(new_nodes(totalNodeCount))
-   new_nNodes = 0
 
    new_nNodes = SIZE(mesh % nodes)
-
 
    ! Initialize mortar mapping parameters
    offsetParams = 0.0_RP
    scaleParams = 0.0_RP
 
-   ! =========================
+   ! ======================================
    ! Rotate sliding mesh region
    ! - Update node coordinates
    ! - Duplicate interface nodes if needed
-   ! =========================
+   ! ======================================
 
    new_nNodes = SIZE(mesh % nodes)
 
-   !if (.not. mesh % SlidingMesh  % active) then
-
-   !call RotateSlidingRegion(theta, mesh % SlidingMesh%omega, numElementsPerLayer, n, m, new_nNodes, new_nodes, &
-   !slidingMortarElems, pureSlidingElems, Connect, offsetParams, scaleParams, face_nodes, &
-   !                        face_othernodes, numBFacePoints, originalNodeCount, rotationAxis)
-
-   !else
-
-   !call RotateSlidingRegion(theta, mesh % SlidingMesh%omega, numElementsPerLayer, n, m, new_nNodes, new_nodes, &
-   !mesh % SlidingMesh%slidingMortarElems, mesh % SlidingMesh%pureSlidingElems, mesh % SlidingMesh%neighborConnectivity, offsetParams, scaleParams, &
-   !mesh % SlidingMesh%face_nodes, mesh % SlidingMesh%face_othernodes, numBFacePoints, originalNodeCount, rotationAxis)
-
    call RotateSlidingRegion(mesh, mesh % SlidingMesh%omega, new_nNodes, new_nodes, &
-   mesh % SlidingMesh%slidingMortarElems, mesh % SlidingMesh%pureSlidingElems, mesh % SlidingMesh%neighborConnectivity, offsetParams, scaleParams, &
-   mesh % SlidingMesh%face_nodes, mesh % SlidingMesh%face_othernodes, mesh % SlidingMesh%numBFacePoints, originalNodeCount)
+            mesh % SlidingMesh%slidingMortarElems, mesh % SlidingMesh%pureSlidingElems,  &
+            mesh % SlidingMesh%neighborConnectivity, offsetParams, scaleParams, &
+            mesh % SlidingMesh%face_nodes, mesh % SlidingMesh%face_othernodes, &
+            mesh % SlidingMesh%numBFacePoints, originalNodeCount)
    !end if
-
 
    ! =========================
    ! Copy updated node coordinates
@@ -1202,9 +1188,9 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, offse
    end do
    end if
 
-   ! =========================
+   ! ============================
    ! Reset face connectivity data
-   ! =========================
+   ! ============================
 
    if (.not. mesh % SlidingMesh % active) then
 
@@ -1253,29 +1239,24 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, numElementsPerLayer, offse
 
 end subroutine InitializeSlidingConnectivity
 
-! -------------------------------------------------------------------------
-! Construct sliding mortar interfaces between neighboring mesh elements.
+! ---------------------------------------------------------------------------
+!  ConstructSlidingMortars
 !
-! This routine:
-!   1. Creates mortar faces for both sliding interface directions
-!   2. Links mortar faces with adjacent master/slave elements
-!   3. Assigns mortar offsets, scaling parameters and rotations
-!   4. Builds mortar geometric mappings and connectivity
+!  Builds mesh % mortar_faces in two families, Mortarpos 0 and 1, one covering
+!  each half of the overlap.  Each mortar gets its master and slave element and
+!  face, its rotation index, its offset and scale, then LinkWithElements to size
+!  the projection operators and geom % construct for the geometry.
 !
-! Inputs:
-!   - slidingMortarConnectivity : connectivity information between
-!                                 neighboring sliding elements
-!   - offsetParams             : parametric mortar offsets
-!   - scaleParams              : parametric mortar scaling factors
-!   - confor                   : conforming/non-conforming interface flag
-!
-! Mortar convention:
-!   - MortarPos = 0 : first sliding direction
-!   - MortarPos = 1 : opposite sliding direction
-!
-! -------------------------------------------------------------------------
-subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidingMortarElems, slidingMortarConnectivity, offsetParams, scaleParams, confor)
+!  Runs every step, so anything measured from the geometry here is current by
+!  construction, and anything copied from the connectivity table is only as
+!  fresh as that table.
+! ---------------------------------------------------------------------------
+subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidingMortarElems, &
+                                    slidingMortarConnectivity, offsetParams, scaleParams, confor)
    implicit none
+   ! ==========
+   ! Arguments
+   ! ==========
    class(HexMesh), intent(inout) :: mesh
    integer, intent(in)           :: nodes
    integer, intent(in)           :: nelm
@@ -1285,8 +1266,10 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
    real(kind=RP), intent(in)     :: offsetParams(4)
    real(kind=RP), intent(in)     :: scaleParams(4)
    logical, intent(in)           :: confor
-   
-   integer                       :: i, j, jj, mortarIndex
+   ! ================
+   ! locale variables
+   ! ================
+   integer                       :: i, j, jj, mortarIndex, dirM, dirS
    integer                       :: masterFaceID, slaveFaceID
    integer                       :: masterElementID, slaveElementID
    integer                       :: masterFaceNumber
@@ -1311,14 +1294,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
          error stop
       end if
    end do
-
-   do i = 1, nelm
-      do mortarIndex = 1, nelm
-         if (mortarNeighborElems(i) == slidingMortarElems(mortarIndex)) then
-            write(*,*) ' mortarNeighborElems(i)==slidingMortarElems(mortarIndex)', i, mortarIndex, mortarNeighborElems(i), slidingMortarElems(mortarIndex)
-         end if
-      end do
-   end do
    
    ! Allocate mortar face container
    if (.not. allocated(mesh%mortar_faces)) then
@@ -1326,7 +1301,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
    end if
    
    mortarIndex = 1
-
 
    ! Construct first family of mortar interfaces (MortarPos = 0).
    do i = 1, size(slidingMortarElems)
@@ -1448,52 +1422,52 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
           mesh%mortar_faces(mortarIndex)%Mortarpos=1
           mesh % mortar_faces(mortarIndex) % FaceType       = HMESH_INTERIOR
    
-       if (.not.allocated(mesh % mortar_faces(mortarIndex) % Mortar)) then 
+      if (.not.allocated(mesh % mortar_faces(mortarIndex) % Mortar)) then 
          allocate(mesh % mortar_faces(mortarIndex) % Mortar(2)) 
          mesh % mortar_faces(mortarIndex) % Mortar=0
-       end if 
-       mesh % mortar_faces(mortarIndex) % Mortar(1)=masterFaceID
-       mesh % faces(masterFaceID) % Mortar(2)=mortarIndex
-   
-       slaveElementID= slidingMortarConnectivity(i,1)   !3
-   
-       mesh % mortar_faces(mortarIndex) % elementIDs(2)  = slaveElementID
-       mesh % mortar_faces(mortarIndex) % elementSide(2) = slidingMortarConnectivity(i,4)
-       mesh % mortar_faces(mortarIndex) % FaceType       = HMESH_INTERIOR
-   
-       mesh % elements(masterElementID)%faceSide(masterFaceNumber)=1
-       mesh % elements(slaveElementID)%faceSide(slidingMortarConnectivity(i,4))=2
-   
-       slaveFaceID=mesh % elements(slaveElementID) % faceIDs(slidingMortarConnectivity(i,4))
-   
-       mesh % mortar_faces(mortarIndex) % Mortar(2)=slaveFaceID
-       mesh % mortar_faces(mortarIndex) % rotation=slidingMortarConnectivity(i,8)
+      end if 
+      mesh % mortar_faces(mortarIndex) % Mortar(1)=masterFaceID
+      mesh % faces(masterFaceID) % Mortar(2)=mortarIndex
 
-       if (.not.allocated(mesh % faces(slaveFaceID) % Mortar)) then 
-                   allocate(mesh % faces(slaveFaceID) % Mortar(2)) 
-               mesh % faces(slaveFaceID) % Mortar=0
-       end if 
+      slaveElementID= slidingMortarConnectivity(i,1)   !3
+
+      mesh % mortar_faces(mortarIndex) % elementIDs(2)  = slaveElementID
+      mesh % mortar_faces(mortarIndex) % elementSide(2) = slidingMortarConnectivity(i,4)
+      mesh % mortar_faces(mortarIndex) % FaceType       = HMESH_INTERIOR
+
+      mesh % elements(masterElementID)%faceSide(masterFaceNumber)=1
+      mesh % elements(slaveElementID)%faceSide(slidingMortarConnectivity(i,4))=2
+
+      slaveFaceID=mesh % elements(slaveElementID) % faceIDs(slidingMortarConnectivity(i,4))
+
+      mesh % mortar_faces(mortarIndex) % Mortar(2)=slaveFaceID
+      mesh % mortar_faces(mortarIndex) % rotation=slidingMortarConnectivity(i,8)
+
+      if (.not.allocated(mesh % faces(slaveFaceID) % Mortar)) then 
+                  allocate(mesh % faces(slaveFaceID) % Mortar(2)) 
+            mesh % faces(slaveFaceID) % Mortar=0
+      end if 
+
+      mesh % mortar_faces(mortarIndex)%offset(1)=offsetParams(3)
+      mesh % mortar_faces(mortarIndex)%offset(2)=offsetParams(4)
+
+      mesh % mortar_faces(mortarIndex)%s(1)=scaleParams(3)
+      mesh % mortar_faces(mortarIndex)%s(2)= scaleParams(4)
    
-       mesh % mortar_faces(mortarIndex)%offset(1)=offsetParams(3)
-       mesh % mortar_faces(mortarIndex)%offset(2)=offsetParams(4)
-   
-       mesh % mortar_faces(mortarIndex)%s(1)=scaleParams(3)
-       mesh % mortar_faces(mortarIndex)%s(2)= scaleParams(4)
-   
-       if (confor) then 
+      if (confor) then 
          mesh % mortar_faces(mortarIndex)%offset(1)=0.0_RP
          mesh % mortar_faces(mortarIndex)%offset(2)=0.0_RP
-   
+
          mesh % mortar_faces(mortarIndex)%s(1)=1.0_RP
          mesh % mortar_faces(mortarIndex)%s(2)=1.0_RP
-       end if 
+      end if 
    
-       mesh % faces(slaveFaceID) % Mortar(1)=mortarIndex
-   
-       mortarIndex = mortarIndex + 1    
-   
-       mesh % elements(slidingMortarElems(i))% MortarFaces(1)=3 
-       mesh % elements(mortarNeighborElems(i))% MortarFaces(2)=3                                                        
+      mesh % faces(slaveFaceID) % Mortar(1)=mortarIndex
+
+      mortarIndex = mortarIndex + 1    
+
+      mesh % elements(slidingMortarElems(i))% MortarFaces(1)=3 
+      mesh % elements(mortarNeighborElems(i))% MortarFaces(2)=3                                                        
 
    end do
    
@@ -1503,34 +1477,40 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
    
    do i=1, size(mesh%mortar_faces)  
    
-       associate(f => mesh % mortar_faces(i))
-           associate(eL => mesh % elements(f % elementIDs(1)), &
-           eR => mesh % elements(f % elementIDs(2))   )
-           NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
-           NelR = eR % Nxyz(axisMap(:, f % elementSide(2)))
+      associate(f => mesh % mortar_faces(i))
+         associate(eL => mesh % elements(f % elementIDs(1)), &
+         eR => mesh % elements(f % elementIDs(2))   )
+         NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
+         NelR = eR % Nxyz(axisMap(:, f % elementSide(2)))
+
+         call f % LinkWithElements(NelL, NelR, nodes, f%offset, f%s)
    
-           call f % LinkWithElements(NelL, NelR, nodes, f%offset, f%s)
-   
-           end associate
-       end associate
+         end associate
+      end associate
    end do
    
-   ! -------------------------------------------------------------------------
    ! Construct mortar geometrical mappings
-   ! -------------------------------------------------------------------------
-   
    do i=1, size(mesh%mortar_faces)
    
-       associate(f => mesh % mortar_faces(i))
-           associate(eL => mesh % elements(f % elementIDs(1)), &
-           eR => mesh % elements(f % elementIDs(2))   )
-           NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
-           NelR = eR % Nxyz(axisMap(:, f % elementSide(2)))
-   
-           call f % geom % construct(f % Nf, f % NelLeft, f % NfLeft, eL % Nxyz, &
-                                    eL % geom, eL % hexMap, f % elementSide(1), &
-                                    f % projectionType(1), 1, 0,.true.,f%Mortarpos, f%s(1))
-   
+      associate(f => mesh % mortar_faces(i))
+         
+         dirM = SlidingFaceDir( mesh % SlidingMesh, mesh % faces(f % Mortar(1)) % geom % x )
+         dirS = SlidingFaceDir( mesh % SlidingMesh, mesh % faces(f % Mortar(2)) % geom % x )
+         f % slidingDir = dirM
+         if ( dirM /= dirS .and. f % rotation == 0 ) then
+            write(STD_OUT,*) 'FATAL: sliding mortar ', f % ID, &
+            ',the two sides disagree on the azimuthal direction but rotation is zero; leftIndexes2Right cannot bridge them.'
+            error stop
+         end if
+
+         associate(eL => mesh % elements(f % elementIDs(1)), &
+         eR => mesh % elements(f % elementIDs(2))   )
+         NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
+         NelR = eR % Nxyz(axisMap(:, f % elementSide(2)))
+
+         call f % geom % construct(f % Nf, f % NelLeft, f % NfLeft, eL % Nxyz, &
+                                 eL % geom, eL % hexMap, f % elementSide(1), &
+                                 f % projectionType(1), 1, 0,.true.,f%Mortarpos, f%s(1), f % slidingDir)
    
          end associate
          jmax = maxval(f % geom % jacobian)
@@ -1541,23 +1521,36 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
          f % geom % h = minval(mesh % elements(f % elementIDs(2)) % geom % jacobian) &
          / maxval(f % geom % jacobian)
    
-       end associate
+      end associate
    
    end do 
    !call PrintMortarConnectivity(mesh)
 end subroutine ConstructSlidingMortars
 
+! ---------------------------------------------------------------------------
+!  GetSlidingTopologyState
+!
+!  Turns the cumulative angle omega into three things: sectorID, the number of
+!  whole element widths turned; localAngle, the remainder inside the sector; and
+!  isConforming, true when that remainder is zero and the two sides line up.
+!  Also nudges a remainder that sits within 1e-10 of a full sector up to the next
+!  one, so the near-conforming case does not produce a degenerate overlap.
+! ---------------------------------------------------------------------------
 subroutine GetSlidingTopologyState(omega, nElements, sectorID, isConforming, localAngle)
    use SMConstants
    use Utilities, only: AlmostEqual
    implicit none
-
+   ! =========================
+   ! Arguments
+   ! =========================
    real(kind=RP), intent(in)  :: omega
    integer,       intent(in)  :: nElements
    integer,       intent(out) :: sectorID
    logical,       intent(out) :: isConforming
    real(kind=RP), intent(out) :: localAngle
-
+   ! =========================
+   ! Local variables
+   ! =========================
    real(kind=RP) :: deltaTheta
    real(kind=RP) :: remainder
 
@@ -1587,11 +1580,24 @@ subroutine GetSlidingTopologyState(omega, nElements, sectorID, isConforming, loc
    end if
 end subroutine GetSlidingTopologyState
 
+! ---------------------------------------------------------------------------
+!  UpdateSlidingMortarsConnectivity
+!
+!  Called when sectorID changes.  Each row of slidingMortarConnectivity is moved
+!  onto the partner it now faces, by matching column 2 against column 1 forwards
+!  and the reverse backwards.  Applies the shift nShift times, so a step that
+!  crosses several sectors is handled in one go.
+! ---------------------------------------------------------------------------
 subroutine UpdateSlidingMortarsConnectivity(mesh, sectorID)
-   IMPLICIT NONE
+   implicit none 
+   ! =========================
+   ! Arguments
+   ! =========================
    class(HexMesh), intent(inout) :: mesh 
    integer, intent(in)           :: sectorID 
-
+   ! =========================
+   ! Local variables
+   ! =========================
    integer :: i, j, k, nShift
    logical :: forward
    integer, allocatable :: tmp_SlidingMortarConnetion(:,:)
@@ -1618,6 +1624,7 @@ subroutine UpdateSlidingMortarsConnectivity(mesh, sectorID)
                   tmp_SlidingMortarConnetion(i,9)  = SM % slidingMortarConnectivity(j,9)
                   tmp_SlidingMortarConnetion(i,12) = SM % slidingMortarConnectivity(j,12)
                   tmp_SlidingMortarConnetion(i,10) = SM % slidingMortarConnectivity(j,10)
+                  tmp_SlidingMortarConnetion(i,11) = SM % slidingMortarConnectivity(j,11)
 
                end if 
             end do 
@@ -1631,6 +1638,11 @@ subroutine UpdateSlidingMortarsConnectivity(mesh, sectorID)
 
 end subroutine UpdateSlidingMortarsConnectivity
 
+! ---------------------------------------------------------------------------
+!  PrintMortarConnectivity
+!
+!  Dumps the mortar table to stdout.  Debug aid, not called in normal runs.
+! ---------------------------------------------------------------------------   
 subroutine PrintMortarConnectivity(mesh)
    implicit none
    class(HexMesh), intent(inout) :: mesh
@@ -1646,11 +1658,25 @@ subroutine PrintMortarConnectivity(mesh)
 
 end subroutine PrintMortarConnectivity 
 
+! ---------------------------------------------------------------------------
+!  SortByLayerAndAngle
+!
+!  Insertion sort on the index array idx, ordering by zeta first and by phi
+!  within a layer.  Two entries are in the same layer when their zeta differ by
+!  less than tolz.  O(n^2), which is fine here: n is the number of interface
+!  elements and the sort runs once.
+! ---------------------------------------------------------------------------
 subroutine SortByLayerAndAngle(idx, zeta, phi, tolz, n)
+
+   ! =========================
+   ! Arguments
+   ! =========================
    integer,       intent(inout) :: idx(n)
    real(kind=RP), intent(in)    :: zeta(*), phi(*), tolz
    integer,       intent(in)    :: n
-
+   ! =========================
+   ! Local variables
+   ! =========================
    integer :: i, j, key
    logical :: before
 
@@ -1676,8 +1702,23 @@ subroutine SortByLayerAndAngle(idx, zeta, phi, tolz, n)
 
 end subroutine SortByLayerAndAngle
 
+! ---------------------------------------------------------------------------
+!  BuildAzimuthalConnectivity
+!
+!  Puts the interface elements in order around the axis so that "next" is
+!  defined.  Takes the centroid of each interface face, converts it to
+!  (phi, zeta, rad), sorts by zeta then by phi, and then checks the ring is
+!  regular: same count in every layer, constant angular spacing to within
+!  tolGeom, and no missing element. 
+! ---------------------------------------------------------------------------
 subroutine BuildAzimuthalConnectivity(mesh)
+   ! =========================
+   ! Arguments
+   ! =========================
    class(HexMesh), intent(inout) :: mesh
+   ! =========================
+   ! Local variables
+   ! =========================
 
    real(kind=RP), allocatable :: phiA(:), zetA(:), radA(:)
    integer,       allocatable :: idx(:)
@@ -1798,5 +1839,68 @@ subroutine BuildAzimuthalConnectivity(mesh)
 
    end associate
 end subroutine BuildAzimuthalConnectivity
+
+! ---------------------------------------------------------------------------
+!  SlidingFaceDir
+!
+!  The contracted direction must be the azimuthal one, because that is where the
+!  mortar overlap lives. Which local direction that is depends on the mesh
+!  generator, not on the geometry. 
+!
+!                   SpecMesh                           HOPR
+!             +-----------------+               +-----------------+
+!             |  .   .   .   .  |               |  .   .   o   .  |
+!             |                 |               |          |      |
+!             |  o---o---o---o  |               |  .   .   o   .  |
+!             |                 |               |          |      |
+!             |  .   .   .   .  |               |  .   .   o   .  |
+!      axis   |                 |        axis   |          |      |
+!       ^     |  .   .   .   .  |         ^     |  .   .   o   .  |
+!     i |     +-----------------+       j |     +-----------------+
+!       |                                 |
+!       +----> azimuth                    +----> azimuth
+!          j                                 i  
+!              dir 1 = axis                      dir 1 = azimuth
+!              dir 2 = azimuth                   dir 2 = axis
+!
+!  Left, contracting dir 2 mixes along the azimuth: correct.
+!  Right, it would mix along the axis and ignore the slip entirely
+! ---------------------------------------------------------------------------
+integer function SlidingFaceDir(SM, x) result(dir)
+   use SlidingMeshClass
+   implicit none
+   ! =========================
+   ! Arguments
+   ! =========================
+   type(SlidingMesh), intent(in) :: SM
+   real(kind=RP), intent(in) :: x(:,0:,0:)
+   ! =========================
+   ! Local variables
+   ! =========================
+   integer :: n1, n2
+   real(kind=RP) :: phi_origin, d1, d2
+
+   n1 = ubound(x,2) ; n2 = ubound(x,3)
+   phi_origin = SM % phi( x(:,0,0) )
+   d1 = abs( WrapPi( SM % phi( x(:,n1,0) ) - phi_origin ) )
+   d2 = abs( WrapPi( SM % phi( x(:,0,n2) ) - phi_origin ) )
+   dir = merge(1, 2, d1 > d2)
+
+end function SlidingFaceDir
+
+real(kind=RP) function WrapPi(a) result(b)
+   implicit none
+   real(kind=RP), intent(in) :: a
+
+   b = a
+   do while (b > PI) 
+      b = b - 2.0_RP*PI 
+    end do
+
+   do while (b < -PI) 
+      b = b + 2.0_RP*PI 
+    end do
+
+end function WrapPi
 
 end module SlidingMeshProcedures

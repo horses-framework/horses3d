@@ -66,6 +66,7 @@
       type Face
       integer, allocatable            :: Mortar(:)                !fID of the slave mortar 
       integer                         :: MortarType               !0 = h-conforming or p-mortar, 1 = big hp-master mortar, 2 = small hp-slave, 3 = sliding h-mortar (the face is connected to a mesh % mortar_faces)
+      integer                         :: slidingDir = 2 
       integer                         :: Mortarpos                !Mortar index (only for slave faces, from 1 to 2 or 4; 0 if not slave mortar face)
       logical                         :: flat
       integer                         :: ID                       ! face ID
@@ -502,9 +503,8 @@
          if (side==1) then
             associate(Qf => fma % storage(1) % Q)
                Qf=0.0_RP
-               do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
-               Qf(:,i,j) = Qf(:,i,j)  + MIntSliding(j,l,1) * Qe(:,i,l)
-               end do                  ; end do                   ; end do
+               call SlidingContract( MIntSliding(:,:,1), Qe, Qf, fma % slidingDir, &
+                                    self % Nf(1), self % Nf(2), self % NfLeft(2) )
             end associate
          else
             do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
@@ -512,10 +512,9 @@
                Qe_rot(:,i,j) = Qe(:,ii,jj)
             end do                        ; end do
             associate(Qf => fma % storage(2) % Q)
-            Qf=0.0_RP
-               do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
-                  Qf(:,i,j) = Qf(:,i,j)  + MIntSliding(j,l,2) *  Qe_rot(:,i,l)
-               end do                  ; end do                   ; end do
+               Qf=0.0_RP
+               call SlidingContract( MIntSliding(:,:,2), Qe_rot, Qf, fma % slidingDir, &
+                                    self % Nf(1), self % Nf(2), self % NfLeft(2) )
             end associate
          end if
       end if
@@ -728,22 +727,20 @@
                Uzf(:,i,j) = Uzf(:,i,j) + MIntEta(j,l) * tmpz(:,i,l)
             end do ; end do ; end do
 
-      end associate
+         end associate
       else  !sliding mortars
 
          if (side==1) then 
-         associate(Uxf => fma % storage(side) % U_x, &
-            Uyf => fma % storage(side) % U_y, &
-            Uzf => fma % storage(side) % U_z   )
-            Uxf=0.0_RP
-            Uyf=0.0_RP
-            Uzf=0.0_RP
-            do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
-               Uxf(:,i,j) = Uxf(:,i,j) + MIntSliding(j,l,side) * Uxe(:,i,l)
-               Uyf(:,i,j) = Uyf(:,i,j) + MIntSliding(j,l,side) * Uye(:,i,l)
-               Uzf(:,i,j) = Uzf(:,i,j) + MIntSliding(j,l,side) * Uze(:,i,l)
-            end do                  ; end do                   ; end do
-         end associate 
+            associate(Uxf => fma % storage(side) % U_x, &
+               Uyf => fma % storage(side) % U_y, &
+               Uzf => fma % storage(side) % U_z   )
+               Uxf=0.0_RP
+               Uyf=0.0_RP
+               Uzf=0.0_RP
+               call SlidingContract(MIntSliding(:,:,side), Uxe, Uxf, fma % slidingDir, self % Nf(1), self % Nf(2), self % NfLeft(2))
+               call SlidingContract(MIntSliding(:,:,side), Uye, Uyf, fma % slidingDir, self % Nf(1), self % Nf(2), self % NfLeft(2))
+               call SlidingContract(MIntSliding(:,:,side), Uze, Uzf, fma % slidingDir, self % Nf(1), self % Nf(2), self % NfLeft(2))
+            end associate 
          else 
             do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
                call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), fma % rotation, ii, jj)
@@ -757,11 +754,9 @@
                Uxf=0.0_RP
                Uyf=0.0_RP
                Uzf=0.0_RP
-               do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
-                  Uxf(:,i,j) = Uxf(:,i,j) + MIntSliding(j,l,side) * Uxe_rot(:,i,l)
-                  Uyf(:,i,j) = Uyf(:,i,j) + MIntSliding(j,l,side) * Uye_rot(:,i,l)
-                  Uzf(:,i,j) = Uzf(:,i,j) + MIntSliding(j,l,side) * Uze_rot(:,i,l)
-               end do                  ; end do                   ; end do
+               call SlidingContract(MIntSliding(:,:,side), Uxe_rot, Uxf, fma % slidingDir, self % Nf(1), self % Nf(2), self % NfLeft(2))
+               call SlidingContract(MIntSliding(:,:,side), Uye_rot, Uyf, fma % slidingDir, self % Nf(1), self % Nf(2), self % NfLeft(2))
+               call SlidingContract(MIntSliding(:,:,side), Uze_rot, Uzf, fma % slidingDir, self % Nf(1), self % Nf(2), self % NfLeft(2))
             end associate 
          end if 
       end if 
@@ -917,9 +912,8 @@
          if (side==1) then
             associate(AVf => fma % storage(side) % AviscFlux)
                AVf = 0.0_RP
-               do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
-                  AVf(:,i,j) = AVf(:,i,j) + MIntSliding(j,l,side) * AVn_e(:,i,l)
-               end do                  ; end do                   ; end do
+               call SlidingContract(MIntSliding(:,:,side), AVn_e, AVf, &
+                                    fma % slidingDir, self % Nf(1), self % Nf(2), self % NfLeft(2))
             end associate
          else
             do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
@@ -928,9 +922,8 @@
             end do                        ; end do
             associate(AVf => fma % storage(side) % AviscFlux)
                AVf = 0.0_RP
-               do l = 0, self % NfLeft(1)  ; do j = 0, self % Nf(1)   ; do i = 0, self % Nf(1)
-                  AVf(:,i,j) = AVf(:,i,j) + MIntSliding(j,l,side) * AVn_e_rot(:,i,l)
-               end do                  ; end do                   ; end do
+               call SlidingContract(MIntSliding(:,:,side), AVn_e_rot, AVf, &
+                                    fma % slidingDir, self % Nf(1), self % Nf(2), self % NfLeft(2))
             end associate
          end if
       end if
@@ -1101,9 +1094,8 @@
       else !sliding mortar
          fStarAux(1:nEqn,:,:) = 0.0_RP 
          if (whichElements(1)==1) then 
-            do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
-               fStarAux(1:nEqn,i,j)= fStarAux(1:nEqn,i,j) + MoutSliding(j,l,1) * MortarFlux(1:nEqn,i,l)
-            end do                  ; end do                   ; end do
+            call SlidingContract( MoutSliding(:,:,1), MortarFlux, fStarAux, slaveFace % slidingDir, &
+                                 slaveFace % NfLeft(1), slaveFace % NfLeft(2), slaveFace % Nf(2) )
             associate(fStar => self % storage(1) % Fstar)
                fStar=fStar + slaveFace%s(1) * fStarAux
             end associate 
@@ -1113,9 +1105,9 @@
 
          else 
             fStarAux(1:nEqn,:,:) = 0.0_RP 
-            do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
-               fStarAux(1:nEqn,i,j)= fStarAux(1:nEqn,i,j) + MoutSliding(j,l,2) * MortarFlux(1:nEqn,i,l)
-            end do                  ; end do                   ; end do
+            fStarAux(1:nEqn,:,:) = 0.0_RP
+            call SlidingContract( MoutSliding(:,:,2), MortarFlux, fStarAux, slaveFace % slidingDir, &
+                                 slaveFace % NfLeft(1), slaveFace % NfLeft(2), slaveFace % Nf(2) )
 
             fStarAux2=0.0_RP
             fStarAux=slaveFace%s(1) * (fStarAux)
@@ -1526,30 +1518,33 @@
       else  !sliding
       if (whichElements(1)==1) then
          hStarAux = 0.0_RP
-            do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
-            hStarAux(:,:,i,j)= hStarAux(:,:,i,j) + MoutSliding(j,l,whichElements(1)) * Hflux(:,:,i,l)
-         end do                  ; end do                   ; end do
+
+         call SlidingContract4( MoutSliding(:,:,whichElements(1)), Hflux, hStarAux, slaveFace % slidingDir, &
+                              slaveFace % NfLeft(1), slaveFace % NfLeft(2), slaveFace % Nf(2) )
    
          hStarAux=slaveFace%s(1) * (hStarAux)
+
          associate(unStar => self % storage(1) % unStar)
-   
+            unStar=unStar+factor*(hStarAux)
          end associate
-            end if
-            if (whichElements(1)==2) then
-               hStarAux = 0.0_RP
-               do l = 0, self % NfLeft(2)  ; do j = 0, self % Nf(2)   ; do i = 0, self % Nf(1)
-               hStarAux(:,:,i,j)= hStarAux(:,:,i,j) + MoutSliding(j,l,whichElements(1)) * Hflux(:,:,i,l)
-                  end do                  ; end do                   ; end do
-                  hStarAux=slaveFace%s(1) * (hStarAux)
-                  associate(unStar => self % storage(2) % unStar)
-                     do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
-                        call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), slaveFace % rotation, ii, jj)
-                        hStarAux2(:,:,ii,jj) = hStarAux(:,:,i,j)
-                     end do                        ; end do
-                     unStar=unStar+factor*(hStarAux2)
-                  end associate
-   
-            end if
+      end if
+      if (whichElements(1)==2) then
+         hStarAux = 0.0_RP
+
+         call SlidingContract4( MoutSliding(:,:,whichElements(1)), Hflux, hStarAux, slaveFace % slidingDir, &
+                              slaveFace % NfLeft(1), slaveFace % NfLeft(2), slaveFace % Nf(2) )
+
+         hStarAux=slaveFace%s(1) * (hStarAux)
+
+         associate(unStar => self % storage(2) % unStar)
+            do j = 0, self % NfRight(2)   ; do i = 0, self % NfRight(1)
+               call leftIndexes2Right(i,j,self % NfRight(1), self % NfRight(2), slaveFace % rotation, ii, jj)
+               hStarAux2(:,:,ii,jj) = hStarAux(:,:,i,j)
+            end do                        ; end do
+            unStar=unStar+factor*(hStarAux2)
+         end associate
+
+      end if
       end if
    
    end subroutine Face_ProjectMortarGradientFluxToElements
@@ -2037,8 +2032,7 @@
       end select
 
    end subroutine Face_AdaptBaseSolutionToFace
-
-   !
+!
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !  
    subroutine Face_AdaptBaseSolutionToMortarFace(self, nEqn, Nelx, Nely, Qe, side, fma)
@@ -2188,6 +2182,7 @@
       to % storage = from % storage
       to % MortarType = from % MortarType
       to % Mortarpos = from % Mortarpos
+      to % slidingDir = from % slidingDir
 
    end subroutine Face_Assign
 
@@ -2279,6 +2274,53 @@
       end select
 
    end subroutine GetMortarMout
+!
+!////////////////////////////////////////////////////////////////////////
+!
+!  Subroutine used by the sliding mortars only, to contract one face direction
+!  with the mortar operator
+   pure subroutine SlidingContract(M, Ain, Aout, dir, N1, N2, Nl)
+      implicit none
+      real(kind=RP), intent(in) :: M(0:,0:)
+      real(kind=RP), intent(in), contiguous :: Ain (:,0:,0:)
+      real(kind=RP), intent(inout), contiguous :: Aout(:,0:,0:)
+      integer, intent(in) :: dir, N1, N2, Nl
+      integer :: i, j, l
+
+         if ( dir == 2 ) then
+            do l = 0, Nl ; do j = 0, N2 ; do i = 0, N1
+               Aout(:,i,j) = Aout(:,i,j) + M(j,l) * Ain(:,i,l)
+            end do ; end do ; end do
+         else
+            do l = 0, Nl ; do j = 0, N2 ; do i = 0, N1
+               Aout(:,i,j) = Aout(:,i,j) + M(i,l) * Ain(:,l,j)
+            end do ; end do ; end do
+         end if
+
+   end subroutine SlidingContract
+!
+!////////////////////////////////////////////////////////////////////////
+!
+!  Same as SlidingContract, for arrays with two leading dimensions
+   pure subroutine SlidingContract4(M, Ain, Aout, dir, N1, N2, Nl)
+      implicit none
+      real(kind=RP), intent(in) :: M(0:,0:)
+      real(kind=RP), intent(in), contiguous :: Ain (:,:,0:,0:)
+      real(kind=RP), intent(inout), contiguous :: Aout(:,:,0:,0:)
+      integer, intent(in) :: dir, N1, N2, Nl
+      integer :: i, j, l
+
+      if ( dir == 2 ) then
+         do l = 0, Nl ; do j = 0, N2 ; do i = 0, N1
+            Aout(:,:,i,j) = Aout(:,:,i,j) + M(j,l) * Ain(:,:,i,l)
+         end do ; end do ; end do
+      else
+         do l = 0, Nl ; do j = 0, N2 ; do i = 0, N1
+               Aout(:,:,i,j) = Aout(:,:,i,j) + M(i,l) * Ain(:,:,l,j)
+         end do ; end do ; end do
+      end if
+
+   end subroutine SlidingContract4
 
 end Module FaceClass
    

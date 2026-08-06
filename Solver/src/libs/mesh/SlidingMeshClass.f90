@@ -1,3 +1,44 @@
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+!     SlidingMeshClass
+!     ----------------
+!
+!     Holds everything the sliding mesh needs to describe itself: the rotating
+!     cylinder, the current angle, and the tables that pair the two sides of the
+!     interface. The algorithms that use them live in SlidingMeshProcedures.
+!
+!     Read from the control file, in a "#define slidingmesh" block:
+!
+!        center          two coordinates, in the plane normal to the axis
+!        radius          elements entirely inside it rotate
+!        angle           rotation applied per time step, radians
+!        rotation axis   x, y or z
+!
+!     Conventions
+!     -----------
+!     iAx is the component index of the rotation axis, iR1 and iR2 the two that
+!     span the plane normal to it. They are NOT in the usual cyclic order:
+!
+!        axis x  ->  (iR1, iR2) = (z, y)
+!        axis y  ->  (iR1, iR2) = (x, z)
+!        axis z  ->  (iR1, iR2) = (y, x)
+!
+!     so phi = atan2(x(iR2) - center(2), x(iR1) - center(1)) runs in the opposite
+!     sense to the usual right-handed convention. This is consistent throughout
+!     both files.
+!
+!     center is given in that same (iR1, iR2) order, which is (z,y) for axis x,
+!     (x,z) for axis y and (y,x) for axis z. Only the middle one matches the
+!     intuitive ordering. Invisible for a cylinder on the axis, off by ninety
+!     degrees for one that is not.
+!
+!     omega is the cumulative angle since the start, theta the increment per
+!     step, both in radians. phi is returned in (-pi, pi].
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+
 #include "Includes.h"
 MODULE SlidingMeshClass
       use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax
@@ -31,7 +72,8 @@ MODULE SlidingMeshClass
       integer,                   allocatable :: face_nodes(:,:)
       integer,                   allocatable :: face_othernodes(:,:)
       integer,                   allocatable :: slidingMortarConnectivity(:,:)! slidingMortarConnectivity(i,:) :
-      !   Data structure describing the mortar interface configuration for each slidingMortarElems(i). Each row encodes the connectivity between:
+      !   Data structure describing the mortar interface configuration for each slidingMortarElems(i). 
+      !   Each row encodes the connectivity between:
       !   - a sliding interface element,
       !   - its neighboring sliding element,
       !   - and the associated non-sliding (mortar) element.
@@ -50,7 +92,8 @@ MODULE SlidingMeshClass
       !     (11) : corresponding local face index for (10)
       !     (12) : rotation associated with (10)
       !
-      !   This structure is used to fully reconstruct mortar connectivity and orientation between sliding and non-sliding regions.
+      !   This structure is used to fully reconstruct mortar connectivity and orientation 
+      !   between sliding and non-sliding regions.
       integer,                   allocatable :: neighborConnectivity(:,:,:)
       integer,                   allocatable :: rotmortars(:)
       integer                                :: numBFacePoints
@@ -89,9 +132,12 @@ MODULE SlidingMeshClass
       CONTAINS
 !     ========
 
-!  -------------------------------------------------
-!  SlidingMesh info
-!  -------------------------------------------------   
+! ---------------------------------------------------------------------------
+!  SlidingMesh_read_info
+!
+!  Entry point for the control file. Does nothing unless a "#define
+!  slidingmesh" block is present, in which case it defers to GetInfo.
+! --------------------------------------------------------------------------
 subroutine SlidingMesh_read_info( self, controlVariables )
     use FileReadingUtilities
     implicit none
@@ -105,6 +151,13 @@ subroutine SlidingMesh_read_info( self, controlVariables )
 
 end subroutine SlidingMesh_read_info
 
+! ---------------------------------------------------------------------------
+!  SlidingMesh_GetInfo
+!
+!  Reads center, radius, angle and rotation axis from the "#define
+!  slidingmesh" block, and derives iAx, iR1 and iR2 from the axis. Every
+!  entry is mandatory: a missing or malformed one stops the run.
+! ---------------------------------------------------------------------------
 subroutine SlidingMesh_GetInfo( self, controlVariables )
     use FileReadingUtilities
     use ParamfileRegions
@@ -185,6 +238,13 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
 
 end subroutine SlidingMesh_GetInfo
 
+! ---------------------------------------------------------------------------
+!  SlidingMesh_Initialize
+!
+!  Allocates the connectivity tables once the interface has been sized, and
+!  zeroes them on the first pass only. Allocation is guarded, so calling it
+!  again on a later step is harmless.
+! ---------------------------------------------------------------------------
 subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingElements, numBFacePoints)
     use Physics
     use PartitionedMeshClass
@@ -215,7 +275,6 @@ subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingE
     ! Initialization (first pass only)
     !========================
     if (.not. self % active) then
-    
        self % mortarNeighborElems       = 0
        self % slidingMortarElems        = 0
        self % pureSlidingElems          = 0
@@ -233,6 +292,12 @@ subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingE
 
 end subroutine SlidingMesh_Initialize
 
+! ---------------------------------------------------------------------------
+!  SlidingMesh_Destruct
+!
+!  Releases every table allocated by Initialize. Uses safedeallocate, so it
+!  is safe on a mesh where the sliding interface was never active.
+! ---------------------------------------------------------------------------
 subroutine SlidingMesh_Destruct(self)
     implicit none
 
@@ -269,6 +334,13 @@ subroutine SlidingMesh_Destruct(self)
 
 end subroutine SlidingMesh_Destruct
 
+! ---------------------------------------------------------------------------
+!  SlidingMeshIsDefined
+!
+!  Scans the case file for a "#define slidingmesh" block and returns whether
+!  one was found. Called before anything is read, so that a case without a
+!  sliding interface pays nothing.
+! ---------------------------------------------------------------------------
 logical function SlidingMeshIsDefined()
     use ParamfileRegions
     implicit none
@@ -336,6 +408,7 @@ logical function SlidingMeshIsDefined()
 
 end function SlidingMeshIsDefined
 
+!  Azimuthal angle of x about the axis, in (-pi, pi].
 pure function SlidingMesh_phi(self, x) result(p)
    class(SlidingMesh), intent(in) :: self
    real(kind=RP),      intent(in) :: x(3)
@@ -345,6 +418,7 @@ pure function SlidingMesh_phi(self, x) result(p)
 
 end function
 
+!  Coordinate of x along the rotation axis.
 pure function SlidingMesh_zeta(self, x) result(z)
    class(SlidingMesh), intent(in) :: self
    real(kind=RP),      intent(in) :: x(3)
@@ -354,6 +428,7 @@ pure function SlidingMesh_zeta(self, x) result(z)
 
 end function
 
+!  Distance from x to the axis.
 pure function SlidingMesh_rad(self, x) result(r)
    class(SlidingMesh), intent(in) :: self
    real(kind=RP),      intent(in) :: x(3)
@@ -363,6 +438,7 @@ pure function SlidingMesh_rad(self, x) result(r)
 
 end function
 
+!  Rotates x about the axis by theta.
 pure subroutine SlidingMesh_RotatePoint(self, theta, x)
    class(SlidingMesh), intent(in)    :: self
    real(kind=RP),      intent(in)    :: theta
@@ -373,8 +449,10 @@ pure subroutine SlidingMesh_RotatePoint(self, theta, x)
    c = cos(theta) ; s = sin(theta)
    u = x(self % iR1) - self % center(1)
    v = x(self % iR2) - self % center(2)
+
    x(self % iR1) = self % center(1) + c*u - s*v
    x(self % iR2) = self % center(2) + s*u + c*v
+
 end subroutine
 
 END MODULE SlidingMeshClass
