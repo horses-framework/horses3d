@@ -907,6 +907,7 @@ Module DGSEMClass
       real(kind=RP)                 :: jac, mu, T                       ! Mapping Jacobian, viscosity and temperature
       real(kind=RP)                 :: kinematicviscocity, musa, etasa
       real(kind=RP)                 :: Q(NCONS)                           ! The solution in a node
+      real(kind=RP)                 :: vg_sm(3)                         ! Sliding-mesh grid velocity
       real(kind=RP)                 :: TimeStep_Conv, TimeStep_Visc     ! Time-step for convective and diffusive terms
       real(kind=RP)                 :: localMax_dt_v, localMax_dt_a     ! Time step to perform MPI reduction
       type(NodalStorage_t), pointer :: spAxi_p, spAeta_p, spAzeta_p     ! Pointers to the nodal storage in every direction
@@ -980,6 +981,16 @@ Module DGSEMClass
 #else
             CALL ComputeEigenvaluesForState( Q , eValues )
 #endif
+!
+!           On the rotating region the convective speed is the ALE velocity
+!           u - v_g (dt < O(h/(|u-w| k^2))); |u| + |v_g| bounds it safely
+!           ----------------------------------------------------------------
+            if ( self % mesh % slidingflux ) then
+               if ( self % mesh % elements(eID) % sliding ) then
+                  vg_sm = self % mesh % SlidingMesh % GridVelocityAt( self % mesh % elements(eID) % geom % x(:,i,j,k) )
+                  eValues = eValues + abs(vg_sm)
+               end if
+            end if
             jac      = self % mesh % elements(eID) % geom % jacobian(i,j,k)
 !
 !           ----------------------------
@@ -1078,6 +1089,7 @@ Module DGSEMClass
       real(kind=RP)                 :: lamcsi_a, lamzet_a, lameta_a     ! Advective eigenvalues in the three reference directions
       real(kind=RP)                 :: jac                              ! Mapping Jacobian
       real(kind=RP)                 :: Q(NCONS)                         ! The conservative variable
+      real(kind=RP)                 :: vg_sm(3)                         ! Sliding-mesh grid velocity
       real(kind=RP)                 :: cfl                              ! cfl - Advective
 	  real(kind=RP)                 :: maxCFL, minCFL, maxCFLInterface
 	  real(kind=RP), allocatable    :: elementCFL(:), maxCFLInterfaceID(:)              
@@ -1161,6 +1173,16 @@ Module DGSEMClass
 #else
             CALL ComputeEigenvaluesForState( Q , eValues )
 #endif
+!
+!           On the rotating region the convective speed is the ALE velocity
+!           u - v_g (dt < O(h/(|u-w| k^2))); |u| + |v_g| bounds it safely
+!           ----------------------------------------------------------------
+            if ( self % mesh % slidingflux ) then
+               if ( self % mesh % elements(eID) % sliding ) then
+                  vg_sm = self % mesh % SlidingMesh % GridVelocityAt( self % mesh % elements(eID) % geom % x(:,i,j,k) )
+                  eValues = eValues + abs(vg_sm)
+               end if
+            end if
             jac      = self % mesh % elements(eID) % geom % jacobian(i,j,k)
 !
 !           ----------------------------

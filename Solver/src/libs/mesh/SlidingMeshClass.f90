@@ -36,6 +36,12 @@
 !     omega is the cumulative angle since the start, theta the increment per
 !     step, both in radians. phi is returned in (-pi, pi].
 !
+!     Because (iR1, iR2) is anti-cyclic for all three axes, RotatePoint turning
+!     by +theta in that plane is a rotation by -theta about +e_iAx, whichever
+!     axis was chosen. OmegaVector is the one place that sign is written down;
+!     anything needing a grid velocity must go through it rather than rebuild
+!     the vector, so that flux and geometry cannot disagree on the direction.
+!
 !////////////////////////////////////////////////////////////////////////////////
 !
 
@@ -105,6 +111,11 @@ MODULE SlidingMeshClass
       real(KIND=RP)                          :: theta = 0.0_RP       ! rotation angle
       real(KIND=RP)                          :: omega = 0.0_RP
       real(KIND=RP)                          :: localAngle
+      real(KIND=RP)                          :: angularVelocity = 0.0_RP ! signed rotation rate, rad per (nondimensional)
+                                                                        ! time unit, in the same sense as theta. Must be
+                                                                        ! kept equal to theta/dt by whoever advances the
+                                                                        ! mesh; it is NOT set here and NOT set by
+                                                                        ! AdvanceSlidingMesh.
       integer                                :: rotationAxis
       integer                                :: iAx = 2 
       integer                                :: iR1 = 1
@@ -125,6 +136,10 @@ MODULE SlidingMeshClass
         procedure :: zeta                               => SlidingMesh_zeta
         procedure :: rad                                => SlidingMesh_rad
         procedure :: RotatePoint                        => SlidingMesh_RotatePoint
+        procedure :: OmegaVector                        => SlidingMesh_OmegaVector
+        procedure :: RotationCenter3D                   => SlidingMesh_RotationCenter3D
+        procedure :: PlaneCoords                        => SlidingMesh_PlaneCoords
+        procedure :: GridVelocityAt                     => SlidingMesh_GridVelocityAt
 
     end type
 
@@ -454,5 +469,80 @@ pure subroutine SlidingMesh_RotatePoint(self, theta, x)
    x(self % iR2) = self % center(2) + s*u + c*v
 
 end subroutine
+
+!  -----------------------------------------------------------------------
+!  Angular velocity vector of the sliding region, in the same sign
+!  convention as RotatePoint. That convention is uniform across the three
+!  axes: turning by +theta in the anti-cyclic (iR1, iR2) plane is a
+!  rotation by -theta about +e_iAx, hence the minus sign below and the
+!  absence of any per-axis branch.
+!
+!  This is the only place the sign lives. Any grid-velocity user must go
+!  through it so that flux and geometry can never disagree on the
+!  direction.
+!  -----------------------------------------------------------------------
+pure function SlidingMesh_OmegaVector(self) result(omg)
+    implicit none
+    class(SlidingMesh), intent(in) :: self
+    real(kind=RP)                  :: omg(3)
+
+    omg = 0.0_RP
+    omg(self % iAx) = -self % angularVelocity
+
+end function SlidingMesh_OmegaVector
+
+!  -----------------------------------------------------------------------
+!  The two control-file center coordinates, placed back into 3D. They are
+!  given in the (iR1, iR2) order, the same one RotatePoint rotates about,
+!  so a nonzero center is consistent between the geometry update and the
+!  fluxes.
+!  -----------------------------------------------------------------------
+pure function SlidingMesh_RotationCenter3D(self) result(xc)
+    implicit none
+    class(SlidingMesh), intent(in) :: self
+    real(kind=RP)                  :: xc(3)
+
+    xc = 0.0_RP
+    xc(self % iR1) = self % center(1)
+    xc(self % iR2) = self % center(2)
+
+end function SlidingMesh_RotationCenter3D
+
+!  -----------------------------------------------------------------------
+!  In-plane coordinate indices of the rotation plane. Kept as a named
+!  accessor for code that reads better that way; it is exactly (iR1, iR2)
+!  and carries the same anti-cyclic ordering, so ih and iv are (z,y) for
+!  axis x, (x,z) for axis y and (y,x) for axis z. Note that for x and z
+!  this is the reverse of the intuitive pairing.
+!  -----------------------------------------------------------------------
+pure subroutine SlidingMesh_PlaneCoords(self, ih, iv)
+    implicit none
+    class(SlidingMesh), intent(in)  :: self
+    integer,            intent(out) :: ih, iv
+
+    ih = self % iR1
+    iv = self % iR2
+
+end subroutine SlidingMesh_PlaneCoords
+
+!  -----------------------------------------------------------------------
+!  Grid velocity v_g = Omega x (x - xc) at a physical point x
+!  -----------------------------------------------------------------------
+pure function SlidingMesh_GridVelocityAt(self, x) result(vg)
+    implicit none
+    class(SlidingMesh), intent(in) :: self
+    real(kind=RP),      intent(in) :: x(3)
+    real(kind=RP)                  :: vg(3)
+
+    real(kind=RP) :: omg(3), r(3)
+
+    omg = self % OmegaVector()
+    r   = x - self % RotationCenter3D()
+
+    vg(1) = omg(2)*r(3) - omg(3)*r(2)
+    vg(2) = omg(3)*r(1) - omg(1)*r(3)
+    vg(3) = omg(1)*r(2) - omg(2)*r(1)
+
+end function SlidingMesh_GridVelocityAt
 
 END MODULE SlidingMeshClass
