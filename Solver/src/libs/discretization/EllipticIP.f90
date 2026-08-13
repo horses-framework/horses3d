@@ -370,36 +370,35 @@ module EllipticIP
 
       if (mesh%SlidingMesh%active) then 
 !$omp do schedule(runtime) private(fID)
-                  do iFace = 1, size(mesh % mortar_faces)
-                     fID = mesh % mortar_faces(iFace)%ID
-                     associate(unStar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(1))%storage(1)%unStar)
-                        unStar=0.0_RP
-                     end associate
-                     associate(unStar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(1))%storage(2)%unStar)
-                        unStar=0.0_RP
-                     end associate
+         do iFace = 1, size(mesh % mortar_faces)
+            fID = mesh % mortar_faces(iFace)%ID
+            associate(unStar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(1))%storage(1)%unStar)
+               unStar=0.0_RP
+            end associate
+            associate(unStar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(1))%storage(2)%unStar)
+               unStar=0.0_RP
+            end associate
 
-                     associate(unStar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(2))%storage(1)%unStar)
-                        unStar=0.0_RP
-                     end associate
-                     associate(unStar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(2))%storage(2)%unStar)
-                        unStar=0.0_RP
-                     end associate
-                  end do 
+            associate(unStar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(2))%storage(1)%unStar)
+               unStar=0.0_RP
+            end associate
+            associate(unStar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(2))%storage(2)%unStar)
+               unStar=0.0_RP
+            end associate
+         end do 
 !$omp end do        
-               end if 
+      end if 
 
       if (mesh%SlidingMesh%active) then 
-!$omp do schedule(runtime) private(fID)
+!$omp single
          do iFace = 1, size(mesh % mortar_faces)
             fID = mesh % mortar_faces(iFace)%ID
             call IP_GradientInterfaceSolution(f=mesh % mortar_faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients,&
             masterFace1=mesh % faces (mesh % mortar_faces(fID)%Mortar(1)), masterFace2=mesh % faces (mesh % mortar_faces(fID)%Mortar(2)), sliding=.true.)
             
          end do 
-!$omp end do        
+!$omp end single       
       end if 
-
 
          if (HOElements) then
 !$omp do schedule(runtime) private(fID)

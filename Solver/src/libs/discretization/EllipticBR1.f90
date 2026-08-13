@@ -423,28 +423,28 @@ module EllipticBR1
 			 end do
 !$omp end do nowait
 
-          if (mesh%SlidingMesh%active) then 
-!$omp do schedule(runtime) private(fID)
-                  do iFace = 1, size(mesh % mortar_faces)
-                     fID = mesh % mortar_faces(iFace)%ID
-                     associate(unStar=>mesh% mortar_faces(fID)%storage(1)%unStar)
-                        unStar=0.0_RP
-                     end associate
-                     associate(unStar=>mesh% mortar_faces(fID)%storage(2)%unStar)
-                        unStar=0.0_RP
-                     end associate
-                  end do 
-!$omp end do        
-               end if 
-
       if (mesh%SlidingMesh%active) then 
 !$omp do schedule(runtime) private(fID)
+         do iFace = 1, size(mesh % mortar_faces)
+            fID = mesh % mortar_faces(iFace)%ID
+            associate(unStar=>mesh% mortar_faces(fID)%storage(1)%unStar)
+               unStar=0.0_RP
+            end associate
+            associate(unStar=>mesh% mortar_faces(fID)%storage(2)%unStar)
+               unStar=0.0_RP
+            end associate
+         end do 
+!$omp end do        
+      end if 
+
+      if (mesh%SlidingMesh%active) then 
+!$omp single
          do iFace = 1, size(mesh % mortar_faces)
             fID = mesh % mortar_faces(iFace)%ID
             call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces (mesh % mortar_faces(fID)%Mortar(1)),masterFace2=mesh % faces (mesh % mortar_faces(fID)%Mortar(2)),&
              nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, f=mesh % mortar_faces(fID), sliding=.true.)
          end do 
-!$omp end do        
+!$omp end single     
       end if
 
 
