@@ -1048,6 +1048,7 @@ subroutine ConstructMeshPartition_FromHDF5File_( self, fileName, nodes, Nx, Ny, 
       deallocate (gHOPR2pHORSESNodeMap)
       deallocate (globalToLocalElementID)
       deallocate (uNodes, vNodes, values)
+      if (.not.isConformingMesh) deallocate (HorsesMortars)
       
       if (.not. self % child) then
          CALL self % Describe         ( trim(fileName), bFaceOrder )
