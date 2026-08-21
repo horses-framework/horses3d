@@ -1,0 +1,71 @@
+Flow equations        = "NS"
+mesh file name        = "../../TestMeshes/cube_50_50.msh"
+
+restart file name     = "RESULTS/GaussianTransport2D.rst"
+solution file name    = "RESULTS/GaussianTransport2D.rst"
+restart               = .false.
+
+!Discretization nodes = "Gauss"
+Discretization nodes = "Gauss-Lobatto"
+
+Polynomial order i    = 3
+Polynomial order j    = 3
+Polynomial order k    = 1
+
+transport velocity type = "constant"
+transport velocity = [0.2d0,0.2d0,0.0d0]
+transport diffusion-dispersion coefficient type = "constant"
+transport diffusion-dispersion coefficient = 0.05d0
+
+simulation type = "time-accurate"
+explicit method = "rk3"
+final time = 0.10000001
+dt = 0.0001
+Number of time steps  = 100000
+
+Output Interval       = 100
+Number of plot points = 2
+Convergence tolerance = 1.d-10
+
+!cfl                   = 0.2
+!dcfl                  = 0.2
+mach number           = 0.08
+Reynolds number       = 1600.0
+
+riemann solver        = "central"
+
+AOA theta             = 0.0
+AOA phi               = 0.0
+
+autosave mode = "time"
+autosave interval = 0.01
+
+#define boundary front
+  type = periodic
+  coupled boundary = back
+#end
+
+#define boundary bottom
+   type = periodic
+   coupled boundary = top
+#end
+
+#define boundary top
+   type = periodic
+   coupled boundary = bottom
+#end
+
+#define boundary back
+   type = periodic
+   coupled boundary = front
+#end
+
+#define boundary left
+   type = periodic
+   coupled boundary = right
+#end
+
+#define boundary right
+   type = periodic
+   coupled boundary = left
+#end
