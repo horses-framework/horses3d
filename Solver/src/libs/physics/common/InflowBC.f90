@@ -131,6 +131,9 @@ module InflowBCClass
 !              #end
 !        ********************************************************************
 !
+#ifdef TRANSPORT
+         use ScalarBoundaryConditions, only: constructScalarBoundaryConditions
+#endif
          implicit none
          type(InflowBC_t)             :: ConstructInflowBC
          character(len=*), intent(in) :: bname
@@ -197,6 +200,9 @@ module InflowBCClass
          call GetValueWithDefault(bcdict, "TurbIntensity", 0.0_RP                            , ConstructInflowBC % TurbIntensity)
 #if defined(SPALARTALMARAS)
          call GetValueWithDefault(bcdict, "Turbulence parameter theta", refValues % mu    , ConstructInflowBC % eddy_theta)
+#endif
+#ifdef TRANSPORT
+         call constructScalarBoundaryConditions(bcdict, ConstructInflowBC)
 #endif
          ConstructInflowBC % p        = ConstructInflowBC % p / refValues % p
          ConstructInflowBC % rho      = ConstructInflowBC % rho / refValues % rho
@@ -308,6 +314,9 @@ module InflowBCClass
 #if defined(SPALARTALMARAS)
          write(STD_OUT,'(30X,A,A28,F10.2)') "->", ' Initial Value of Turbulence variable: ', (3.0_RP * self % eddy_theta)
 #endif
+#if defined(TRANSPORT)
+         call self % ScalarBC % Describe()
+#endif
 #elif defined(INCNS)
          write(STD_OUT,'(30X,A,A28,F10.2)') "->", ' Velocity: ', self % v * refValues % v
 #if (!defined(CAHNHILLIARD))
@@ -349,7 +358,9 @@ module InflowBCClass
       subroutine InflowBC_Destruct(self)
          implicit none
          class(InflowBC_t)    :: self
-
+#ifdef TRANSPORT
+         call self % ScalarBC % Destruct()
+#endif
       end subroutine InflowBC_Destruct
 !
 !////////////////////////////////////////////////////////////////////////////
@@ -401,6 +412,9 @@ module InflowBCClass
 #if defined(SPALARTALMARAS)
          Q(6) = Q(1) * 3.0_RP*self % eddy_theta
 #endif
+#if defined(TRANSPORT)
+         call self % ScalarBC % FlowState(x, t, nHat, Q)
+#endif
          end associate
 
       end subroutine InflowBC_FlowState
@@ -423,6 +437,10 @@ module InflowBCClass
          real(kind=RP),       intent(inout) :: flux(NCONS)
 
          flux = 0.0_RP
+
+#if defined(TRANSPORT)
+         call self % ScalarBC % FlowNeumann(x, t, nHat, Q, U_x, U_y, U_z, flux)
+#endif
 
       end subroutine InflowBC_FlowNeumann
 #endif

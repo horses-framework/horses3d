@@ -103,6 +103,9 @@ module OutflowBCClass
 !              #end
 !        ********************************************************************
 !
+#ifdef TRANSPORT
+         use ScalarBoundaryConditions, only: constructScalarBoundaryConditions
+#endif
          implicit none
          type(OutflowBC_t)             :: ConstructOutflowBC
          character(len=*), intent(in) :: bname
@@ -180,6 +183,10 @@ module OutflowBCClass
          end if
 
          ConstructOutflowBC % pExt = ConstructOutflowBC % pExt / refValues % p
+
+#ifdef TRANSPORT
+         call constructScalarBoundaryConditions(bcdict, ConstructOutflowBC)
+#endif
 #endif
 
          close(fid)
@@ -197,6 +204,9 @@ module OutflowBCClass
 #ifdef FLOW
          write(STD_OUT,'(30X,A,A28,A)') "->", " Boundary condition type: ", "Outflow"
          write(STD_OUT,'(30X,A,A28,F10.2)') "->", " Outflow pressure: ", self % pExt * refValues % p
+#if defined(TRANSPORT)
+         call self % ScalarBC % Describe()
+#endif
 #endif
          
       end subroutine OutflowBC_Describe
@@ -212,7 +222,9 @@ module OutflowBCClass
       subroutine OutflowBC_Destruct(self)
          implicit none
          class(OutflowBC_t)    :: self
-
+#ifdef TRANSPORT
+         call self % ScalarBC % Destruct()
+#endif
       end subroutine OutflowBC_Destruct
 !
 !////////////////////////////////////////////////////////////////////////////
@@ -282,7 +294,9 @@ module OutflowBCClass
             Q(6) = eddy_theta * rho 
 #endif
          END IF
-   
+#if defined(TRANSPORT)
+         call self % ScalarBC % FlowState(x, t, nHat, Q)
+#endif   
       end associate
 
       end subroutine OutflowBC_FlowState
@@ -300,7 +314,9 @@ module OutflowBCClass
          real(kind=RP),       intent(inout) :: flux(NCONS)
 
          flux = 0.0_RP
-         
+#if defined(TRANSPORT)
+         call self % ScalarBC % FlowNeumann(x, t, nHat, Q, U_x, U_y, U_z, flux)
+#endif     
       end subroutine OutflowBC_FlowNeumann
 #endif
 !

@@ -80,7 +80,6 @@
      public    GRADVARS_STATE, GRADVARS_ENTROPY, GRADVARS_ENERGY
      public    grad_vars, SetGradientVariables
 
-   !   public getTransportVelocity, getTransportDiffusion
      public    transportVelocity_CONSTANT, transportD_CONSTANT
      public    transportVelocityType, transportVelocityType_Constant, transportVelocityType_NS, transportVelocityType_UserDefined
      public    transportDiffusionType, transportDiffusionType_Constant, transportDiffusionType_NS, transportDiffusionType_UserDefined

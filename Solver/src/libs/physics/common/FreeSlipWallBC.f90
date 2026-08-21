@@ -112,6 +112,9 @@ module FreeSlipWallBCClass
 !              #end
 !        ********************************************************************
 !
+#ifdef TRANSPORT
+         use ScalarBoundaryConditions, only: constructScalarBoundaryConditions
+#endif
          implicit none
          type(FreeSlipWallBC_t)             :: ConstructFreeSlipWallBC
          character(len=*), intent(in) :: bname
@@ -191,6 +194,9 @@ module FreeSlipWallBCClass
             ConstructFreeSlipWallBC % invTwall = dimensionless % gammaM2*refValues % T / ConstructFreeSlipWallBC % Twall
             ConstructFreeSlipWallBC % wallType = 1.0_RP
          end if
+#ifdef TRANSPORT
+         call constructScalarBoundaryConditions(bcdict, ConstructFreeSlipWallBC)
+#endif
 #endif
 #ifdef CAHNHILLIARD
          call GetValueWithDefault(bcdict, "contact angle", 90.0_RP, ConstructFreeSlipWallBC % thetaw)
@@ -217,6 +223,9 @@ module FreeSlipWallBCClass
             write(STD_OUT,'(30X,A,A28,A)') "->", ' Thermal type: ', "Isothermal"
             write(STD_OUT,'(30X,A,A28,F10.2)') "->", ' Wall temperature: ', self % Twall * refValues % T
          end if
+#if defined(TRANSPORT)
+         call self % ScalarBC % Describe()
+#endif
 #endif
 #ifdef CAHNHILLIARD
          write(STD_OUT,'(30X,A,A28,F10.2)') "->", ' Wall contact angle: ', self % thetaw
@@ -235,7 +244,9 @@ module FreeSlipWallBCClass
       subroutine FreeSlipWallBC_Destruct(self)
          implicit none
          class(FreeSlipWallBC_t)    :: self
-
+#ifdef TRANSPORT
+         call self % ScalarBC % Destruct()
+#endif
       end subroutine FreeSlipWallBC_Destruct
 !
 !////////////////////////////////////////////////////////////////////////////
@@ -281,7 +292,9 @@ module FreeSlipWallBCClass
          !Isothermal BC
          pressure_aux = Q(IRHO) * self % Twall / (refValues % T * dimensionless % gammaM2)
          Q(IRHOE) = Q(IRHOE) + self % wallType*(pressure_aux/thermodynamics % gammaMinus1 + 0.5_RP*(POW2(Q(IRHOU))+POW2(Q(IRHOV))+POW2(Q(IRHOW)))/Q(IRHO) - Q(IRHOE))
-
+#if defined(TRANSPORT)
+         call self % ScalarBC % FlowState(x, t, nHat, Q)
+#endif
 
       end subroutine FreeSlipWallBC_FlowState
 
@@ -314,7 +327,9 @@ module FreeSlipWallBCClass
          Q_aux(IRHOTHETA)= Q(IRHOTHETA)
 #endif
          call GetGradients(NCONS, NGRAD, Q_aux, U)
-
+#if defined(TRANSPORT)
+         call self % ScalarBC % FlowGradVars(x, t, nHat, Q, U, GetGradients)
+#endif
       end subroutine FreeSlipWallBC_FlowGradVars
 
       subroutine FreeSlipWallBC_FlowNeumann(self, x, t, nHat, Q, U_x, U_y, U_z, flux)
@@ -347,6 +362,9 @@ module FreeSlipWallBCClass
          flux(IRHOE) = self % wallType * heatFlux  ! 0 (Adiabatic)/ heatFlux (Isothermal)
 #if defined(SPALARTALMARAS)
          flux(IRHOTHETA) = 0.0_RP
+#endif
+#if defined(TRANSPORT)
+         call self % ScalarBC % FlowNeumann(x, t, nHat, Q, U_x, U_y, U_z, flux)
 #endif
       end subroutine FreeSlipWallBC_FlowNeumann
 #endif

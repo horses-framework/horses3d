@@ -44,6 +44,9 @@ module GenericBoundaryConditionClass
       character(len=LINE_LENGTH) :: bname
       character(len=LINE_LENGTH) :: BCType
       integer                    :: currentEqn = 1
+#if defined(TRANSPORT)
+      class(GenericBC_t), pointer :: ScalarBC      
+#endif
       contains
          procedure         :: Destruct          => GenericBC_Destruct
          procedure         :: Describe          => GenericBC_Describe

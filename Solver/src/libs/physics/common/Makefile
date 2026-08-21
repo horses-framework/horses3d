@@ -44,6 +44,7 @@ LIBOBJS_NSTPT = 	./build_nstpt/FluidData.o \
 		./build_nstpt/VariableConversion.o \
 		./build_nstpt/Physics.o \
 		./build_nstpt/GenericBoundaryConditionClass.o \
+		./build_nstpt/ScalarBoundaryConditions.o \
 		./build_nstpt/InflowBC.o \
 		./build_nstpt/OutflowBC.o \
 		./build_nstpt/NoSlipWallBC.o \
