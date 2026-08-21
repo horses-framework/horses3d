@@ -2554,7 +2554,7 @@ slavecoord:             DO l = 1, 4
                end do
             end do
 
-#if defined(NAVIERSTOKES)
+#if defined(NAVIERSTOKES) && !defined(TRANSPORT)
             call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NGRAD, MPI_NDOFS)
 #elif defined(INCNS)
             call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS)
@@ -5605,7 +5605,7 @@ slavecoord:             DO l = 1, 4
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   self % MPIfaces % faces(domain) % transportVSend(counterV:counterV+NDIM-1) = f % storage(thisSide) % transportVelocity(:,i,j)
                   counterV = counterV + NDIM
-                  self % MPIfaces % faces(domain) % transportDSend(counterD:counterD+NDIM*NDIM-1) = f % storage(thisSide) % transportD(:,:,i,j)
+                  self % MPIfaces % faces(domain) % transportDSend(counterD:counterD+NDIM*NDIM-1) = reshape(f % storage(thisSide) % transportD(:,:,i,j), (/ NDIM*NDIM /))
                   counterD = counterD + NDIM*NDIM
                end do               ; end do
                end associate
@@ -5664,7 +5664,7 @@ slavecoord:             DO l = 1, 4
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   f % storage(otherSide(thisSide)) % transportVelocity(:,i,j) = self % MPIfaces % faces(domain) % transportVRecv(counterV:counterV+NDIM-1)
                   counterV = counterV + NDIM
-                  f % storage(otherSide(thisSide)) % transportD(:,:,i,j) = self % MPIfaces % faces(domain) % transportDRecv(counterD:counterD+NDIM*NDIM-1)
+                  f % storage(otherSide(thisSide)) % transportD(:,:,i,j) = reshape(self % MPIfaces % faces(domain) % transportDRecv(counterD:counterD+NDIM*NDIM-1), (/ NDIM, NDIM /))
                   counterD = counterD + NDIM*NDIM
                end do               ; end do
                end associate

@@ -128,7 +128,7 @@ module MPI_Face_Class
 !        ---------------
 !
          integer  :: domain, NCONSB
-
+         
          if (present(NCONSB_in)) then
              NCONSB = NCONSB_in
          else
@@ -160,7 +160,7 @@ module MPI_Face_Class
                allocate( facesSet % faces(domain) % AviscFluxRecv(NCONS * NDOFS(domain)) )
                allocate( facesSet % faces(domain) % QBaseSend(NCONSB * NDOFS(domain)) )
                allocate( facesSet % faces(domain) % QBaseRecv(NCONSB * NDOFS(domain)) )
-               if (transportData) then
+               if (present(transportData) .and. transportData) then
                   safedeallocate(facesSet % faces(domain) % transportVSend)
                   safedeallocate(facesSet % faces(domain) % transportVRecv)
                   safedeallocate(facesSet % faces(domain) % transportDSend)
