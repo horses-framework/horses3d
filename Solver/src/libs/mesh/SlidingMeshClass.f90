@@ -62,70 +62,91 @@ MODULE SlidingMeshClass
         enumerator :: rotationAxis_X, rotationAxis_Z, rotationAxis_Y
       end enum
 
-!     ---------------
-!     Mesh definition
-!     ---------------
-!
+      type SlidingRingEntry
+      ! communicated 
+      integer       :: globID   = 0        ! global element ID
+      integer       :: rank     = -1       ! owning rank
+      integer       :: side     = 0        ! local face index 1..6 on the owner
+      integer       :: rotation = 0        ! face rotation index
+      integer       :: dir      = 0        ! azimuthal local direction, see SlidingFaceDir
+      real(kind=RP) :: phi      = 0.0_RP   ! azimuth of the face centroid, IN ITS OWN FRAME
+      real(kind=RP) :: zeta     = 0.0_RP   ! axial coordinate of the face centroid
+      real(kind=RP) :: jacMin   = 0.0_RP   ! min jacobian of the owning element
+      integer       :: Nel(2)   = 0        ! polynomial orders of the owning element on this face
+      ! assigned locally, never communicated 
+      integer       :: Azim_Id  = 0        ! azimuthal index, 1..numElemsPerLayer
+      integer       :: Ax_Id    = 0        ! axial layer index, 1..numLayers
+      integer       :: localEID = 0        ! local element ID, valid only on the owner
+   end type SlidingRingEntry
+   
+
+   integer, parameter :: SM_RING_NINT  = 7      
+   integer, parameter :: SM_RING_NREAL = 3
+
     type SlidingMesh
-      logical                                :: active = .false.
-      logical                                :: isConfigured = .false.
-      integer                                :: numPureSlidingElems = 0
-      integer,                   allocatable :: mortarNeighborElems(:)!associated non-sliding neighbors across the interface (require mortars)
-      integer,                   allocatable :: slidingMortarElems(:)!sliding elements at the interface (require mortars)
-      integer,                   allocatable :: pureSlidingElems(:)!sliding elements fully inside the region (no mortar)
-      integer,                   allocatable :: mortararr1(:,:)
-      integer,                   allocatable :: mortararr2(:,:)
-      integer,                   allocatable :: face_nodes(:,:)
-      integer,                   allocatable :: face_othernodes(:,:)
-      integer,                   allocatable :: slidingMortarConnectivity(:,:)! slidingMortarConnectivity(i,:) :
-      !   Data structure describing the mortar interface configuration for each slidingMortarElems(i). 
-      !   Each row encodes the connectivity between:
-      !   - a sliding interface element,
-      !   - its neighboring sliding element,
-      !   - and the associated non-sliding (mortar) element.
-      !
-      !   Column description:
-      !     (1)  : ID of the sliding interface element (current element)
-      !     (2)  : ID of the neighboring sliding element across the interface (left of (1))
-      !     (3)  : ID of the neighboring non-sliding element (mortar element) (top of (2))
-      !     (4)  : local face index of (1) connected to the mortar interface
-      !     (5)  : local face index of (2) connected to the mortar interface
-      !     (6)  : local face index of (3) connected to the mortar interface
-      !     (7)  : rotation of face (1)
-      !     (8)  : rotation of face (2)
-      !     (9)  : rotation of face (3)
-      !     (10) : ID of the second non-sliding master element connected to (1)
-      !     (11) : corresponding local face index for (10)
-      !     (12) : rotation associated with (10)
-      !
-      !   This structure is used to fully reconstruct mortar connectivity and orientation 
-      !   between sliding and non-sliding regions.
-      integer,                   allocatable :: neighborConnectivity(:,:,:)
-      integer,                   allocatable :: rotmortars(:)
-      integer                                :: numBFacePoints
-      integer                                :: numSlidingElements
-      integer                                :: numSlidingInterfaceElements 
-      integer                                :: currentSectorID = 0
-      real(KIND=RP)                          :: center(2) = 0.0_RP
-      real(KIND=RP)                          :: radius = huge(1.0_RP)
-      real(KIND=RP)                          :: theta = 0.0_RP       ! rotation angle
-      real(KIND=RP)                          :: omega = 0.0_RP
-      real(KIND=RP)                          :: localAngle
-      real(KIND=RP)                          :: angularVelocity = 0.0_RP ! signed rotation rate, rad per (nondimensional)
-                                                                        ! time unit, in the same sense as theta. Must be
-                                                                        ! kept equal to theta/dt by whoever advances the
-                                                                        ! mesh; it is NOT set here and NOT set by
-                                                                        ! AdvanceSlidingMesh.
-      integer                                :: rotationAxis
-      integer                                :: iAx = 2 
-      integer                                :: iR1 = 1
-      integer                                :: iR2 = 3
-      integer                                :: numElemsPerLayer = 0
-      logical                                :: initialized=.false.
-      logical                                :: conforming=.false.
-      integer                                :: numDuplicatedNodes = 0
-      integer                                :: numLayers = 0
-      integer, allocatable                   :: layerID(:)
+        logical                                :: active = .false.
+        logical                                :: isConfigured = .false.
+        integer                                :: numPureSlidingElems = 0
+        integer, allocatable                   :: slidingElems(:)       ! All sliding elements
+        integer, allocatable                   :: slidingFaces(:)       ! All sliding faces
+        integer, allocatable                   :: mortarNeighborElems(:)! associated non-sliding neighbors across the interface (require mortars)
+        integer, allocatable                   :: slidingMortarElems(:) ! sliding elements at the interface (require mortars)
+        integer, allocatable                   :: pureSlidingElems(:)   ! sliding elements fully inside the region (no mortar)
+        integer, allocatable                   :: slidingMortarConnectivity(:,:)
+        !   slidingMortarConnectivity(i,:) :
+        !   One row per static ring row this rank owns, in myMasterRows order.
+        !   A zero element means the other side is on another rank.
+        !
+        !     (1),(4),(7) : element, local face and rotation of the rotating side of Mortarpos 1
+        !     (2),(5),(8) : the same for Mortarpos 0
+        !     (3),(6),(9) : element, local face and rotation of the static side, the master, shared by both families
+        integer                                :: numBFacePoints
+        integer                                :: numSlidingElements
+        integer                                :: numSlidingInterfaceElements 
+        integer                                :: currentSectorID = -1
+        real(KIND=RP)                          :: center(2) = 0.0_RP
+        real(KIND=RP)                          :: radius = huge(1.0_RP)
+        real(KIND=RP)                          :: theta = 0.0_RP       ! rotation angle
+        real(KIND=RP)                          :: omega = 0.0_RP
+        real(KIND=RP)                          :: localAngle
+        real(KIND=RP)                          :: angularVelocity = 0.0_RP ! signed rotation rate, rad per (nondimensional)
+                                                                            ! time unit, in the same sense as theta. Must be
+                                                                            ! kept equal to theta/dt by whoever advances the
+                                                                            ! mesh; it is NOT set here and NOT set by
+                                                                            ! AdvanceSlidingMesh.
+        integer                                :: rotationAxis
+        integer                                :: iAx = 2 
+        integer                                :: iR1 = 1
+        integer                                :: iR2 = 3
+        integer                                :: numElemsPerLayer = 0
+        integer                                :: numDuplicatedNodes = 0
+        integer                                :: numLayers = 0
+        !   global interface directory, replicated on every rank 
+        type(SlidingRingEntry), allocatable    :: rotorRing(:)    ! allocated by AllgatherRing
+        type(SlidingRingEntry), allocatable    :: statorRing(:)   
+        integer                                :: nRingGlobal = 0 ! numElemsPerLayer * numLayers
+        !   local entries, produced by CollectLocalRingEntries 
+        type(SlidingRingEntry), allocatable    :: localRotorEnt(:)
+        type(SlidingRingEntry), allocatable    :: localStatorEnt(:)
+        integer                                :: nLocalRotorEnt  = 0
+        integer                                :: nLocalStatorEnt = 0
+        !   global -> local resolution, valid for ring elements only 
+        integer, allocatable                   :: rotorLocalElem(:)   ! nRingGlobal, 0 when not mine
+        integer, allocatable                   :: statorLocalElem(:)  ! nRingGlobal, 0 when not mine
+        integer, allocatable                   :: myMasterRows(:)     ! stator rows I own: I build the mortars
+        integer, allocatable                   :: mySlaveRows(:)      ! stator rows where a rotor slave is mine
+        integer                                :: nMasterRows = 0
+        integer                                :: nSlaveRows  = 0
+        integer                                :: nSlaveRowsMax = 0   ! max over all sectors, set once at setup
+        !   global geometric anchors 
+        real(kind=RP)                          :: Rint     = 0.0_RP   ! interface radius, Allreduce(max)
+        real(kind=RP)                          :: zetaMin  = 0.0_RP   ! axial extent of the rotating region
+        real(kind=RP)                          :: zetaMax  = 0.0_RP
+        integer                                :: NfInterface(2) = 0   ! uniform polynomial order on the interface
+        integer                                :: nodeGlobIDOffset = 0 ! global node count before the sliding split
+        !  local counts, NOT to be confused with the global ones 
+        integer                                :: nLocalSplitFaces = 0   ! of those, the ones needing a local split
+        logical                                :: needsLocalSplit  = .false.
     contains
 
         procedure :: read_info                          => SlidingMesh_read_info
@@ -140,13 +161,17 @@ MODULE SlidingMeshClass
         procedure :: RotationCenter3D                   => SlidingMesh_RotationCenter3D
         procedure :: PlaneCoords                        => SlidingMesh_PlaneCoords
         procedure :: GridVelocityAt                     => SlidingMesh_GridVelocityAt
-
+        procedure :: RingRow                            => SlidingMesh_RingRow
+        procedure :: RingAzimId                         => SlidingMesh_RingAzimId
+        procedure :: RingAxId                           => SlidingMesh_RingAxId
     end type
 
 !     ========
       CONTAINS
 !     ========
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 ! ---------------------------------------------------------------------------
 !  SlidingMesh_read_info
 !
@@ -165,7 +190,9 @@ subroutine SlidingMesh_read_info( self, controlVariables )
     end if
 
 end subroutine SlidingMesh_read_info
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 ! ---------------------------------------------------------------------------
 !  SlidingMesh_GetInfo
 !
@@ -187,7 +214,6 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     real(kind=RP),allocatable :: radius
     real(kind=RP),allocatable :: angle 
     character(len=LINE_LENGTH) :: rotAxis
-    integer :: i
 
 !     **********
 !     Read block
@@ -252,7 +278,9 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     self % isConfigured = .true.
 
 end subroutine SlidingMesh_GetInfo
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 ! ---------------------------------------------------------------------------
 !  SlidingMesh_Initialize
 !
@@ -260,7 +288,7 @@ end subroutine SlidingMesh_GetInfo
 !  zeroes them on the first pass only. Allocation is guarded, so calling it
 !  again on a later step is harmless.
 ! ---------------------------------------------------------------------------
-subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingElements, numBFacePoints)
+subroutine SlidingMesh_Initialize(self, numLocalInterfaceElements, numLocalSlidingElements, numBFacePoints)
     use Physics
     use PartitionedMeshClass
     use MPI_Process_Info
@@ -268,23 +296,16 @@ subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingE
     implicit none
 
     class(SlidingMesh), intent(inout)        :: self
-    integer, intent(in)                      :: numSlidingInterfaceElements
-    integer, intent(in)                      :: numSlidingElements
+    integer, intent(in)                      :: numLocalInterfaceElements
+    integer, intent(in)                      :: numLocalSlidingElements
     integer, intent(in)                      :: numBFacePoints
    !========================
    ! Allocation
    !========================
-    if (.not. allocated(self % mortarNeighborElems))             allocate(self % mortarNeighborElems(numSlidingInterfaceElements))
-    if (.not. allocated(self % slidingMortarElems))              allocate(self % slidingMortarElems(numSlidingInterfaceElements))
-    if (.not. allocated(self % mortararr1))                      allocate(self % mortararr1(numSlidingInterfaceElements, 2))
-    if (.not. allocated(self % mortararr2))                      allocate(self % mortararr2(numSlidingInterfaceElements, 2))
-    if (.not. allocated(self % pureSlidingElems))                allocate(self % pureSlidingElems(numSlidingElements))
-    if (.not. allocated(self % slidingMortarConnectivity))       allocate(self % slidingMortarConnectivity(numSlidingInterfaceElements, 12))
-    if (.not. allocated(self % face_nodes))                      allocate(self % face_nodes(numSlidingInterfaceElements, 4))
-    if (.not. allocated(self % face_othernodes))                 allocate(self % face_othernodes(numSlidingInterfaceElements, 4))
-    if (.not. allocated(self % neighborConnectivity))            allocate(self % neighborConnectivity(numSlidingInterfaceElements, 9, 6))
-    if (.not. allocated(self % rotmortars))                      allocate(self % rotmortars(2 * numSlidingInterfaceElements))
-    if (.not. allocated(self % layerID))                         allocate(self % layerID(numSlidingInterfaceElements))
+    if (.not. allocated(self % mortarNeighborElems))             allocate(self % mortarNeighborElems(numLocalInterfaceElements))
+    if (.not. allocated(self % slidingMortarElems))              allocate(self % slidingMortarElems(numLocalInterfaceElements))
+    if (.not. allocated(self % pureSlidingElems))                allocate(self % pureSlidingElems(numLocalSlidingElements))
+    if (.not. allocated(self % slidingMortarConnectivity))       allocate(self % slidingMortarConnectivity(numLocalInterfaceElements, 9))
     
     !========================
     ! Initialization (first pass only)
@@ -294,19 +315,17 @@ subroutine SlidingMesh_Initialize(self, numSlidingInterfaceElements, numSlidingE
        self % slidingMortarElems        = 0
        self % pureSlidingElems          = 0
        self % slidingMortarConnectivity = 0
-       self % neighborConnectivity      = 0
-       self % face_nodes                = 0
-       self % face_othernodes           = 0
        self % localAngle                = 0
-       self % currentSectorID           = 0
-       self % numSlidingInterfaceElements = numSlidingInterfaceElements
-       self % numSlidingElements          = numSlidingElements
+       self % currentSectorID           = -1
+       self % numSlidingInterfaceElements = numLocalInterfaceElements
+       self % numSlidingElements          = numLocalSlidingElements
        self % numBFacePoints              = numBFacePoints
-       self % layerID                   = 0
     end if 
 
 end subroutine SlidingMesh_Initialize
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 ! ---------------------------------------------------------------------------
 !  SlidingMesh_Destruct
 !
@@ -324,14 +343,18 @@ subroutine SlidingMesh_Destruct(self)
     safedeallocate(self % mortarNeighborElems)
     safedeallocate(self % slidingMortarElems)
     safedeallocate(self % pureSlidingElems)
-    safedeallocate(self % mortararr1)
-    safedeallocate(self % mortararr2)
-    safedeallocate(self % face_nodes)
-    safedeallocate(self % face_othernodes)
     safedeallocate(self % slidingMortarConnectivity)
-    safedeallocate(self % neighborConnectivity)
-    safedeallocate(self % rotmortars)
-    safedeallocate(self % layerID)
+    safedeallocate(self % rotorRing)
+    safedeallocate(self % statorRing)
+    safedeallocate(self % rotorLocalElem)
+    safedeallocate(self % statorLocalElem)
+    safedeallocate(self % myMasterRows)
+    safedeallocate(self % mySlaveRows)
+    safedeallocate(self % localRotorEnt)
+    safedeallocate(self % localStatorEnt)
+    safedeallocate(self % slidingElems)
+    safedeallocate(self % slidingFaces)
+
     ! ---------------------------------------------------------------------
     ! Reset counters and state variables
     ! ---------------------------------------------------------------------
@@ -343,12 +366,30 @@ subroutine SlidingMesh_Destruct(self)
     self % omega        = 0.0_RP
     self % theta        = 0.0_RP
 
-    self % initialized  = .false.
-    self % conforming   = .false.
     self % active       = .false.
 
-end subroutine SlidingMesh_Destruct
+    self % nRingGlobal      = 0
+    self % nMasterRows      = 0
+    self % nSlaveRows       = 0
+    self % nLocalRotorEnt   = 0
+    self % nLocalStatorEnt  = 0
+    self % Rint             = 0.0_RP
+    self % zetaMin          = 0.0_RP
+    self % zetaMax          = 0.0_RP
+    self % NfInterface      = 0
+    self % nodeGlobIDOffset = 0
+    self % numElemsPerLayer = 0
+    self % numLayers        = 0
+    self % numDuplicatedNodes = 0
+    self % nLocalSplitFaces = 0
+    self % needsLocalSplit  = .false.
+    self % currentSectorID  = -1
+    self % nSlaveRowsMax    = 0
 
+end subroutine SlidingMesh_Destruct
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 ! ---------------------------------------------------------------------------
 !  SlidingMeshIsDefined
 !
@@ -422,17 +463,21 @@ logical function SlidingMeshIsDefined()
     close(fID)                             
 
 end function SlidingMeshIsDefined
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 !  Azimuthal angle of x about the axis, in (-pi, pi].
 pure function SlidingMesh_phi(self, x) result(p)
    class(SlidingMesh), intent(in) :: self
    real(kind=RP),      intent(in) :: x(3)
    real(kind=RP) :: p
 
-   p = atan2( x(self % iR2) - self % center(2), x(self % iR1) - self % center(1) )
+   p = atan2(x(self % iR2) - self % center(2), x(self % iR1) - self % center(1))
 
 end function
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 !  Coordinate of x along the rotation axis.
 pure function SlidingMesh_zeta(self, x) result(z)
    class(SlidingMesh), intent(in) :: self
@@ -442,17 +487,21 @@ pure function SlidingMesh_zeta(self, x) result(z)
    z = x(self % iAx)
 
 end function
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 !  Distance from x to the axis.
 pure function SlidingMesh_rad(self, x) result(r)
    class(SlidingMesh), intent(in) :: self
    real(kind=RP),      intent(in) :: x(3)
    real(kind=RP) :: r
 
-   r = sqrt( (x(self % iR1) - self % center(1))**2 + (x(self % iR2) - self % center(2))**2 )
+   r = sqrt((x(self % iR1) - self % center(1))**2 + (x(self % iR2) - self % center(2))**2)
 
 end function
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 !  Rotates x about the axis by theta.
 pure subroutine SlidingMesh_RotatePoint(self, theta, x)
    class(SlidingMesh), intent(in)    :: self
@@ -461,7 +510,8 @@ pure subroutine SlidingMesh_RotatePoint(self, theta, x)
 
    real(kind=RP) :: u, v, c, s
 
-   c = cos(theta) ; s = sin(theta)
+   c = cos(theta) 
+   s = sin(theta)
    u = x(self % iR1) - self % center(1)
    v = x(self % iR2) - self % center(2)
 
@@ -469,7 +519,9 @@ pure subroutine SlidingMesh_RotatePoint(self, theta, x)
    x(self % iR2) = self % center(2) + s*u + c*v
 
 end subroutine
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 !  -----------------------------------------------------------------------
 !  Angular velocity vector of the sliding region, in the same sign
 !  convention as RotatePoint. That convention is uniform across the three
@@ -490,7 +542,9 @@ pure function SlidingMesh_OmegaVector(self) result(omg)
     omg(self % iAx) = -self % angularVelocity
 
 end function SlidingMesh_OmegaVector
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 !  -----------------------------------------------------------------------
 !  The two control-file center coordinates, placed back into 3D. They are
 !  given in the (iR1, iR2) order, the same one RotatePoint rotates about,
@@ -507,7 +561,9 @@ pure function SlidingMesh_RotationCenter3D(self) result(xc)
     xc(self % iR2) = self % center(2)
 
 end function SlidingMesh_RotationCenter3D
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 !  -----------------------------------------------------------------------
 !  In-plane coordinate indices of the rotation plane. Kept as a named
 !  accessor for code that reads better that way; it is exactly (iR1, iR2)
@@ -524,7 +580,9 @@ pure subroutine SlidingMesh_PlaneCoords(self, ih, iv)
     iv = self % iR2
 
 end subroutine SlidingMesh_PlaneCoords
-
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
 !  -----------------------------------------------------------------------
 !  Grid velocity v_g = Omega x (x - xc) at a physical point x
 !  -----------------------------------------------------------------------
@@ -544,5 +602,119 @@ pure function SlidingMesh_GridVelocityAt(self, x) result(vg)
     vg(3) = omg(1)*r(2) - omg(2)*r(1)
 
 end function SlidingMesh_GridVelocityAt
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+!  -----------------------------------------------------------------------
+!  Row of the ring array for azimuthal index Azim_Id of axial layer Ax_Id.
+!  Azim_Id is taken modulo the number of elements per layer, so callers can
+!  pass Azim_Id-1 or Azim_Id-sectorID without wrapping by hand. This is the
+!  only place where the closure of the ring is expressed.
+!  -----------------------------------------------------------------------
+pure integer function SlidingMesh_RingRow(self, Ax_Id, Azim_Id) result(row)
+   class(SlidingMesh), intent(in) :: self
+   integer,            intent(in) :: Ax_Id, Azim_Id
 
+   row = (Ax_Id - 1) * self % numElemsPerLayer &
+       + modulo(Azim_Id - 1, self % numElemsPerLayer) + 1
+
+end function SlidingMesh_RingRow
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+pure integer function SlidingMesh_RingAzimId(self, row) result(Azim_Id)
+   class(SlidingMesh), intent(in) :: self
+   integer,            intent(in) :: row
+
+   Azim_Id = modulo(row - 1, self % numElemsPerLayer) + 1
+
+end function SlidingMesh_RingAzimId
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+pure integer function SlidingMesh_RingAxId(self, row) result(Ax_Id)
+   class(SlidingMesh), intent(in) :: self
+   integer,            intent(in) :: row
+
+   Ax_Id = (row - 1) / self % numElemsPerLayer + 1
+
+end function SlidingMesh_RingAxId
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+! ---------------------------------------------------------------------------
+!  SlidingSlaveRows
+!
+!  The two rotating interface elements overlapping static element j indexed by
+!  Mortarpos:
+!
+!      Azim_Id_rotor = Azim_Id_stator - sectorID - Mortarpos
+!
+!  After turning by omega the rotating element of index k occupies the sector of
+!  effective index k + sectorID, so each static sector is straddled by exactly
+!  two of them. Holds for negative sectorID.
+!
+!  rows(0) covers the static face as localAngle -> 0, rows(1) degenerates to
+!  zero scale there.
+! ---------------------------------------------------------------------------
+subroutine SlidingSlaveRows(SM, j, sectorID, rows)
+    implicit none
+    ! =========================
+    ! Arguments
+    ! =========================
+    type(SlidingMesh), intent(in)  :: SM
+    integer,           intent(in)  :: j, sectorID
+    integer,           intent(out) :: rows(0:1)          ! indexed BY Mortarpos
+    ! =========================
+    ! Local variables
+    ! =========================
+    integer :: Ax_Id, Azim_Id, Mortarpos
+ 
+    Ax_Id   = SM % RingAxId(j)
+    Azim_Id = SM % RingAzimId(j) - sectorID
+ 
+    do Mortarpos = 0, 1
+       rows(Mortarpos) = SM % RingRow(Ax_Id, Azim_Id - Mortarpos)
+    end do
+ 
+ end subroutine SlidingSlaveRows
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+! ---------------------------------------------------------------------------
+!  SlidingMaxSlaveRows
+!
+!  Largest number of static interface elements this rank is the slave of, over every
+!  sector, so the mortar tables are sized once and never reallocated.
+!
+!  Sweeping the sectors gives the exact value: the trivial bound 2m is loose,
+!  a contiguous arc of m rotor elements touching only m + 1 static rows.
+!
+!  Local, constant for the run. Call once, after the rings are built.
+! ---------------------------------------------------------------------------
+integer function SlidingMaxSlaveRows(SM) result(nMax)
+    implicit none
+    ! =========================
+    ! Arguments
+    ! =========================
+    type(SlidingMesh), intent(in) :: SM
+    ! =========================
+    ! Local variables
+    ! =========================
+    integer :: s, j, n, rows(0:1)
+
+    nMax = 0
+
+    do s = 0, SM % numElemsPerLayer - 1
+    n = 0
+    do j = 1, SM % nRingGlobal
+        call SlidingSlaveRows(SM, j, s, rows)
+        if (SM % rotorLocalElem(rows(0)) > 0 .or. &
+            SM % rotorLocalElem(rows(1)) > 0) n = n + 1
+    end do
+    nMax = max(nMax, n)
+    end do
+
+end function SlidingMaxSlaveRows
+ 
 END MODULE SlidingMeshClass

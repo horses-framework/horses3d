@@ -37,7 +37,7 @@ MODULE HexMeshClass
       private
       public      HexMesh
       public      Neighbor_t, NUM_OF_NEIGHBORS
-	  public      MultiLevel_RK
+	   public      MultiLevel_RK
 
       public      GetOriginalNumberOfFaces
       public      ConstructFaces, ConstructPeriodicFaces
@@ -92,10 +92,9 @@ MODULE HexMeshClass
          type(Face)   , dimension(:), allocatable  :: mortar_faces         !Mortars for sliding meshes, 4:1 mortars are embeded in faces
          type(Element), dimension(:), allocatable  :: elements
          type(MPI_FacesSet_t)                      :: MPIfaces
-         type(MPI_FacesSet_t)                      :: MPImortar_faces
          type(IBM_type)                            :: IBM
          type(Zone_t), dimension(:), allocatable   :: zones
-		 type(MultiLevel_RK)                       :: MLRK
+		   type(MultiLevel_RK)                       :: MLRK
          logical                                   :: child       = .FALSE.         ! Is this a (multigrid) child mesh? default .FALSE.
          logical                                   :: meshIs2D    = .FALSE.         ! Is this a 2D mesh? default .FALSE.
          integer                                   :: dir2D       = 0               ! If it is in fact a 2D mesh, dir 2D stores the global direction IX, IY or IZ
@@ -447,11 +446,9 @@ MODULE HexMeshClass
          nodeIDs = self % elements(eID) % nodeIDs
 
          DO faceNumber = 1, 6
-!
-!           ============================================================
+
 !           Regular face (MortarFaces == 0) or slave mortar (>= 2)
-!           ============================================================
-!
+
             IF (self % elements(eID) % MortarFaces(faceNumber) == 0 .OR. &
                 self % elements(eID) % MortarFaces(faceNumber) >= 2) THEN   ! keep the same
 !
@@ -3498,12 +3495,6 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
 !                 Construct connectivity
 !                 ----------------------
 
-                 if (NelL(1)==-1 .or. NelL(2)==-1) then 
-                  write(*,*) 'line 2681; NelL of face', f%id,'=', NelL,'el', el%eID,'ftype', f%facetype 
-                 end if 
-                 if (NelR(1)==-1 .or. NelR(2)==-1) then 
-                  write(*,*) 'line 2683; NelR of face', f%id,'=', NelR,'er', er%eID,'ftype', f%facetype
-                 end if 
                  eL % NumberOfConnections(SideL) = 1
                  call eL % Connection(SideL) % Construct(eR % GlobID, eR % Nxyz)
 
@@ -3512,12 +3503,12 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                  end associate
                end if 
                  if (f % MortarType == MORTAR_SMALL4) then 
-                 offset(1)=0.5_RP!!!!!!!if
+                 offset(1)=0.5_RP
                  offset(2)=0.5_RP
-                  call f % LinkWithElements(NelL, NelR, nodes, offset)!!!!!!!
+                  call f % LinkWithElements(NelL, NelR, nodes, offset)
    
                  elseif (f % MortarType == MORTAR_NONE) then 
-                 call f % LinkWithElements(NelL, NelR, nodes)!!!!!!!
+                 call f % LinkWithElements(NelL, NelR, nodes)
                  end if 
                
               case (1, 3) 
@@ -3536,7 +3527,6 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                            NelL = eL % Nxyz(axisMap(:, f % elementSide(2)))
                            NelR = NelL
                         end associate 
-                           write(*,*) 'now Nell and NelR',NelL, NelR 
                      end if 
                   end if 
                  call f % LinkWithElements(NelL, NelR, nodes)   
@@ -3995,10 +3985,19 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                   end if
                end if 
                if (f % MortarType == MORTAR_BIG .OR. f % MortarType == MORTAR_SLIDING) then 
+                  if (f % elementIDs(1) > 0) then
+                     thisSide = 1
+                  else
+                     thisSide = 2
+                  end if
 
-                  eIDLeft  = f % elementIDs(1)
-                  SideIDL  = f % elementSide(1)
-                  if (eIDLeft==-1) write(*,*) 'Mortar face is not linked correctly f % f % elementIDs==',f % elementIDs
+                  eIDLeft  = f % elementIDs(thisSide)
+                  SideIDL  = f % elementSide(thisSide)
+                  if (eIDLeft <= 0) then
+                     write(STD_OUT,*) 'Mortar face has no local element, fID=', fID, &
+                                      ' elementIDs=', f % elementIDs
+                     error stop
+                  end if
                   NSurfL   = SurfInfo(eIDLeft)  % facePatches(SideIDL) % noOfKnots - 1
    
                   if     (SurfInfo(eIDLeft) % IsHex8 .or. all(NSurfL == 1)) cycle
@@ -4006,8 +4005,24 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                   if (self % anisotropic  .and. (.not. self % meshIs2D) ) then
                      CLN = bfOrder(f % zone)
                   else
-                     CLN(1) = f % NfLeft(1)
-                     CLN(2) = f % NfLeft(2)
+                     if (thisSide == 1) then
+                        CLN(1) = f % NfLeft(1)
+                        CLN(2) = f % NfLeft(2)
+                     else
+                        CLN(1) = f % NfRight(1)
+                        CLN(2) = f % NfRight(2)
+                     end if
+                  end if
+
+                  if ( thisSide == 2 ) then    ! right faces need to be rotated
+                     select case ( f % rotation )
+                     case ( 1, 3, 4, 6 )       ! local x and y axis are perpendicular
+                        if (CLN(1) /= CLN(2)) then
+                           buffer = CLN(1)
+                           CLN(1) = CLN(2)
+                           CLN(2) = buffer
+                        end if
+                     end select
                   end if
    !
    !              Adapt the curved face order to the polynomial order
@@ -4151,11 +4166,23 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                end associate
                end select 
             else 
-               associate(eL => self % elements(f % elementIDs(1)))
+               if (f % elementIDs(1) > 0) then
+                  side = 1
+                  Nel  = f % NelLeft
+                  Nelf = f % NfLeft
+                  rot  = 0
+               else
+                  side = 2
+                  Nel  = f % NelRight
+                  Nelf = f % NfRight
+                  rot  = f % rotation
+               end if
 
-               call f % geom % construct(f % Nf, f % NelLeft, f % NfLeft, eL % Nxyz, &
-                                         eL % geom, eL % hexMap, f % elementSide(1), &
-                                         f % projectionType(1), 1, 0 )
+               associate(e => self % elements(f % elementIDs(side)))
+
+               call f % geom % construct(f % Nf, Nelf, Nel, e % Nxyz, &
+                                         e % geom, e % hexMap, f % elementSide(side), &
+                                         f % projectionType(side), side, rot )
                end associate
             end if
             case(HMESH_MPI)
@@ -4205,9 +4232,14 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                         / maxval(f % geom % jacobian)
 
                elseif(f % MortarType == MORTAR_BIG .or. f % MortarType == MORTAR_SLIDING) then 
-                  f % geom % h = minval(self % elements(f % elementIDs(1)) % geom % jacobian) &
+                  if (f % elementIDs(1) > 0) then
+                     thisSide = 1
+                  else
+                     thisSide = 2
+                  end if
+                  f % geom % h = minval(self % elements(f % elementIDs(thisSide)) % geom % jacobian) &
                   / maxval(f % geom % jacobian)
-               end if 
+               end if
             case(HMESH_BOUNDARY)
                f % geom % h = minval(self % elements(f % elementIDs(1)) % geom % jacobian) &
                         / maxval(f % geom % jacobian)
