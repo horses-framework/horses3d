@@ -287,29 +287,79 @@ contains
       real(kind=RP)            , intent(in)    :: time
       class(Matrix_t)          , intent(inout) :: Matrix
       !--------------------------------------------
-      integer :: eID, fID
+      integer :: eID, fID, m 
       type(Element), pointer :: e   
       !--------------------------------------------
 !
 !     Project flux Jacobian to corresponding element
 !     ----------------------------------------------
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
       do fID = 1, size(mesh % faces)
-         call mesh % faces(fID) % ProjectFluxJacobianToElements(nEqn,LEFT ,LEFT )   ! dF/dQL to the left element 
-         if (.not. (mesh % faces(fID) % faceType == HMESH_BOUNDARY)) call mesh % faces(fID) % ProjectFluxJacobianToElements(nEqn,RIGHT,RIGHT)   ! dF/dQR to the right element
+         if (mesh % faces(fID)% MortarType == MORTAR_NONE .OR. mesh % faces(fID)% MortarType == MORTAR_SMALL4) then 
+
+            if (mesh % faces(fID)% MortarType == MORTAR_NONE) call mesh % faces(fID) % ProjectFluxJacobianToElements(nEqn,LEFT ,LEFT )   ! dF/dQL to the left element 
+            if (.not. (mesh % faces(fID) % faceType == HMESH_BOUNDARY )) call mesh % faces(fID) % ProjectFluxJacobianToElements(nEqn,RIGHT,RIGHT)   ! dF/dQR to the right element
+
+         elseif(mesh % faces(fID)% MortarType == MORTAR_BIG) then 
+            associate(dFStar_dqEl=>mesh% faces(fID)%storage(1)%dFStar_dqEl)
+               dFStar_dqEl=0.0_RP
+            end associate
+            associate(dFStar_dqEl=>mesh% faces(fID)%storage(2)%dFStar_dqEl)
+               dFStar_dqEl=0.0_RP
+            end associate
+            do m=1,4
+               if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                  call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(nEqn,LEFT ,LEFT,  mesh % faces(mesh %faces(fID) % Mortar(m)))   
+                  call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(nEqn,RIGHT ,RIGHT,  mesh % faces(mesh %faces(fID) % Mortar(m)))   
+
+               end if 
+            end do 
+         end if 
       end do
 !$omp end do
+
+!$omp single
+      if ( mesh % nonconforming ) then
+         call mesh % UpdateMPIFacesMortarFluxJac(NCONS)
+         call mesh % GatherMPIFacesMortarFluxJac(NCONS)
+      end if
+!$omp end single
 !
 !     Project flux Jacobian with respect to gradients to corresponding elements
 !     -------------------------------------------------------------------------
       if (flowIsNavierStokes) then
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
          do fID = 1, size(mesh % faces)
-            call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT, LEFT)   ! dF/dQL to the left element 
-            if (.not. (mesh % faces(fID) % faceType == HMESH_BOUNDARY)) call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,RIGHT)   ! dF/dQR to the right element
+            if (mesh % faces(fID)% MortarType == MORTAR_NONE .OR. mesh % faces(fID)% MortarType == MORTAR_SMALL4) then 
+
+               if (mesh % faces(fID)% MortarType == MORTAR_NONE) call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT, LEFT)   ! dF/dQL to the left element 
+               if (.not. (mesh % faces(fID) % faceType == HMESH_BOUNDARY)) call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,RIGHT)   ! dF/dQR to the right element
+
+            elseif(mesh % faces(fID)% MortarType == MORTAR_BIG) then 
+               associate(dFv_dGradQEl=>mesh% faces(fID)%storage(1)%dFv_dGradQEl)
+                  dFv_dGradQEl=0.0_RP
+               end associate
+               associate(dFv_dGradQEl=>mesh% faces(fID)%storage(2)%dFv_dGradQEl)
+                  dFv_dGradQEl=0.0_RP
+               end associate
+               do m=1,4
+                  if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                     call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,LEFT, mesh % faces(mesh % faces(fID) % Mortar(m)))   ! dF/dQL to the left element 
+                     call mesh % faces(fID) % ProjectMortarGradJacobianToElements(RIGHT ,RIGHT, mesh % faces(mesh % faces(fID) % Mortar(m)))   ! dF/dQL to the left element 
+
+                  end if 
+               end do 
+            end if 
          end do
 !$omp end do
       end if
+
+!$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % UpdateMPIFacesGradMortarfluxJac(NCONS)
+            call mesh % GatherMPIFacesGradMortarFluxJac(NCONS)
+         end if
+!$omp end single     
 !
 !     Compute each element's diagonal block
 !     -------------------------------------
@@ -343,7 +393,7 @@ contains
       type(HexMesh), target    , intent(inout) :: mesh
       class(Matrix_t)          , intent(inout) :: Matrix
       !--------------------------------------------
-      integer :: eID, fID, elSide, side
+      integer :: eID, fID, elSide, side, m 
       type(Element), pointer :: e_plus
       type(Face)   , pointer :: f
       !--------------------------------------------
@@ -351,11 +401,33 @@ contains
 !
 !     Project flux Jacobian to opposed elements (RIGHT to LEFT and LEFT to RIGHT)
 !     ---------------------------------------------------------------------------
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
       do fID = 1, size(mesh % faces)
          if (mesh % faces(fID) % faceType /= HMESH_BOUNDARY) then
-            call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, LEFT ,RIGHT)   ! dF/dQR to the left element
-            call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, RIGHT,LEFT )   ! dF/dQL to the right element 
+            if (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
+
+               call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, LEFT ,RIGHT)   ! dF/dQR to the left element
+               call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, RIGHT,LEFT )   ! dF/dQL to the right element 
+
+            elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
+
+               call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, LEFT ,RIGHT)   ! dF/dQR to the left element
+               call mesh % faces(fID) % ProjectFluxJacobianToElements(NCONS, RIGHT,LEFT )   ! dF/dQL to the right element 
+
+            elseif (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
+               associate(dFStar_dqEl=>mesh% faces(fID)%storage(1)%dFStar_dqEl)
+                  dFStar_dqEl=0.0_RP
+               end associate
+               associate(dFStar_dqEl=>mesh% faces(fID)%storage(2)%dFStar_dqEl)
+                  dFStar_dqEl=0.0_RP
+               end associate
+               do m=1,4
+                  if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                     call mesh % faces(fID) % ProjectMortarFluxJacobianToElements(NCONS, LEFT ,RIGHT, mesh % faces(mesh % faces(fID) % Mortar(m)))   ! dF/dQR to the left element
+                  end if 
+               end do 
+
+            end if 
          end if
       end do
 !$omp end do
@@ -364,11 +436,33 @@ contains
 !     Project flux Jacobian with respect to gradients to opposed elements (RIGHT to LEFT and LEFT to RIGHT)
 !     -----------------------------------------------------------------------------------------------------
       if (flowIsNavierStokes) then
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
          do fID = 1, size(mesh % faces)
             if (mesh % faces(fID) % faceType /= HMESH_BOUNDARY) then
-               call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT ,RIGHT)   ! dF/dGradQR to the left element
-               call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,LEFT )   ! dF/dGradQL to the right element 
+               if (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
+
+                  call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT ,RIGHT)   ! dF/dGradQR to the left element
+                  call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,LEFT )   ! dF/dGradQL to the right element 
+
+               elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
+
+                  call mesh % faces(fID) % ProjectGradJacobianToElements(LEFT,RIGHT ) 
+                  call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,LEFT ) 
+
+               elseif (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
+                  associate(dFStar_dqEl=>mesh% faces(fID)%storage(1)%dFStar_dqEl)
+                     dFStar_dqEl=0.0_RP
+                  end associate
+                  associate(dFStar_dqEl=>mesh% faces(fID)%storage(2)%dFStar_dqEl)
+                     dFStar_dqEl=0.0_RP
+                  end associate
+                  do m=1,4
+                     if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                        call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,RIGHT, mesh % faces(mesh % faces(fID) % Mortar(m)))
+                     end if 
+                  end do 
+
+               end if 
             end if
          end do
 !$omp end do
@@ -410,17 +504,25 @@ contains
       integer,       intent(in)       :: nEqn
       real(kind=RP), intent(in)       :: time
       !--------------------------------------------
-      integer :: fID, ierr
+      integer :: fID, ierr, m
       !--------------------------------------------
 !
 !     Compute the non-shared faces
 !     ----------------------------
 !
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private(m)
       do fID = 1, size(mesh % faces)
          select case (mesh % faces(fID) % faceType)
             case (HMESH_INTERIOR)
-               call ComputeInterfaceFluxJacobian(mesh % faces(fID))
+               if (mesh % faces(fID)% MortarType == MORTAR_NONE) then 
+                  call ComputeInterfaceFluxJacobian(mesh % faces(fID))
+               elseif (mesh % faces(fID)%MortarType == MORTAR_BIG) then 
+                  do m=1,4
+                     if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                        call  ComputeInterfaceFluxJacobian(mesh % faces(mesh % faces (fID) % Mortar(m)))
+                     end if 
+                  end do 
+               end if 
             case (HMESH_BOUNDARY)
                call ComputeBoundaryFluxJacobian(mesh % faces(fID),time)
          end select
@@ -442,14 +544,30 @@ contains
             call mesh % GatherMPIFacesSolution(NCONS)
          end if
 !$omp end single
-!$omp do schedule(runtime)
+!$omp do schedule(runtime) private (m)
          do fID = 1, size(mesh % faces)
             select case (mesh % faces(fID) % faceType)
                case (HMESH_MPI)
-                  call ComputeInterfaceFluxJacobian(mesh % faces(fID))
+                  if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
+                     do m=1,4
+                        if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
+                           call ComputeInterfaceFluxJacobian(mesh % faces(mesh % faces(fID) % Mortar(m)))
+                        end if 
+                     end do 
+                  elseif (mesh % faces(fID) % MortarType == MORTAR_SMALL4) then 
+
+                     call ComputeInterfaceFluxJacobian(mesh % faces(fID), mortar_mpi=.TRUE. )
+                     
+                  elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then 
+
+                     call ComputeInterfaceFluxJacobian(mesh % faces(fID))
+                  end if
+
             end select
          end do
 !$omp end do
+
+         !TODO HTMKS: MPI communicatin for 4:1 mortars
 !
 !        Add an MPI Barrier
 !        ------------------
@@ -459,6 +577,7 @@ contains
       end if
 #endif
    end subroutine ComputeNumericalFluxJacobian
+
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -588,10 +707,11 @@ contains
 !           dFStar/dqL = ---------------         dFStar/dqR = ---------------
 !                          dQ⁺                                  dQ⁻         
 !  -----------------------------------------------------------------------------------------------
-   subroutine ComputeInterfaceFluxJacobian(f)
+   subroutine ComputeInterfaceFluxJacobian(f, mortar_mpi)
       implicit none
       !--------------------------------------------
       type(Face), intent(inout) :: f
+      logical, optional, intent(in) :: mortar_mpi 
       !--------------------------------------------
       integer :: i,j
       !--------------------------------------------
@@ -622,6 +742,9 @@ contains
       if (flowIsNavierStokes) call ViscousDiscretization % RiemannSolver_Jacobians(f)
 #endif
 
+      if (f % MortarType == MORTAR_SMALL4  .and. present(mortar_mpi)) then 
+         call f % Interpolatesmall2big (nEqn = NCONS, anJacobian = .true. )
+      end if 
    end subroutine ComputeInterfaceFluxJacobian
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -95,17 +95,25 @@ Module MappedGeometryClass
       self % Ny = Ny
       self % Nz = Nz
 
-      ALLOCATE( self % JGradXi  (3,0:Nx,0:Ny,0:Nz) )
-      ALLOCATE( self % JGradEta (3,0:Nx,0:Ny,0:Nz) )
-      ALLOCATE( self % JGradZeta(3,0:Nx,0:Ny,0:Nz) )
-      ALLOCATE( self % jacobian   (0:Nx,0:Ny,0:Nz) )
-      ALLOCATE( self % invJacobian(0:Nx,0:Ny,0:Nz) )
-      ALLOCATE( self % x        (3,0:Nx,0:Ny,0:Nz)    )
+      if (.not.allocated(self % JGradXi)) ALLOCATE( self % JGradXi  (3,0:Nx,0:Ny,0:Nz) )
+      if (.not.allocated(self % JGradEta)) ALLOCATE( self % JGradEta (3,0:Nx,0:Ny,0:Nz) )
+      if (.not.allocated(self % JGradZeta)) ALLOCATE( self % JGradZeta(3,0:Nx,0:Ny,0:Nz) )
+      if (.not.allocated(self % jacobian)) ALLOCATE( self % jacobian   (0:Nx,0:Ny,0:Nz) )
+      if (.not.allocated(self % invJacobian)) ALLOCATE( self % invJacobian(0:Nx,0:Ny,0:Nz) )
+      if (.not.allocated(self % x)) ALLOCATE( self % x        (3,0:Nx,0:Ny,0:Nz)    )
+
+      if (allocated(self % JGradXi))  self % JGradXi = 0.0_RP 
+      if (allocated(self % JGradEta))  self % JGradEta = 0.0_RP 
+      if (allocated(self % JGradZeta)) self % JGradZeta= 0.0_RP 
+      if (allocated(self % jacobian)) self % jacobian   = 0.0_RP 
+      if (allocated(self % invJacobian)) self % invJacobian= 0.0_RP 
+      if (allocated(self % x))  self % x = 0.0_RP 
 !
 !     --------------------------
 !     Compute interior locations
 !     --------------------------
 !
+
       DO k = 0, Nz
          DO j= 0, Ny
             DO i = 0,Nx
@@ -479,7 +487,7 @@ Module MappedGeometryClass
 !  -----------------------------------------
 !  Computation of the metric terms on a face
 !  -----------------------------------------
-   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot)
+   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, mortar_position, scale, slidingDir)
       use PhysicsStorage
       use InterpolationMatrices
       implicit none
@@ -494,12 +502,17 @@ Module MappedGeometryClass
       integer,                   intent(in)     :: projType
       integer,                   intent(in)     :: eSide
       integer,                   intent(in)     :: rot
+
+      logical,   optional,       intent(in)     :: sliding 
+      integer,   optional,       intent(in)     :: mortar_position 
+      real(kind=RP), optional,   intent(in)     :: scale
+      integer, optional,         intent(in)     :: slidingDir
 !
 !     ---------------
 !     Local variables
 !     ---------------
 !
-      integer        :: i, j, k, l, m, ii, jj
+      integer        :: i, j, k, l, m, ii, jj, p, q, im
       real(kind=RP)  :: xi, eta
       real(kind=RP)  :: dS      (NDIM,0:Nel(1),0:Nel(2))
       real(kind=RP)  :: GradXi  (NDIM,0:Nel(1),0:Nel(2))
@@ -510,15 +523,25 @@ Module MappedGeometryClass
       real(kind=RP)  :: GradEtaRot (NDIM,0:Nelf(1),0:Nelf(2))
       real(kind=RP)  :: GradZetaRot(NDIM,0:Nelf(1),0:Nelf(2))
       real(kind=RP)  :: x(3)
+      real(kind=RP) ::  xrot(NDIM, 0:Nelf(1), 0:Nf(2))
 
-      allocate( self % jacobian(0:Nf(1), 0:Nf(2)))
-      allocate( self % x       (NDIM, 0:Nf(1), 0:Nf(2)))
-      allocate( self % normal  (NDIM, 0:Nf(1), 0:Nf(2)))
-      allocate( self % GradXi  (NDIM, 0:Nf(1), 0:Nf(2)))
-      allocate( self % GradEta (NDIM, 0:Nf(1), 0:Nf(2)))
-      allocate( self % GradZeta(NDIM, 0:Nf(1), 0:Nf(2)))
-      allocate( self % t1      (NDIM, 0:Nf(1), 0:Nf(2)))
-      allocate( self % t2      (NDIM, 0:Nf(1), 0:Nf(2)))
+      if (.not.allocated(self % jacobian)) allocate( self % jacobian(0:Nf(1), 0:Nf(2)))
+      if (.not.allocated(self % x)) allocate( self % x       (NDIM, 0:Nf(1), 0:Nf(2)))
+      if (.not.allocated(self % normal))  allocate( self % normal  (NDIM, 0:Nf(1), 0:Nf(2)))
+      if (.not.allocated(self % GradXi)) allocate( self % GradXi  (NDIM, 0:Nf(1), 0:Nf(2)))
+      if (.not.allocated(self % GradEta)) allocate( self % GradEta (NDIM, 0:Nf(1), 0:Nf(2)))
+      if (.not.allocated(self % GradZeta)) allocate( self % GradZeta(NDIM, 0:Nf(1), 0:Nf(2)))
+      if (.not.allocated(self % t1))  allocate( self % t1      (NDIM, 0:Nf(1), 0:Nf(2)))
+      if (.not.allocated(self % t2))  allocate( self % t2      (NDIM, 0:Nf(1), 0:Nf(2)))
+ 
+      if (allocated(self % jacobian))  self % jacobian=0.0_RP
+      if (allocated(self % x))  self % x =0.0_RP
+      if (allocated(self % normal))   self % normal=0.0_RP
+      if (allocated(self % GradXi))  self % GradXi =0.0_RP
+      if (allocated(self % GradEta))  self % GradEta =0.0_RP
+      if (allocated(self % GradZeta))  self % GradZeta=0.0_RP
+      if (allocated(self % t1))   self % t1     =0.0_RP
+      if (allocated(self % t2))   self % t2      =0.0_RP
 
       dS = 0.0_RP
       GradXi   = 0.0_RP
@@ -535,7 +558,7 @@ Module MappedGeometryClass
                x = [-1.0_RP, xi, eta]
                self % x(:,i,j) = hexMap % transfiniteMapAt(x)
             end do ; end do
-!
+!  
 !           Get surface Jacobian and normal vector
 !           --------------------------------------
             do k = 0, Nel3D(3) ; do j = 0, Nel3D(2) ; do i = 0, Nel3D(1)
@@ -645,6 +668,7 @@ Module MappedGeometryClass
 !     Change the orientation depending on whether left or right elements are used
 !     ---------------------------------------------------------------------------
       if ( eSide .eq. 2 ) dS = -dS
+
 !
 !     Perform the rotation
 !     --------------------
@@ -657,14 +681,14 @@ Module MappedGeometryClass
       else
          do j = 0, Nelf(2) ; do i = 0, Nelf(1)
             call leftIndexes2Right(i,j,Nelf(1), Nelf(2), rot, ii, jj)
+
             dSRot(:,i,j) = dS(:,ii,jj)
             GradXiRot  (:,i,j) = GradXi  (:,ii,jj)
             GradEtaRot (:,i,j) = GradEta (:,ii,jj)
             GradZetaRot(:,i,j) = GradZeta(:,ii,jj)
          end do            ; end do
-
       end if
-
+     
 !
 !     Perform p-Adaption
 !     ------------------
@@ -720,6 +744,46 @@ Module MappedGeometryClass
             end do                 ; end do
          end do                  ; end do
       end select
+
+!
+!     Perform h/p-Adaption if it's a sliding mesh
+!     ------------------------------------------
+
+      if (present(sliding) .and. present(mortar_position) .and. present(scale) .and. present(slidingDir)) then 
+         if (sliding) then 
+
+            xrot=self % x 
+            self % x = 0.0_RP 
+            self % normal = 0.0_RP
+            self % GradXi   = 0.0_RP
+            self % GradEta  = 0.0_RP
+            self % GradZeta = 0.0_RP
+            im = merge(3, 1, mortar_position == 1)
+
+            if (slidingDir == 2) then
+               do l = 0, Nelf(2) ; do j = 0, Nf(2) ; do i = 0, Nf(1)
+                  self % x (:,i,j) = self % x (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * xrot (:,i,l)
+                  self % normal (:,i,j) = self % normal (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * dSRot (:,i,l)
+                  self % GradXi (:,i,j) = self % GradXi (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradXiRot (:,i,l)
+                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradEtaRot (:,i,l)
+                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradZetaRot(:,i,l)
+               end do ; end do ; end do
+
+            else
+               do l = 0, Nelf(1) ; do j = 0, Nf(2) ; do i = 0, Nf(1)
+                  self % x (:,i,j) = self % x (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * xrot (:,l,j)
+                  self % normal (:,i,j) = self % normal (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * dSRot (:,l,j)
+                  self % GradXi (:,i,j) = self % GradXi (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradXiRot (:,l,j)
+                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradEtaRot (:,l,j)
+                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradZetaRot(:,l,j)
+               end do ; end do ; end do
+            end if
+            self % GradXi=self % GradXi*scale
+            self % GradEta=self % GradEta *scale
+            self % GradZeta=self % GradZeta*scale
+         end if 
+      end if 
+
 !
 !     Compute
 !     -------
@@ -753,7 +817,6 @@ Module MappedGeometryClass
       do j = 0, Nf(2) ; do i = 0, Nf(1)
          self % surface = self % surface + NodalStorage(Nf(1)) % w(i) * NodalStorage(Nf(2)) % w(j) * self % jacobian(i,j)
       end do          ; end do
-
 
    end subroutine ConstructMappedGeometryFace
 !

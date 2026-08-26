@@ -29,10 +29,11 @@ module SpatialDiscretization
       public   Initialize_SpaceAndTimeMethods, Finalize_SpaceAndTimeMethods
 
       abstract interface
-         SUBROUTINE computeElementInterfaceFluxF(f)
+      SUBROUTINE computeElementInterfaceFluxF(f, masterFace)
             use FaceClass
             IMPLICIT NONE
             TYPE(Face)   , INTENT(inout) :: f   
+            type(Face), optional, intent(inout) :: masterFace
          end subroutine computeElementInterfaceFluxF
 
          SUBROUTINE computeMPIFaceFluxF(f)
@@ -104,13 +105,13 @@ module SpatialDiscretization
             case ( "split-form")
                print*, "There are no split-forms available for the Multiphase Solver"
                errorMessage(STD_OUT)
-               error stop
+               stop
             case default
                write(STD_OUT,'(A,A,A)') 'Requested inviscid discretization "',trim(inviscidDiscretizationName),'" is not implemented.'
                write(STD_OUT,'(A)') "Implemented discretizations are:"
                write(STD_OUT,'(A)') "  * Standard"
                errorMessage(STD_OUT)
-               error stop 
+               stop 
 
             end select
                
@@ -121,7 +122,7 @@ module SpatialDiscretization
                if ( .not. controlVariables % ContainsKey(viscousDiscretizationKey) ) then
                   print*, "Input file is missing entry for keyword: viscous discretization"
                   errorMessage(STD_OUT)
-                  error stop
+                  stop
                end if
 
                viscousDiscretizationName = controlVariables % stringValueForKey(viscousDiscretizationKey, requestedLength = LINE_LENGTH)
@@ -144,7 +145,7 @@ module SpatialDiscretization
                   write(STD_OUT,'(A)') "  * BR2"
                   write(STD_OUT,'(A)') "  * IP"
                   errorMessage(STD_OUT)
-                  error stop 
+                  stop 
 
                end select
 
@@ -164,7 +165,7 @@ module SpatialDiscretization
             if ( .not. controlVariables % ContainsKey(CHDiscretizationKey) ) then
                print*, "Input file is missing entry for keyword: Cahn-Hilliard discretization"
                errorMessage(STD_OUT)
-               error stop
+               stop
             end if
    
             CHDiscretizationName = controlVariables % stringValueForKey(CHDiscretizationKey, requestedLength = LINE_LENGTH)
@@ -187,7 +188,7 @@ module SpatialDiscretization
                write(STD_OUT,'(A)') "  * BR2"
                write(STD_OUT,'(A)') "  * IP"
                errorMessage(STD_OUT)
-               error stop 
+               stop 
    
             end select
    
@@ -714,7 +715,7 @@ module SpatialDiscretization
 !        Local variables
 !        ---------------
 !
-         integer     :: eID , i, j, k, ierr, fID, iFace, iEl, locLevel,lID
+         integer     :: eID , i, j, k, ierr, fID, m, iFace, iEl, locLevel,lID
          real(kind=RP) :: sqrtRho, invSqrtRho
          real(kind=RP)  :: mu_smag, delta
          real(kind=RP), dimension(NCONS)  :: Source
@@ -790,14 +791,28 @@ module SpatialDiscretization
 !        Compute Riemann solver of non-shared faces
 !        ******************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
          do iFace = 1, MLIter(locLevel,3)
 		    fID = MLIter_fID_Interior(iFace)
 		    compute_element = .true.
 			if (present(element_mask)) compute_element = face_mask(fID)
      
             if (compute_element) then
-				call computeElementInterfaceFlux_MU(mesh % faces(fID))
+               if (mesh% faces(fID) % MortarType == MORTAR_BIG) then
+                  associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                     fstar=0.0_RP
+                  end associate
+                  associate(fstar=>mesh% faces(fID)%storage(2)%fStar)
+                     fstar=0.0_RP
+                  end associate
+                  do m=1,4
+                     if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                        CALL computeElementInterfaceFlux_MU(masterFace=mesh% faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
+                     end if
+                  end do 
+               elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then
+				      call computeElementInterfaceFlux_MU(mesh % faces(fID))
+               end if
 			end if 
          end do
 !$omp end do nowait
@@ -870,17 +885,41 @@ module SpatialDiscretization
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
             do iFace = 1, MLIter(locLevel,7)
                fID = MLIter_fID_MPI(iFace)
                compute_element = .true.
                if (present(element_mask)) compute_element = face_mask(fID)
                
                if (compute_element) then
-                     CALL computeMPIFaceFlux_MU( mesh % faces(fID) )
+                  if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
+                     associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                        fstar=0.0_RP
+                     end associate
+                     do m=1,4
+                        if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                           CALL computeElementInterfaceFlux_MU(masterFace=mesh% faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m))) 
+                        end if 
+                     end do 
+                  end if 
+                  ! AJRTODO: Should it be here: ifelse MortarType == 0 ? Before you do it
+                  CALL computeMPIFaceFlux_MU( mesh % faces(fID) )
                endif
             end do
 !$omp end do 
+
+!$omp single
+            if ( mesh % nonconforming ) then
+               call mesh % UpdateMPIFacesMortarflux(NCONS)
+            end if
+      !$omp end single
+      
+      
+      !$omp single
+            if ( mesh % nonconforming ) then
+               call mesh % GatherMPIFacesMortarFlux(NCONS)         
+            end if
+      !$omp end single
 !
 !           ***********************************************************
 !           Surface integrals and scaling of elements with shared faces
@@ -1086,11 +1125,13 @@ module SpatialDiscretization
 ! 
 !///////////////////////////////////////////////////////////////////////////////////////////// 
 ! 
-      SUBROUTINE computeElementInterfaceFlux_MU(f)
+      SUBROUTINE computeElementInterfaceFlux_MU(f, masterFace)
          use FaceClass
          use RiemannSolvers_MU
          IMPLICIT NONE
          TYPE(Face)   , INTENT(inout) :: f   
+         type(Face), optional, intent(inout) :: masterFace 
+
          integer       :: i, j
          real(kind=RP) :: inv_fluxL(1:NCONS,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: inv_fluxR(1:NCONS,0:f % Nf(1),0:f % Nf(2))
@@ -1180,9 +1221,15 @@ module SpatialDiscretization
 !        Return the flux to elements
 !        ---------------------------
 !
+         if (f % MortarType == MORTAR_NONE) then 
          call f % ProjectFluxToElements(NCONS, fluxL, (/1, HMESH_NONE/))
-         call f % ProjectFluxToElements(NCONS, fluxR, (/2, HMESH_NONE/))
+         call f % ProjectFluxToElements(NCONS, fluxR, (/2, HMESH_NONE/)) 
+      end if 
+      if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace)) then 
 
+         call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), slaveFace=f, MortarFlux=fluxL)
+         call f % ProjectFluxToElements(NCONS, fluxR, (/2,0/))
+      end if 
       END SUBROUTINE computeElementInterfaceFlux_MU
 
       SUBROUTINE computeMPIFaceFlux_MU(f)
@@ -1285,7 +1332,10 @@ module SpatialDiscretization
          flux(:,:,:,2) = fluxR
 
          call f % ProjectFluxToElements(NCONS, flux(:,:,:,thisSide), (/thisSide, HMESH_NONE/))
-
+         if (f % MortarType == MORTAR_SMALL4) then 
+            call f% Interpolatesmall2big(NCONS, fluxL)
+         
+         end if 
       end subroutine ComputeMPIFaceFlux_MU
 
       SUBROUTINE computeBoundaryFlux_MU(f, time)
@@ -1398,7 +1448,7 @@ module SpatialDiscretization
 !        Local variables
 !        ---------------
 !
-         integer     :: eID , i, j, k, ierr, fID, iFace, iEl, lID, locLevel
+         integer     :: eID , i, j, k, ierr, fID, m, iFace, iEl, lID, locLevel
          logical     :: compute_element
          logical, allocatable :: face_mask(:)
 
@@ -1442,14 +1492,28 @@ module SpatialDiscretization
 !        Compute Riemann solver of non-shared faces
 !        ******************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
          do iFace = 1, MLIter(locLevel,3)
             fID = MLIter_fID_Interior(iFace)
 			compute_element = .true.
             if (present(element_mask)) compute_element = face_mask(fID)
             
             if (compute_element) then
-				call Laplacian_computeElementInterfaceFlux(mesh % faces(fID))
+               if(mesh% faces(fID) % MortarType == MORTAR_BIG) then 
+                  associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                     fstar=0.0_RP
+                  end associate
+                  associate(fstar=>mesh% faces(fID)%storage(2)%fStar)
+                     fstar=0.0_RP
+                  end associate
+                  do m=1,4
+                     if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                        CALL Laplacian_computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)) ) 
+                     end if 
+                  end do 
+               elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then
+                  call Laplacian_computeElementInterfaceFlux(mesh % faces(fID))
+               end if
 			end if 
          end do
 !$omp end do nowait
@@ -1503,17 +1567,41 @@ module SpatialDiscretization
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(fID, m)
             do iFace = 1, MLIter(locLevel,7)
                fID = MLIter_fID_MPI(iFace)
                compute_element = .true.
                if (present(element_mask)) compute_element = face_mask(fID)
                
                if (compute_element) then
+                  if (mesh % faces(fID)%MortarType == MORTAR_BIG) then 
+                     associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                        fstar=0.0_RP
+                     end associate
+                     do m=1,4
+                        if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                           CALL Laplacian_computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)) ) 
+                        end if 
+                     end do 
+                  end if
+                  ! AJRTODO: ifelse MortarType==0 as before ??
                   call Laplacian_computeMPIFaceFlux(mesh % faces(fID))
                end if
             end do
 !$omp end do 
+            !$omp single
+            if ( mesh % nonconforming ) then
+               call mesh % UpdateMPIFacesMortarflux(NCONS)
+            end if
+      !$omp end single
+      
+      
+      !$omp single
+            if ( mesh % nonconforming ) then
+               call mesh % GatherMPIFacesMortarFlux(NCONS)         
+            end if
+      !$omp end single
+      
 !
 !           ***********************************************************
 !           Surface integrals and scaling of elements with shared faces
@@ -1713,13 +1801,15 @@ module SpatialDiscretization
 ! 
 !///////////////////////////////////////////////////////////////////////////////////////////// 
 ! 
-      subroutine Laplacian_computeElementInterfaceFlux(f)
+      subroutine Laplacian_computeElementInterfaceFlux(f, masterFace)
          use FaceClass
          use Physics
          use PhysicsStorage
          IMPLICIT NONE
-         TYPE(Face)   , INTENT(inout) :: f   
-         integer       :: i, j
+         TYPE(Face)   , INTENT(inout) :: f  
+         type(Face), optional, intent(inout) :: masterFace 
+
+         integer       :: i, j, m
          real(kind=RP) :: flux(1:NCOMP,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: mu
 
@@ -1759,8 +1849,13 @@ module SpatialDiscretization
 !        Return the flux to elements
 !        ---------------------------
 !
+         if (f % MortarType == MORTAR_NONE) then 
          call f % ProjectFluxToElements(NCOMP, flux, (/1,2/))
-
+      end if 
+      if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace)) then 
+         call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), slaveFace=f, MortarFlux=flux)
+         call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
+        end if 
       end subroutine Laplacian_computeElementInterfaceFlux
 
       subroutine Laplacian_computeMPIFaceFlux(f)
@@ -1812,6 +1907,10 @@ module SpatialDiscretization
          thisSide = maxloc(f % elementIDs, dim = 1)
          call f % ProjectFluxToElements(NCOMP, flux, (/thisSide, HMESH_NONE/))
 
+         if (f % MortarType == MORTAR_SMALL4) then 
+            call f% Interpolatesmall2big(NCONS, flux)
+            
+         end if 
       end subroutine Laplacian_ComputeMPIFaceFlux
 
       subroutine Laplacian_computeBoundaryFlux(f, time)

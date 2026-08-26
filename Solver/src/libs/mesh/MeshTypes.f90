@@ -10,7 +10,9 @@
       public   HMESH_NONE, HMESH_UNDEFINED, HMESH_INTERIOR
       public   HMESH_BOUNDARY, HMESH_MPI, emptyBCName
       public   EFRONT, EBACK, EBOTTOM, ERIGHT, ETOP, ELEFT
-      public   SPECMESH, HOPRMESH, GMSHMESH
+      public   SPECMESH, HOPRMESH, GMSHMESH, MORTAR_NONE
+      public   MORTAR_BIG, MORTAR_SMALL4, MORTAR_SLIDING
+      public   small2big, big2small
    
       public indexesOnOtherFace, leftIndexes2Right, coordRotation
 
@@ -23,7 +25,15 @@
       integer, parameter :: HMESH_INTERIOR  = 1       ! Interior face
       integer, parameter :: HMESH_BOUNDARY  = 2       ! Physical boundary face
       integer, parameter :: HMESH_MPI       = 3       ! MPI face
-      
+
+      integer, parameter :: MORTAR_NONE     = 0       ! No mortar, h-conforming face
+      integer, parameter :: MORTAR_BIG      = 1       ! Big mortar (master) face 
+      integer, parameter :: MORTAR_SMALL4   = 2       ! Small mortar (slave) face 
+      integer, parameter :: MORTAR_SLIDING  = 3       ! Sliding mortar
+
+      integer, parameter :: small2big       = 0
+      integer, parameter :: big2small       = 1
+
       CHARACTER(LEN=3), parameter   :: emptyBCName = "---"
       
       integer, parameter :: SPECMESH = 1

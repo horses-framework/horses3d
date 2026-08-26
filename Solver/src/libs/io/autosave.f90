@@ -6,6 +6,7 @@ module AutosaveClass
 
    private
    public   Autosave_t, AUTOSAVE_BY_TIME, AUTOSAVE_BY_ITERATION, AUTOSAVE_UNDEFINED
+   public   AutosaveSlidingMesh_t
    public   Autosave_LambVectorConfigure
 
    integer, parameter :: AUTOSAVE_UNDEFINED    = 0
@@ -23,6 +24,11 @@ module AutosaveClass
          procedure   :: Configure => Autosave_Configure
          procedure   :: Autosave  => Autosave_Autosave
    end type Autosave_t
+
+   type, extends(Autosave_t)  :: AutosaveSlidingMesh_t
+         contains
+         procedure   :: Configure => AutosaveSlidingMesh_Configure
+   end type AutosaveSlidingMesh_t
 
    contains
 !
@@ -255,5 +261,57 @@ module AutosaveClass
       self % performAutosave = .false.
          
    end subroutine Autosave_LambVectorConfigure
+
+   subroutine AutosaveSlidingMesh_Configure(self, controlVariables, t0)
+      use ParamfileRegions
+      implicit none
+      class(AutosaveSlidingMesh_t)          :: self
+      class(FTValueDictionary)   :: controlVariables
+      real(kind=RP), intent(in)  :: t0
+!
+!     ---------------
+!     Local variables
+!     ---------------
+!
+      character(len=LINE_LENGTH) :: in_label, paramFile
+      character(len=LINE_LENGTH) :: autosaveMode
+      integer, allocatable :: readIteration
+      real(kind=rp), allocatable :: readTime
+      character(len=LINE_LENGTH), parameter :: autosaveModeKey = "autosave mode"
+      character(len=LINE_LENGTH), parameter :: autosaveIntervalKey = "autosave interval"
+      character(len=LINE_LENGTH), parameter :: autosaveByIteration = "iteration"
+      character(len=LINE_LENGTH), parameter :: autosaveByTime = "time"
+
+      ! Default values
+      self % enable = .false.
+      self % mode = AUTOSAVE_UNDEFINED
+      self % iter_interval = huge(1)
+      self % time_interval = huge(1.0_RP)
+
+      ! Read values
+      write(in_label , '(A)') "#define slidingmesh"
+      call get_command_argument(1, paramFile) 
+
+      call readValueInRegion( trim( paramFile ), autosaveModeKey, autosaveMode, in_label, "#end" )
+
+      if ( trim(autosaveMode) .eq. trim(autosaveByIteration) ) then
+         self % enable = .true.
+         self % mode = AUTOSAVE_BY_ITERATION
+         call readValueInRegion( trim( paramFile ), autosaveIntervalKey, readIteration, in_label, "#end" )
+         self % iter_interval = readIteration
+      elseif ( trim(autosaveMode) .eq. trim(autosaveByTime) ) then
+         self % enable = .true.
+         self % mode = AUTOSAVE_BY_TIME
+         call readValueInRegion( trim( paramFile ), autosaveIntervalKey, readTime, in_label, "#end" )
+         self % time_interval = readTime
+      end if
+
+!
+!     Reset the last autosave time
+!     ----------------------------
+      self % nextAutosaveTime = t0 + self % time_interval
+      self % performAutosave = .false.
+         
+   end subroutine AutosaveSlidingMesh_Configure
 
 end module AutosaveClass

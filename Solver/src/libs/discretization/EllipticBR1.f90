@@ -183,7 +183,7 @@ module EllipticBR1
 !        Local variables
 !        ---------------
 !
-         integer                :: i, j, k
+         integer                :: i, j, k, m
          integer                :: eID , fID , dimID , eqID, fIDs(6), iFace, iEl, locLevel, locLevelm1
          logical                :: compute_element
          logical, allocatable   :: face_mask(:)
@@ -217,7 +217,30 @@ module EllipticBR1
 				if (present(element_mask)) compute_element = face_mask(fID)
 				
 				if (compute_element) then
-				   call BR1_ComputeElementInterfaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
+				   if (mesh % faces(fID) % MortarType == MORTAR_SLIDING) then
+                  associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                     unStar=0.0_RP
+                  end associate
+                  associate(unStar=>mesh% faces(fID)%storage(2)%unStar)
+                     unStar=0.0_RP
+                  end associate
+               end if
+               if (mesh % faces(fID) % MortarType == MORTAR_BIG) then
+                  associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                     unStar=0.0_RP
+                  end associate
+                  associate(unStar=>mesh% faces(fID)%storage(2)%unStar)
+                     unStar=0.0_RP
+                  end associate
+                  do m=1,4
+                     if (mesh % faces(fID)%Mortar(m) .ne. 0) then
+                        call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                        f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                     end if
+                  end do
+               elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then
+                  call BR1_ComputeElementInterfaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
+               end if
 				endif
 			 end do
 !$omp end do nowait
@@ -250,12 +273,33 @@ module EllipticBR1
 	!              Prolong gradients
 	!              -----------------
 				   fIDs = e % faceIDs
-				   call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
-													mesh % faces(fIDs(2)),&
-													mesh % faces(fIDs(3)),&
-													mesh % faces(fIDs(4)),&
-													mesh % faces(fIDs(5)),&
-													mesh % faces(fIDs(6)) )
+				   if (.not.mesh%SlidingMesh%active) then
+                  if (.not.mesh%nonconforming) then
+                     call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
+                                                   mesh % faces(fIDs(2)),&
+                                                   mesh % faces(fIDs(3)),&
+                                                   mesh % faces(fIDs(4)),&
+                                                   mesh % faces(fIDs(5)),&
+                                                   mesh % faces(fIDs(6)))
+                  else
+                     call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
+                                                   mesh % faces(fIDs(2)),&
+                                                   mesh % faces(fIDs(3)),&
+                                                   mesh % faces(fIDs(4)),&
+                                                   mesh % faces(fIDs(5)),&
+                                                   mesh % faces(fIDs(6)),&
+                                                   faces=mesh % faces)
+                  end if
+               else
+                  call e %  ProlongGradientsToFaces(nGradEqn, &
+                                                fFR=mesh % faces(fIDs(1)),&
+                                                fBK=mesh % faces(fIDs(2)),&
+                                                fBOT=mesh % faces(fIDs(3)),&
+                                                fR=mesh % faces(fIDs(4)),&
+                                                fT=mesh % faces(fIDs(5)),&
+                                                fL=mesh % faces(fIDs(6)),&
+                                                faces=mesh % mortar_faces )
+               end if
 
 				   end associate
 				endif
@@ -272,9 +316,40 @@ module EllipticBR1
 !$omp do schedule(runtime) private(fID)
 			 do iFace = 1, mesh % MLRK % MLIter(locLevelm1,7)
 				fID = mesh % MLRK % MLIter_fID_MPI(iFace)
+				if (mesh % faces(fID) % MortarType == MORTAR_SLIDING) then
+               associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                  unStar=0.0_RP
+               end associate
+               associate(unStar=>mesh% faces(fID)%storage(2)%unStar)
+                  unStar=0.0_RP
+               end associate
+            end if
+				if (mesh% faces(fID)%MortarType == MORTAR_BIG) then
+               associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                  unStar=0.0_RP
+               end associate
+               do m=1,4
+                  if (mesh % faces(fID)%Mortar(m) .ne. 0) then
+                     call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                     f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                  end if
+               end do
+            end if
 				call BR1_ComputeMPIFaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
 			 end do
 !$omp end do 
+
+!$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % UpdateMPIFacesGradMortarflux(nGradEqn)
+         end if
+!$omp end single
+
+!$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % GatherMPIFacesGradMortarFlux(nGradEqn)
+         end if
+!$omp end single
 !
 !$omp do schedule(runtime) private(eID) 
 			 do iEl = 1, mesh % MLRK % MLIter(locLevel,10)
@@ -288,12 +363,21 @@ module EllipticBR1
 	!           Prolong gradients
 	!           -----------------
 				fIDs = e % faceIDs
-				call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
-												 mesh % faces(fIDs(2)),&
-												 mesh % faces(fIDs(3)),&
-												 mesh % faces(fIDs(4)),&
-												 mesh % faces(fIDs(5)),&
-												 mesh % faces(fIDs(6)) )
+				if ( .not.mesh % nonconforming ) then
+               call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
+                                                mesh % faces(fIDs(2)),&
+                                                mesh % faces(fIDs(3)),&
+                                                mesh % faces(fIDs(4)),&
+                                                mesh % faces(fIDs(5)),&
+                                                mesh % faces(fIDs(6)))
+            else
+               call e % ProlongGradientsToFaces(nGradEqn,fFR=mesh % faces(fIDs(1)),&
+                                                fBK=mesh % faces(fIDs(2)),&
+                                                fBOT=mesh % faces(fIDs(3)),&
+                                                fR=mesh % faces(fIDs(4)),&
+                                                fT=mesh % faces(fIDs(5)),&
+                                                fL=mesh % faces(fIDs(6)), faces=mesh%faces)
+            end if
 				end associate
 			 end do
 !$omp end do
@@ -311,10 +395,58 @@ module EllipticBR1
 				if (present(element_mask)) compute_element = face_mask(fID)
 				
 				if (compute_element) then
-				   call BR1_ComputeElementInterfaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
+				   if (mesh % faces(fID) % MortarType == MORTAR_SLIDING) then 
+                  associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                     unStar=0.0_RP
+                  end associate
+                  associate(unStar=>mesh% faces(fID)%storage(2)%unStar)
+                     unStar=0.0_RP
+                  end associate 
+               end if 
+               if (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
+                  associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                     unStar=0.0_RP
+                  end associate
+                  associate(unStar=>mesh% faces(fID)%storage(2)%unStar)
+                     unStar=0.0_RP
+                  end associate
+                  do m=1,4
+                     if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                     call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                     f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                     end if 
+                  end do 
+               elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then
+                  call BR1_ComputeElementInterfaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
+               end if
 				endif
 			 end do
 !$omp end do nowait
+
+      if (mesh%SlidingMesh%active) then 
+!$omp do schedule(runtime) private(fID)
+         do iFace = 1, size(mesh % mortar_faces)
+            fID = mesh % mortar_faces(iFace)%ID
+            associate(unStar=>mesh% mortar_faces(fID)%storage(1)%unStar)
+               unStar=0.0_RP
+            end associate
+            associate(unStar=>mesh% mortar_faces(fID)%storage(2)%unStar)
+               unStar=0.0_RP
+            end associate
+         end do 
+!$omp end do        
+      end if 
+
+      if (mesh%SlidingMesh%active) then 
+!$omp single
+         do iFace = 1, size(mesh % mortar_faces)
+            fID = mesh % mortar_faces(iFace)%ID
+            call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces (mesh % mortar_faces(fID)%Mortar(1)),masterFace2=mesh % faces (mesh % mortar_faces(fID)%Mortar(2)),&
+             nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, f=mesh % mortar_faces(fID), sliding=.true.)
+         end do 
+!$omp end single     
+      end if
+
 
 !$omp do schedule(runtime) private(fID)
 			 do iFace = 1, size(mesh % faces_boundary)
@@ -344,12 +476,33 @@ module EllipticBR1
 !              Prolong gradients
 !              -----------------
 				   fIDs = e % faceIDs
-				   call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
-													mesh % faces(fIDs(2)),&
-													mesh % faces(fIDs(3)),&
-													mesh % faces(fIDs(4)),&
-													mesh % faces(fIDs(5)),&
-													mesh % faces(fIDs(6)) )
+				   if (.not.mesh%SlidingMesh%active) then 
+                  if (.not.mesh%nonconforming) then 
+                     call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
+                                                   mesh % faces(fIDs(2)),&
+                                                   mesh % faces(fIDs(3)),&
+                                                   mesh % faces(fIDs(4)),&
+                                                   mesh % faces(fIDs(5)),&
+                                                   mesh % faces(fIDs(6)))
+                  else 
+                     call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
+                                                   mesh % faces(fIDs(2)),&
+                                                   mesh % faces(fIDs(3)),&
+                                                   mesh % faces(fIDs(4)),&
+                                                   mesh % faces(fIDs(5)),&
+                                                   mesh % faces(fIDs(6)),&
+                                                   faces=mesh % faces)
+                  end if 
+               else 
+                  call e %  ProlongGradientsToFaces(nGradEqn, &
+                                                fFR=mesh % faces(fIDs(1)),&
+                                                fBK=mesh % faces(fIDs(2)),&
+                                                fBOT=mesh % faces(fIDs(3)),&
+                                                fR=mesh % faces(fIDs(4)),&
+                                                fT=mesh % faces(fIDs(5)),&
+                                                fL=mesh % faces(fIDs(6)),&
+                                                faces=mesh % mortar_faces )
+               end if
 
 				   end associate
 				endif
@@ -364,11 +517,35 @@ module EllipticBR1
 !$omp end single
 
 !$omp do schedule(runtime) private(fID)
-			 do iFace = 1, size(mesh % faces_mpi)
-				fID = mesh % faces_mpi(iFace)
-				call BR1_ComputeMPIFaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
-			 end do
+         do iFace = 1, size(mesh % faces_mpi)
+            fID = mesh % faces_mpi(iFace)
+            if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
+               associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                  unStar=0.0_RP
+               end associate
+               do m=1,4
+                  if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                     call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces(fID), nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, &
+                     f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                  end if 
+               end do 
+            end if 
+            call BR1_ComputeMPIFaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
+         end do
 !$omp end do 
+
+!$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % UpdateMPIFacesGradMortarflux(nGradEqn)
+         end if
+!$omp end single
+   
+   
+!$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % GatherMPIFacesGradMortarFlux(nGradEqn)
+         end if
+ !$omp end single
 !
 !$omp do schedule(runtime) private(eID) 
 			 do iEl = 1, size(mesh % elements_mpi)
@@ -382,12 +559,21 @@ module EllipticBR1
 	!           Prolong gradients
 	!           -----------------
 				fIDs = e % faceIDs
-				call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
-												 mesh % faces(fIDs(2)),&
-												 mesh % faces(fIDs(3)),&
-												 mesh % faces(fIDs(4)),&
-												 mesh % faces(fIDs(5)),&
-												 mesh % faces(fIDs(6)) )
+				if ( .not.mesh % nonconforming ) then
+               call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
+                                                mesh % faces(fIDs(2)),&
+                                                mesh % faces(fIDs(3)),&
+                                                mesh % faces(fIDs(4)),&
+                                                mesh % faces(fIDs(5)),&
+                                                mesh % faces(fIDs(6)))
+            else
+               call e % ProlongGradientsToFaces(nGradEqn,fFR=mesh % faces(fIDs(1)),&
+                                                fBK=mesh % faces(fIDs(2)),&
+                                                fBOT=mesh % faces(fIDs(3)),&
+                                                fR=mesh % faces(fIDs(4)),&
+                                                fT=mesh % faces(fIDs(5)),&
+                                                fL=mesh % faces(fIDs(6)), faces=mesh%faces)
+            end if
 				end associate
 			 end do
 !$omp end do
@@ -413,7 +599,7 @@ module EllipticBR1
 !        Local variables
 !        ---------------
 !
-         integer                :: i, j, k
+         integer                :: i, j, k, m 
          integer                :: eID , fID , dimID , eqID, fIDs(6), iFace, iEl
          logical                :: compute_element
          logical, allocatable   :: face_mask(:)
@@ -475,12 +661,22 @@ module EllipticBR1
 !              Prolong gradients
 !              -----------------
                fIDs = e % faceIDs
-               call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
-                                                mesh % faces(fIDs(2)),&
-                                                mesh % faces(fIDs(3)),&
-                                                mesh % faces(fIDs(4)),&
-                                                mesh % faces(fIDs(5)),&
-                                                mesh % faces(fIDs(6)) )
+               if (.not.mesh%nonconforming) then
+                  call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
+                                                   mesh % faces(fIDs(2)),&
+                                                   mesh % faces(fIDs(3)),&
+                                                   mesh % faces(fIDs(4)),&
+                                                   mesh % faces(fIDs(5)),&
+                                                   mesh % faces(fIDs(6)))
+               else 
+                  call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
+                                                   mesh % faces(fIDs(2)),&
+                                                   mesh % faces(fIDs(3)),&
+                                                   mesh % faces(fIDs(4)),&
+                                                   mesh % faces(fIDs(5)),&
+                                                   mesh % faces(fIDs(6)),&
+                                                   faces=mesh % faces)
+               end if
 
                end associate
             endif
@@ -500,6 +696,19 @@ module EllipticBR1
             call BR1_ComputeMPIFaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
          end do
 !$omp end do 
+
+!$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % UpdateMPIFacesGradMortarflux(nGradEqn)
+         end if
+!$omp end single
+   
+   
+!$omp single
+      if ( mesh % nonconforming ) then
+         call mesh % GatherMPIFacesGradMortarFlux(nGradEqn)
+      end if
+!$omp end single
 !
 !$omp do schedule(runtime) private(eID) 
          do iEl = 1, size(mesh % HO_ElementsMPI)
@@ -513,12 +722,22 @@ module EllipticBR1
 !           Prolong gradients
 !           -----------------
             fIDs = e % faceIDs
+            if ( .not.mesh % nonconforming ) then
             call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
                                              mesh % faces(fIDs(2)),&
                                              mesh % faces(fIDs(3)),&
                                              mesh % faces(fIDs(4)),&
                                              mesh % faces(fIDs(5)),&
-                                             mesh % faces(fIDs(6)) )
+                                             mesh % faces(fIDs(6)))
+            else
+               call e % ProlongGradientsToFaces(nGradEqn,fFR=mesh % faces(fIDs(1)),&
+               fBK=mesh % faces(fIDs(2)),&
+               fBOT=mesh % faces(fIDs(3)),&
+               fR=mesh % faces(fIDs(4)),&
+               fT=mesh % faces(fIDs(5)),&
+               fL=mesh % faces(fIDs(6)), faces=mesh%faces)
+            end if 
+ 
             end associate
          end do
 !$omp end do
@@ -568,7 +787,7 @@ module EllipticBR1
 
       end subroutine BR1_GradientFaceLoop
 !
-      subroutine BR1_ComputeElementInterfaceAverage(self, f, nEqn, nGradEqn, GetGradients)
+      subroutine BR1_ComputeElementInterfaceAverage(self, f, nEqn, nGradEqn, GetGradients,masterFace1, masterFace2, sliding)
          use Physics  
          use ElementClass
          use FaceClass
@@ -582,6 +801,9 @@ module EllipticBR1
          type(Face)                       :: f
          integer,    intent(in)           :: nEqn, nGradEqn
          procedure(GetGradientValues_f)   :: GetGradients
+         type(Face), optional             :: masterFace1
+         type(Face), optional             :: masterFace2
+         logical, optional                :: sliding 
 !
 !        ---------------
 !        Local variables
@@ -590,11 +812,11 @@ module EllipticBR1
          real(kind=RP) :: UL(nGradEqn), UR(nGradEqn)
          real(kind=RP) :: uStar(nGradEqn)
          real(kind=RP) :: uStar_n(nGradEqn,NDIM,0:f % Nf(1), 0:f % Nf(2))
+ 
 
-         integer       :: i,j
+         integer       :: i,j, lm
          integer       :: Sidearray(2)
-         
-         do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+           do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
 #ifdef MULTIPHASE
             call GetGradients(nEqn, nGradEqn, Q = f % storage(1) % Q(:,i,j), U = UL, rho_ = f % storage(1) % rho(i,j))
             call GetGradients(nEqn, nGradEqn, Q = f % storage(2) % Q(:,i,j), U = UR, rho_ = f % storage(2) % rho(i,j))
@@ -619,10 +841,25 @@ module EllipticBR1
             uStar_n(:,IX,i,j) = uStar * f % geom % normal(IX,i,j)
             uStar_n(:,IY,i,j) = uStar * f % geom % normal(IY,i,j)
             uStar_n(:,IZ,i,j) = uStar * f % geom % normal(IZ,i,j)
-         end do               ; end do
+           end do               ; end do
          
-         Sidearray = (/1,2/)
-         call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
+         if (.not.present(sliding)) then 
+            if (f % MortarType == MORTAR_NONE) then 
+            Sidearray = (/1,2/)
+            call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
+            end if 
+            if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace1)) then 
+               Sidearray = (/1,0/)
+               call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1) 
+               Sidearray = (/0,2/)
+               call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
+            end if 
+         else 
+            Sidearray = (/1,0/)
+            call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1, sliding=sliding) 
+            Sidearray = (/2,0/)
+            call masterFace2 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1,sliding=sliding) 
+         end if 
          
       end subroutine BR1_ComputeElementInterfaceAverage   
 
@@ -680,6 +917,12 @@ module EllipticBR1
 
          Sidearray = (/maxloc(f % elementIDs, dim = 1), HMESH_NONE/)
          call f % ProjectGradientFluxToElements(nGradEqn, uStar_n,Sidearray,1)
+
+         if (f % MortarType == MORTAR_SMALL4) then 
+            
+            call f% Interpolatesmall2biggrad(nGradEqn, uStar_n)
+            
+         end if 
          
       end subroutine BR1_ComputeMPIFaceAverage   
 

@@ -121,7 +121,7 @@ module Utilities
 !
       mytol = 2*epsilon(b)
       if (present(tol)) mytol = tol
-
+      !mytol = 2*epsilon(b)
       IF ( a == 0.0_RP .OR. b == 0.0_RP )     THEN
          IF ( ABS(a-b) <= mytol )     THEN
             AlmostEqual = .TRUE.
@@ -134,6 +134,7 @@ module Utilities
          ELSE
             AlmostEqual = .FALSE.
          END IF
+         !IF ((a .LE. 1.0E-12_RP) .AND. (b .LE. 1.0E-12_RP)) AlmostEqual = .TRUE.
       END IF
 
       END FUNCTION AlmostEqual

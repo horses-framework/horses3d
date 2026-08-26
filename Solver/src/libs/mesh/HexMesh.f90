@@ -23,7 +23,9 @@ MODULE HexMeshClass
       use BoundaryConditions,               only: BCs
       use IntegerDataLinkedList           , only: IntegerDataLinkedList_t
       use PartitionedMeshClass            , only: mpi_partition
+      use InterpolationMatrices           , only: Tset, TsetM
       use IBMClass
+      use SlidingMeshClass
 #if defined(NAVIERSTOKES)
       use WallDistance
 #endif
@@ -35,7 +37,7 @@ MODULE HexMeshClass
       private
       public      HexMesh
       public      Neighbor_t, NUM_OF_NEIGHBORS
-	  public      MultiLevel_RK
+	   public      MultiLevel_RK
 
       public      GetOriginalNumberOfFaces
       public      ConstructFaces, ConstructPeriodicFaces
@@ -87,11 +89,12 @@ MODULE HexMeshClass
          type(SolutionStorage_t)                   :: storage              ! Here the solution and its derivative are stored
          type(Node)   , dimension(:), allocatable  :: nodes
          type(Face)   , dimension(:), allocatable  :: faces
+         type(Face)   , dimension(:), allocatable  :: mortar_faces         !Mortars for sliding meshes, 4:1 mortars are embeded in faces
          type(Element), dimension(:), allocatable  :: elements
          type(MPI_FacesSet_t)                      :: MPIfaces
          type(IBM_type)                            :: IBM
          type(Zone_t), dimension(:), allocatable   :: zones
-		 type(MultiLevel_RK)                       :: MLRK
+		   type(MultiLevel_RK)                       :: MLRK
          logical                                   :: child       = .FALSE.         ! Is this a (multigrid) child mesh? default .FALSE.
          logical                                   :: meshIs2D    = .FALSE.         ! Is this a 2D mesh? default .FALSE.
          integer                                   :: dir2D       = 0               ! If it is in fact a 2D mesh, dir 2D stores the global direction IX, IY or IZ
@@ -106,6 +109,13 @@ MODULE HexMeshClass
          integer,                     allocatable  :: HO_ElementsSequential(:) !List of sequential elements with polynomial order greater than 1
          integer,                     allocatable  :: elements_acoustics(:)    !List of elements with acoustic polynomial order adaptation
          integer,                     allocatable  :: elements_aerodynamics(:) !List of elements with standard polynomial order adaptation
+         logical                                   :: nonconforming= .FALSE. 
+         integer                                   :: nMasterMortars 
+         integer                                   :: nSlaveFaces 
+         logical                                   :: slidingflux= .FALSE.
+         integer                                   :: numBFacePoints
+         type(SlidingMesh)                         :: SlidingMesh
+
          contains
             procedure :: destruct                      => HexMesh_Destruct
             procedure :: Describe                      => HexMesh_Describe
@@ -162,9 +172,17 @@ MODULE HexMeshClass
             procedure :: UpdateMPIFacesSolution        => HexMesh_UpdateMPIFacesSolution
             procedure :: UpdateMPIFacesGradients       => HexMesh_UpdateMPIFacesGradients
             procedure :: UpdateMPIFacesAviscflux       => HexMesh_UpdateMPIFacesAviscflux
+            procedure :: UpdateMPIFacesMortarflux      => HexMesh_UpdateMPIFacesMortarflux
+            procedure :: UpdateMPIFacesGradMortarflux  => HexMesh_UpdateMPIFacesGradMortarflux
+            procedure :: UpdateMPIFacesMortarfluxJac   => HexMesh_UpdateMPIFacesMortarfluxJac 
+            procedure :: UpdateMPIFacesGradMortarfluxJac  => HexMesh_UpdateMPIFacesGradMortarfluxJac 
             procedure :: GatherMPIFacesSolution        => HexMesh_GatherMPIFacesSolution
             procedure :: GatherMPIFacesGradients       => HexMesh_GatherMPIFacesGradients
             procedure :: GatherMPIFacesAviscFlux       => HexMesh_GatherMPIFacesAviscFlux
+            procedure :: GatherMPIFacesMortarFlux      => HexMesh_GatherMPIFacesMortarFlux
+            procedure :: GatherMPIFacesGradMortarFlux  => HexMesh_GatherMPIFacesGradMortarFlux
+            procedure :: GatherMPIFacesMortarFluxJac   => HexMesh_GatherMPIFacesMortarFluxJac 
+            procedure :: GatherMPIFacesGradMortarFluxJac  => HexMesh_GatherMPIFacesGradMortarFluxJac 
             procedure :: FindPointWithCoords           => HexMesh_FindPointWithCoords
             procedure :: FindPointWithCoordsInNeighbors=> HexMesh_FindPointWithCoordsInNeighbors
             procedure :: ComputeWallDistances          => HexMesh_ComputeWallDistances
@@ -352,47 +370,120 @@ MODULE HexMeshClass
          CALL release(table)
 
       end function GetOriginalNumberOfFaces
-
-      SUBROUTINE ConstructFaces( self, success )
 !
-!     -------------------------------------------------------------
-!     Go through the elements and find the unique faces in the mesh
-!     -------------------------------------------------------------
+!////////////////////////////////////////////////////////////////////////
 !
-         use IntegerArrayLinkedListTable
-         IMPLICIT NONE
-         TYPE(HexMesh) :: self
-         LOGICAL       :: success
+!  ConstructFaces
+!
+!  Go through the elements and find the unique faces in the mesh.
+!
+!  Handles three kinds of faces, driven by elements(eID) % MortarFaces(faceNumber):
+!     == 0        -> regular (conforming) face
+!     == 1        -> big "master" mortar face: build it plus its 4 small slave faces
+!     >= 2        -> small "slave" mortar face owned by another side / process
+!
+!  Optional arguments (present only for the non-conforming / MPI octree path):
+!     numberOfElements        -> if present, the mesh is treated as non-conforming
+!     HorsesMortars           -> mortar connectivity table (6 x 6*nElements)
+!     globalToLocalElementID  -> maps a global element ID to its local ID,
+!                                or -1 if the element is not on this process
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   SUBROUTINE ConstructFaces( self, success, numberOfElements, HorsesMortars, globalToLocalElementID )   !mod
+      use IntegerArrayLinkedListTable
+      IMPLICIT NONE
+!
+!     ---------
+!     Arguments
+!     ---------
+!
+      TYPE(HexMesh), target   :: self
+      LOGICAL                 :: success
+      INTEGER, optional       :: numberOfElements
+      INTEGER, optional       :: HorsesMortars(6, 6*SIZE( self % elements ))
+      INTEGER, optional       :: globalToLocalElementID(self % no_of_allElements)
+!
+!     ---------------
+!     Local variables
+!     ---------------
+!
+      INTEGER                 :: eID, eIDM, faceNumber, faceNumberM
+      INTEGER                 :: faceID
+      INTEGER                 :: nodeIDs(8), faceNodeIDs(4), j, i, k, l
+      INTEGER                 :: MnodeIDs(8), MfaceNodeIDs(4)
+      type(Table_t)           :: table
+      logical                 :: ConformingMesh
+      INTEGER                 :: nbface, nintface, nmaster, nslave, nintfacec, mID
+      integer                 :: rotations(4)
+      Type(Face)              :: small(4)
+      Logical                 :: change_pos
+      integer                 :: inter_pos(4)
+!
+!     ----------------
+!     Initialization
+!     ----------------
+!
+      ConformingMesh = .TRUE.
+      nbface         = 0
+      nintface       = 0
+      nmaster        = 0
+      nslave         = 0
+      nintfacec      = 0
 
-         INTEGER                 :: eID, faceNumber
-         INTEGER                 :: faceID
-         INTEGER                 :: nodeIDs(8), faceNodeIDs(4), j
-         type(Table_t)           :: table
+      if (present(numberOfElements)) ConformingMesh = .FALSE.
 
-         table = Table_t(size(self % nodes))
+      table = Table_t(size(self % nodes))
 
-         self % numberOfFaces = 0
-         DO eID = 1, SIZE( self % elements )
+      self % numberOfFaces = 0
+!
+!     -----------------------------------
+!     Loop over every element and its faces
+!     -----------------------------------
+!
+      DO eID = 1, SIZE( self % elements )
 
-            nodeIDs = self % elements(eID) % nodeIDs
-            DO faceNumber = 1, 6
+         nodeIDs = self % elements(eID) % nodeIDs
+
+         DO faceNumber = 1, 6
+
+!           Regular face (MortarFaces == 0) or slave mortar (>= 2)
+
+            IF (self % elements(eID) % MortarFaces(faceNumber) == 0 .OR. &
+                self % elements(eID) % MortarFaces(faceNumber) >= 2) THEN   ! keep the same
+!
+!              Slave mortar whose neighbour is not on this process: skip it
+!
+               IF (self % elements(eID) % MortarFaces(faceNumber) >= 2 .AND. &
+                   .not. present(globalToLocalElementID)) CYCLE
+
+               IF (self % elements(eID) % MortarFaces(faceNumber) >= 2 .AND. &
+                   present(globalToLocalElementID)) THEN
+                  IF (globalToLocalElementID(HorsesMortars(3,(eID*6)-5+faceNumber-1)) .NE. -1) CYCLE
+               END IF
+
                DO j = 1, 4
                   faceNodeIDs(j) = nodeIDs(localFaceNode(j,faceNumber))
                END DO
 
                faceID = table % ContainsEntry(faceNodeIDs)
-               IF ( faceID .ne. 0 )     THEN
+
+               IF ( faceID .ne. 0 ) THEN
 !
 !                 --------------------------------------------------------------
-!                 Add this element to the slave side of the face associated with
-!                 these nodes.
+!                 Face already exists: add this element to its slave side
 !                 --------------------------------------------------------------
 !
+                  nintfacec = nintfacec + 1
+
                   self % faces(faceID) % elementIDs(2)  = eID
                   self % faces(faceID) % elementSide(2) = faceNumber
                   self % faces(faceID) % FaceType       = HMESH_INTERIOR
                   self % faces(faceID) % rotation       = faceRotation(masterNodeIDs = self % faces(faceID) % nodeIDs, &
                                                                        slaveNodeIDs  = faceNodeIDs                      )
+                  !self % faces(faceID) % rotation       = 0
+                  !write(*,*) 'rotation', self % faces(faceID) % rotation
+
                ELSE
 !
 !                 ------------------
@@ -400,80 +491,267 @@ MODULE HexMeshClass
 !                 ------------------
 !
                   self % numberOfFaces = self % numberOfFaces + 1
+                  nintface = nintface + 1
 
-                  IF(self % numberOfFaces > SIZE(self % faces))     THEN
-
+                  IF (self % numberOfFaces > SIZE(self % faces)) THEN
                      call table % Destruct
-                     PRINT *, "Too many faces for # of elements:", self % numberOfFaces, " vs ", SIZE(self % faces)
+                     PRINT *, "Too many faces for # of elements (interior):", self % numberOfFaces, " vs ", SIZE(self % faces)
+                     write(*,*) 'nintface=',         nintface
+                     write(*,*) 'nmaster=',          nmaster
+                     write(*,*) 'nslave=',           nslave
+                     write(*,*) 'nint_constructed=', nintfacec
                      success = .FALSE.
                      RETURN
                   END IF
 
-                  CALL self % faces(self % numberOfFaces) % Construct(ID  = self % numberOfFaces, &
-                                                                      nodeIDs = faceNodeIDs, &
-                                                                      elementID = eID,       &
-                                                                      side = faceNumber)
+                  CALL self % faces(self % numberOfFaces) % Construct(ID        = self % numberOfFaces, &
+                                                                      nodeIDs   = faceNodeIDs,          &
+                                                                      elementID = eID,                 &
+                                                                      side      = faceNumber)
 
-                  self % faces(self % numberOfFaces) % boundaryName = &
-                           self % elements(eID) % boundaryName(faceNumber)
+                  self % faces(self % numberOfFaces) % boundaryName = self % elements(eID) % boundaryName(faceNumber)
+                  self % faces(self % numberOfFaces) % MortarType     = MORTAR_NONE
 !
-!                 ----------------------------------------------
+!                 Slave mortar whose master is on another process
+!
+                  IF (self % elements(eID) % MortarFaces(faceNumber) >= 2 .AND. present(globalToLocalElementID)) THEN
+                     if (globalToLocalElementID(HorsesMortars(3,(eID*6)-5+faceNumber-1)) == -1) THEN
+                        self % faces(self % numberOfFaces) % FaceType       = HMESH_INTERIOR
+                        self % faces(self % numberOfFaces) % MortarType       = MORTAR_SMALL4
+                        self % faces(self % numberOfFaces) % Mortarpos      = MODULO(self % elements(eID) % MortarFaces(faceNumber),20)
+                        self % faces(self % numberOfFaces) % elementIDs(2)  = self % faces(self % numberOfFaces) % elementIDs(1)
+                        self % faces(self % numberOfFaces) % elementIDs(1)  = 0
+                        self % faces(self % numberOfFaces) % elementSide(2) = faceNumber
+                        !write(*,*) 'masterface in otherprocess'
+                     end if
+                  END IF
+!
 !                 Mark which face is associated with these nodes
-!                 ----------------------------------------------
 !
                   call table % AddEntry(faceNodeIDs)
+
                END IF
-            END DO
 
-         END DO
-
-         call table % Destruct
-
-      END SUBROUTINE ConstructFaces
-
-      subroutine GetElementsFaceIDs(self)
-         implicit none
-         type(HexMesh), intent(inout)  :: self
+            END IF
 !
-!        ---------------
-!        Local variables
-!        ---------------
+!           ============================================================
+!           Big mortar face (MortarFaces == 1):
+!           construct the master face and its 4 small slave faces
+!           ============================================================
 !
-         integer  :: fID, eL, eR, e, side
+            IF (self % elements(eID) % MortarFaces(faceNumber) == 1) THEN
 
-         do fID = 1, size(self % faces)
-            select case (self % faces(fID) % faceType)
-            case (HMESH_INTERIOR)
-               eL = self % faces(fID) % elementIDs(1)
-               eR = self % faces(fID) % elementIDs(2)
+               DO j = 1, 4
+                  faceNodeIDs(j) = nodeIDs(localFaceNode(j,faceNumber))
+               END DO
 
-               self % elements(eL) % faceIDs(self % faces(fID) % elementSide(1)) = fID
-               self % elements(eR) % faceIDs(self % faces(fID) % elementSide(2)) = fID
-               self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
-               self % elements(eR) % faceSide(self % faces(fID) % elementSide(2)) = 2
+               self % numberOfFaces = self % numberOfFaces + 1
+               nmaster = nmaster + 1
 
-            case (HMESH_BOUNDARY)
-               eL = self % faces(fID) % elementIDs(1)
-               self % elements(eL) % faceIDs(self % faces(fID) % elementSide(1)) = fID
-               self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
+               IF (self % numberOfFaces > SIZE(self % faces)) THEN
+                  call table % Destruct
+                  PRINT *, "Too many faces for # of elements (master):", self % numberOfFaces, " vs ", SIZE(self % faces)
+                  write(*,*) 'nintface=',         nintface
+                  write(*,*) 'nmaster=',          nmaster
+                  write(*,*) 'nslave=',           nslave
+                  write(*,*) 'nint_constructed=', nintfacec
+                  success = .FALSE.
+                  RETURN
+               END IF
 
-            case (HMESH_MPI)
-               side = maxloc(self % faces(fID) % elementIDs, 1)
+               CALL self % faces(self % numberOfFaces) % Construct(ID        = self % numberOfFaces, &
+                                                                   nodeIDs   = faceNodeIDs,          &
+                                                                   elementID = eID,                 &
+                                                                   side      = faceNumber)
 
-               e = self % faces(fID) % elementIDs(side)
-               self % elements(e) % faceIDs(self % faces(fID) % elementSide(side)) = fID
-               self % elements(e) % faceSide(self % faces(fID) % elementSide(side)) = side
-               self % elements(e) % hasSharedFaces = .true.
+               self % faces(self % numberOfFaces) % FaceType     = HMESH_INTERIOR
+               self % faces(self % numberOfFaces) % boundaryName = self % elements(eID) % boundaryName(faceNumber)
 
-            case (HMESH_UNDEFINED)
-               eL = self % faces(fID) % elementIDs(1)
-               self % elements(eL) % faceIDs(self % faces(fID) % elementSide(1)) = fID
-               self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
+               call table % AddEntry(faceNodeIDs)
 
-            end select
-         end do
+               self % faces(self % numberOfFaces) % MortarType = MORTAR_BIG
+               mID = self % numberOfFaces
 
-      end subroutine GetElementsFaceIDs
+               allocate(self % faces(mID) % Mortar(4))
+
+               self % faces(mID) % Mortar = 0
+!
+!              ----------------------------------------
+!              Build the 4 small slave faces of this mortar
+!              ----------------------------------------
+!
+               DO l = 1, 4
+
+                  eIDM = HorsesMortars(l + 2, (eID*6)-5 + faceNumber-1)
+!
+!                 Slave element on another process: just count it and skip
+!
+                  IF (present(globalToLocalElementID)) THEN
+                     IF (globalToLocalElementID(eIDM) == -1) then
+
+                        self % faces(mID) % n_mpi_mortar = self % faces(mID) % n_mpi_mortar + 1
+                        cycle
+                     end if
+                  END IF
+
+                  self % numberOfFaces = self % numberOfFaces + 1
+                  nslave = nslave + 1
+                  self % faces(mID) % Mortar(l) = self % numberOfFaces
+
+                  IF (self % numberOfFaces > SIZE(self % faces)) THEN
+                     call table % Destruct
+                     PRINT *, "Too many faces for # of elements (slaves):", self % numberOfFaces, " vs ", SIZE(self % faces)
+                     write(*,*) 'nintface=',         nintface
+                     write(*,*) 'nmaster=',          nmaster
+                     write(*,*) 'nslave=',           nslave
+                     write(*,*) 'nint_constructed=', nintfacec
+                     success = .FALSE.
+                     RETURN
+                  END IF
+
+                  IF (eIDM == 0) THEN
+                     call table % Destruct
+                     PRINT *, "Mortar error:"
+                     success = .FALSE.
+                     RETURN
+                  END IF
+!
+!                 Opposite face index on the neighbour element
+!
+                  if (faceNumber==1) faceNumberM=2
+                  if (faceNumber==2) faceNumberM=1
+                  if (faceNumber==3) faceNumberM=5
+                  if (faceNumber==4) faceNumberM=6
+                  if (faceNumber==5) faceNumberM=3
+                  if (faceNumber==6) faceNumberM=4
+
+                  IF (present(globalToLocalElementID)) then
+                     MnodeIDs = self % elements(globalToLocalElementID(eIDM)) % nodeIDs
+                  ELSE
+                     MnodeIDs = self % elements(eIDM) % nodeIDs
+                  END IF
+
+                  DO j = 1, 4
+                     MfaceNodeIDs(j) = MnodeIDs(localFaceNode(j,faceNumberM))
+                  END DO
+!
+!                 Construct the small slave mortar.
+!                 Side (1) of a small slave mortar is always the big mortar.
+!
+                  CALL self % faces(self % numberOfFaces) % Construct(ID        = self % numberOfFaces, &
+                                                                      nodeIDs   = MfaceNodeIDs,         &
+                                                                      elementID = eID,                 &
+                                                                      side      = faceNumber)
+
+                  IF (present(globalToLocalElementID)) then
+                     self % faces(self % numberOfFaces) % boundaryName  = &
+                                 self % elements(globalToLocalElementID(eIDM)) % boundaryName(faceNumberM)
+                     self % faces(self % numberOfFaces) % elementIDs(2) = globalToLocalElementID(eIDM)
+                  ELSE
+                     self % faces(self % numberOfFaces) % boundaryName  = &
+                                 self % elements(eIDM) % boundaryName(faceNumberM)
+                     self % faces(self % numberOfFaces) % elementIDs(2) = eIDM
+                  END IF
+
+                  self % faces(self % numberOfFaces) % elementSide(2) = faceNumberM
+                  self % faces(self % numberOfFaces) % FaceType       = HMESH_INTERIOR
+                  ! self % faces(self % numberOfFaces) % rotation     = faceRotation(masterNodeIDs = self % faces(faceID) % nodeIDs, &
+                  !                                                                  slaveNodeIDs  = faceNodeIDs                      )
+                  self % faces(self % numberOfFaces) % rotation       = 0
+                  self % faces(self % numberOfFaces) % MortarType       = MORTAR_SMALL4
+                  self % faces(self % numberOfFaces) % Mortarpos      = l
+
+                  call table % AddEntry(MfaceNodeIDs)
+                  self % faces(mID) % Mortar(l) = self % numberOfFaces
+                  !small(l) = self % faces(self % faces(mID) % Mortar(l))
+
+               END DO !l
+!
+!              -------------------------------------------------
+!              Fix small-face rotations (and ordering if needed)
+!              -------------------------------------------------
+!
+               if (.not.present(globalToLocalElementID) .and. present(HorsesMortars)) then
+                  rotations=0
+                  do l=1,4 
+                     small(l)=self%faces(self % faces(mID)% Mortar(l))
+                  end do 
+            
+                  call GetSmallFacesRotation(self % faces(mID), small, self % nodes, rotations,change_pos)
+
+                  do l=1,4 
+                     if (rotations(l) .NE. 0) self%faces(self % faces(mID)% Mortar(l))% rotation=rotations(l)
+                  end do 
+               end if 
+
+            END IF  
+            
+         END DO !faceNumber
+         
+      END DO !eID 
+
+      call table % Destruct
+
+END SUBROUTINE ConstructFaces
+   
+subroutine GetElementsFaceIDs(self)       
+   implicit none
+   type(HexMesh), intent(inout)  :: self
+!
+!  ---------------
+!  Local variables
+!  ---------------
+!
+   integer  :: fID, eL, eR, e, side
+
+   do fID = 1, size(self % faces)
+      select case (self % faces(fID) % faceType)
+      case (HMESH_INTERIOR)
+         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%MortarType == MORTAR_NONE) then !conforming
+            eL = self % faces(fID) % elementIDs(1)
+            eR = self % faces(fID) % elementIDs(2)
+
+            self % elements(eL) % faceIDs(self % faces(fID) % elementSide(1)) = fID
+            self % elements(eR) % faceIDs(self % faces(fID) % elementSide(2)) = fID
+            self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
+            self % elements(eR) % faceSide(self % faces(fID) % elementSide(2)) = 2
+         end if 
+         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%MortarType == MORTAR_BIG) then !Big master
+
+            eL = self % faces(fID) % elementIDs(1)
+            self % elements(eL) % faceIDs(self % faces(fID) % elementSide(1)) = fID
+            self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
+         end if 
+         if (self % faces(fID) % faceType==HMESH_INTERIOR .AND. self%faces(fID)%MortarType == MORTAR_SMALL4) then
+
+            eR = self % faces(fID) % elementIDs(2)
+            self % elements(eR) % faceIDs(self % faces(fID) % elementSide(2)) = fID
+            self % elements(eR) % faceSide(self % faces(fID) % elementSide(2)) = 2
+
+         end if  
+
+      case (HMESH_BOUNDARY)
+         eL = self % faces(fID) % elementIDs(1)
+         self % elements(eL) % faceIDs(self % faces(fID) % elementSide(1)) = fID
+         self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
+
+      case (HMESH_MPI)
+         side = maxloc(self % faces(fID) % elementIDs, 1)
+
+         e = self % faces(fID) % elementIDs(side)
+         self % elements(e) % faceIDs(self % faces(fID) % elementSide(side)) = fID
+         self % elements(e) % faceSide(self % faces(fID) % elementSide(side)) = side
+         self % elements(e) % hasSharedFaces = .true.
+
+      case (HMESH_UNDEFINED)
+         eL = self % faces(fID) % elementIDs(1)
+         self % elements(eL) % faceIDs(self % faces(fID) % elementSide(1)) = fID
+         self % elements(eL) % faceSide(self % faces(fID) % elementSide(1)) = 1
+
+      end select
+   end do
+
+end subroutine getElementsFaceIDs
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -487,38 +765,83 @@ MODULE HexMeshClass
 !!
 !! As an example, faceRotation = 1 <=> rotating master by 90 deg.
 !
-      INTEGER pure FUNCTION faceRotation(masterNodeIDs, slaveNodeIDs)
-         IMPLICIT NONE
-         INTEGER, DIMENSION(4), intent(in) :: masterNodeIDs, slaveNodeIDs !< Node IDs
+   INTEGER pure FUNCTION faceRotation(masterNodeIDs, slaveNodeIDs)
+      IMPLICIT NONE
+      INTEGER, DIMENSION(4), intent(in) :: masterNodeIDs, slaveNodeIDs !< Node IDs
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer, dimension(4), parameter :: NEXTNODE = (/2,3,4,1/)
-         INTEGER :: j
+      integer, dimension(4), parameter :: NEXTNODE = (/2,3,4,1/)
+      INTEGER :: j,l
+
 !
 !        Rotate until both first nodes match (each j corresponds to a 90deg rotation)
 !        -----------------------------------
-         DO j = 1, 4
-            IF(masterNodeIDs(1) == slaveNodeIDs(j)) EXIT
-         END DO
+      DO j = 1, 4
+         IF(masterNodeIDs(1) == slaveNodeIDs(j)) EXIT
+      END DO 
 !
 !        Check whether the orientation is same or opposite
 !        -------------------------------------------------
-         if ( masterNodeIDS(2) == slaveNodeIDs(NEXTNODE(j)) ) then
-            faceRotation = j - 1
-         else
-            faceRotation = j + 3
-         end if
+      if ( masterNodeIDS(2) == slaveNodeIDs(NEXTNODE(j)) ) then
+         faceRotation = j - 1
+      else
+         faceRotation = j + 3
+      end if
 
-      END FUNCTION faceRotation
+   END FUNCTION faceRotation
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      SUBROUTINE ConstructPeriodicFaces(self, useRelaxTol)
-      USE Physics
-      IMPLICIT NONE
+   INTEGER FUNCTION faceRotationNodes(masterNodeIDs, slaveNodeIDs)
+   IMPLICIT NONE
+   REAL(kind=RP), DIMENSION(4,3), intent(in) :: masterNodeIDs, slaveNodeIDs !< Node IDs
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+   integer, dimension(4), parameter :: NEXTNODE = (/2,3,4,1/)
+   INTEGER :: j,l
+   integer :: coord 
+   logical :: success 
+   real(kind=RP) :: tol 
+!
+!        Rotate until both first nodes match (each j corresponds to a 90deg rotation)
+!        -----------------------------------
+
+   coord=0
+   success=.FALSE.
+   tol=0.00000001_RP
+   DO j = 1, 4
+      coord=0
+      call CompareTwoNodesALL(masterNodeIDs(1,:), slaveNodeIDs(j,:), success, coord, tol)
+
+      IF (success ) then 
+         EXIT
+      END IF  
+   END DO 
+!
+!        Check whether the orientation is same or opposite
+!        -------------------------------------------------
+
+   coord=0
+   success=.FALSE.
+   call CompareTwoNodesALL(masterNodeIDs(2,:), slaveNodeIDs(NEXTNODE(j),:), success, coord, tol)
+   IF (success ) THEN 
+      faceRotationNodes = j - 1
+   else
+      faceRotationNodes = j + 3
+   end if
+END FUNCTION faceRotationNodes   
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   SUBROUTINE ConstructPeriodicFaces(self, useRelaxTol)
+   USE Physics
+   IMPLICIT NONE
 !
 !-------------------------------------------------------------------
 ! This subroutine looks for periodic boundary conditions. If they
@@ -532,8 +855,8 @@ MODULE HexMeshClass
 ! External variables
 !--------------------
 !
-      TYPE(HexMesh)              :: self
-      LOGICAL, intent(in)        :: useRelaxTol
+   TYPE(HexMesh)              :: self
+   LOGICAL, intent(in)        :: useRelaxTol
 
 !
 !--------------------
@@ -541,13 +864,13 @@ MODULE HexMeshClass
 !--------------------
 !
 !
-      REAL(KIND=RP)              :: x1(NDIM), x2(NDIM), edge_length(4), min_edge_length
-      LOGICAL                    :: master_matched(4), slave_matched(4), success, found
-      INTEGER                    :: coord, slaveNodeIDs(4), localCoord
+   REAL(KIND=RP)              :: x1(NDIM), x2(NDIM), edge_length(4), min_edge_length
+   LOGICAL                    :: master_matched(4), slave_matched(4), success, found
+   INTEGER                    :: coord, slaveNodeIDs(4), localCoord
 
-      INTEGER                    :: i,j,k,l
-      integer                    :: zIDplus, zIDMinus, iFace, jFace
-      character(len=LINE_LENGTH) :: associatedBname
+   INTEGER                    :: i,j,k,l
+   integer                    :: zIDplus, zIDMinus, iFace, jFace
+   character(len=LINE_LENGTH) :: associatedBname
 !
 !     --------------------------------------------
 !     Loop to find faces with the label "periodic"
@@ -558,37 +881,37 @@ MODULE HexMeshClass
 !     -----------------------------
 !
 
-      do zIDPlus = 1, size(self % zones)
+   do zIDPlus = 1, size(self % zones)
 !
 !        Cycle if the zone is not periodic
 !        ---------------------------------
-         if ( trim(BCs(zIDPlus) % bc % bcType) .ne. "periodic") cycle
+      if ( trim(BCs(zIDPlus) % bc % bcType) .ne. "periodic") cycle
 !
 !        Cycle if the zone has already marked to be deleted
 !        --------------------------------------------------
-         if ( self % zones(zIDPlus) % toBeDeleted ) cycle
+      if ( self % zones(zIDPlus) % toBeDeleted ) cycle
 !
 !        Reset the coordinate (changes when changing zones)
 !        --------------------------------------------------
-         coord = 0
+      coord = 0
 !
 !        Get the marker of the associated zone
 !        -------------------------------------
-         found = .false.
-         do zIDMinus = 1, size(self % zones)
-            call BCs(zIDPlus) % bc % GetPeriodicPair(associatedBname)
-            if ( trim(associatedBname) .eq. trim(self % zones(zIDMinus) % Name) ) then
-               found = .true.
-               self % zones(zIDMinus) % toBeDeleted = .true.
-               exit
-            end if
-         end do
-
-         if ( .not. found ) then
-            print*, 'coupled boundary "',trim(associatedBname),' for boundary "',trim(self % zones(zIDPlus) % Name),'" not found.'
-            errorMessage(STD_OUT)
-            error stop
+      found = .false.
+      do zIDMinus = 1, size(self % zones)
+         call BCs(zIDPlus) % bc % GetPeriodicPair(associatedBname)
+         if ( trim(associatedBname) .eq. trim(self % zones(zIDMinus) % Name) ) then
+            found = .true.
+            self % zones(zIDMinus) % toBeDeleted = .true.
+            exit
          end if
+      end do
+
+      if ( .not. found ) then
+         print*, 'coupled boundary "',trim(associatedBname),' for boundary "',trim(self % zones(zIDPlus) % Name),'" not found.'
+         errorMessage(STD_OUT)
+         error stop
+      end if
 !
 !        Loop faces in the periodic+ zone
 !        --------------------------------
@@ -596,11 +919,11 @@ ploop:   do iFace = 1, self % zones(zIDPlus) % no_of_faces
 !
 !           Get the face ID
 !           ---------------
-            i = self % zones(zIDPlus) % faces(iFace)
+         i = self % zones(zIDPlus) % faces(iFace)
 !
 !           Consider only HMESH_UNDEFINED faces
 !           -----------------------------------
-            if ( (self % faces(i) % faceType .ne. HMESH_UNDEFINED)) cycle ploop
+         if ( (self % faces(i) % faceType .ne. HMESH_UNDEFINED)) cycle ploop
 !
 !           Loop faces in the periodic- zone
 !           --------------------------------
@@ -608,11 +931,11 @@ mloop:      do jFace = 1, self % zones(zIDMinus) % no_of_faces
 !
 !              Get the face ID
 !              ---------------
-               j = self % zones(zIDMinus) % faces(jFace)
+            j = self % zones(zIDMinus) % faces(jFace)
 !
 !              Consider only HMESH_UNDEFINED faces
 !              -----------------------------------
-               if ( (self % faces(j) % faceType .ne. HMESH_UNDEFINED)) cycle mloop
+            if ( (self % faces(j) % faceType .ne. HMESH_UNDEFINED)) cycle mloop
 !
 !              ----------------------------------------------------------------------------------------
 !              The index i is a periodic+ face
@@ -621,123 +944,193 @@ mloop:      do jFace = 1, self % zones(zIDMinus) % no_of_faces
 !              in all the corners are shared. The non-shared coordinate has to be always the same one.
 !              ---------------------------------------------------------------------------------------
 !
-               master_matched(:)   = .FALSE.     ! True if the master corner finds a partner
-               slave_matched(:)    = .FALSE.     ! True if the slave corner finds a partner
+            master_matched(:)   = .FALSE.     ! True if the master corner finds a partner
+            slave_matched(:)    = .FALSE.     ! True if the slave corner finds a partner
 
-               ! compute minimum edge length to make matching tolerance relative to element size. Assumes that the periodic
-               ! coordinate of all the nodes not vary significativelly compared to the other two coordinates.
-               if (useRelaxTol) then
-                   edge_length(1)=NORM2(self % nodes(self % faces(i) % nodeIDs(1)) % x - self % nodes(self % faces(i) % nodeIDs(2)) % x)
-                   edge_length(2)=NORM2(self % nodes(self % faces(i) % nodeIDs(2)) % x - self % nodes(self % faces(i) % nodeIDs(3)) % x)
-                   edge_length(3)=NORM2(self % nodes(self % faces(i) % nodeIDs(3)) % x - self % nodes(self % faces(i) % nodeIDs(4)) % x)
-                   edge_length(4)=NORM2(self % nodes(self % faces(i) % nodeIDs(4)) % x - self % nodes(self % faces(i) % nodeIDs(1)) % x)
-                   min_edge_length=minval(edge_length)
-               end if
+            ! compute minimum edge length to make matching tolerance relative to element size. Assumes that the periodic
+            ! coordinate of all the nodes not vary significativelly compared to the other two coordinates.
+            if (useRelaxTol) then
+                  edge_length(1)=NORM2(self % nodes(self % faces(i) % nodeIDs(1)) % x - self % nodes(self % faces(i) % nodeIDs(2)) % x)
+                  edge_length(2)=NORM2(self % nodes(self % faces(i) % nodeIDs(2)) % x - self % nodes(self % faces(i) % nodeIDs(3)) % x)
+                  edge_length(3)=NORM2(self % nodes(self % faces(i) % nodeIDs(3)) % x - self % nodes(self % faces(i) % nodeIDs(4)) % x)
+                  edge_length(4)=NORM2(self % nodes(self % faces(i) % nodeIDs(4)) % x - self % nodes(self % faces(i) % nodeIDs(1)) % x)
+                  min_edge_length=minval(edge_length)
+            end if
 
-               if ( coord .eq. 0 ) then
+            if ( coord .eq. 0 ) then
 !
 !                 Check all coordinates
 !                 ---------------------
-                  do localCoord = 1, 3
-                     master_matched = .false.
-                     slave_matched = .false.
+               do localCoord = 1, 3
+                  master_matched = .false.
+                  slave_matched = .false.
 mastercoord:         DO k = 1, 4
-                        x1 = self%nodes(self%faces(i)%nodeIDs(k))%x
-slavecoord:             DO l = 1, 4
-                           IF (.NOT.slave_matched(l)) THEN
-                              x2 = self%nodes(self%faces(j)%nodeIDs(l))%x
-                              IF (useRelaxTol) THEN
-                                  CALL CompareTwoNodesRelax(x1, x2, master_matched(k), localCoord, min_edge_length)
-                              ELSE
-                                  CALL CompareTwoNodes(x1, x2, master_matched(k), localCoord)
-                              END IF
-                              IF (master_matched(k)) THEN
-                                 slave_matched(l) = .TRUE.
-                                 EXIT  slavecoord
-                              ENDIF
-                           ENDIF
-                        ENDDO    slavecoord
-                        IF (.NOT.master_matched(k)) EXIT mastercoord
-                     ENDDO mastercoord
-
-                     if ( all(master_matched) ) exit
-                  end do
-
-               else
-!
-!                 Check only the shared coordinates
-!                 ---------------------------------
-                  DO k = 1, 4
                      x1 = self%nodes(self%faces(i)%nodeIDs(k))%x
-                     DO l = 1, 4
+slavecoord:             DO l = 1, 4
                         IF (.NOT.slave_matched(l)) THEN
                            x2 = self%nodes(self%faces(j)%nodeIDs(l))%x
                            IF (useRelaxTol) THEN
-                               CALL CompareTwoNodesRelax(x1, x2, master_matched(k), coord, min_edge_length)
+                                 CALL CompareTwoNodesRelax(x1, x2, master_matched(k), localCoord, min_edge_length)
                            ELSE
-                               CALL CompareTwoNodes(x1, x2, master_matched(k), coord)
+                                 CALL CompareTwoNodes(x1, x2, master_matched(k), localCoord)
                            END IF
                            IF (master_matched(k)) THEN
                               slave_matched(l) = .TRUE.
-                              EXIT
+                              EXIT  slavecoord
                            ENDIF
                         ENDIF
-                     ENDDO
-                     IF (.NOT.master_matched(k)) EXIT
+                     ENDDO    slavecoord
+                     IF (.NOT.master_matched(k)) EXIT mastercoord
+                  ENDDO mastercoord
+
+                  if ( all(master_matched) ) exit
+               end do
+
+            else
+!
+!                 Check only the shared coordinates
+!                 ---------------------------------
+               DO k = 1, 4
+                  x1 = self%nodes(self%faces(i)%nodeIDs(k))%x
+                  DO l = 1, 4
+                     IF (.NOT.slave_matched(l)) THEN
+                        x2 = self%nodes(self%faces(j)%nodeIDs(l))%x
+                        IF (useRelaxTol) THEN
+                              CALL CompareTwoNodesRelax(x1, x2, master_matched(k), coord, min_edge_length)
+                        ELSE
+                              CALL CompareTwoNodes(x1, x2, master_matched(k), coord)
+                        END IF
+                        IF (master_matched(k)) THEN
+                           slave_matched(l) = .TRUE.
+                           EXIT
+                        ENDIF
+                     ENDIF
                   ENDDO
+                  IF (.NOT.master_matched(k)) EXIT
+               ENDDO
 
-               end if
+            end if
 
-               IF ( all(master_matched) ) THEN
-                  if ( coord .eq. 0 ) coord = localCoord
-                  self % faces(i) % boundaryName   = emptyBCName
-                  self % faces(i) % elementIDs(2)  = self % faces(j) % elementIDs(1)
-                  self % faces(i) % elementSide(2) = self % faces(j) % elementSide(1)
-                  self % faces(i) % FaceType       = HMESH_INTERIOR
-                  self % elements(self % faces(i) % elementIDs(1)) % boundaryName(self % faces(i) % elementSide(1)) = emptyBCName
-                  self % elements(self % faces(i) % elementIDs(2)) % boundaryName(self % faces(i) % elementSide(2)) = emptyBCName
+            IF ( all(master_matched) ) THEN
+               if ( coord .eq. 0 ) coord = localCoord
+               self % faces(i) % boundaryName   = emptyBCName
+               self % faces(i) % elementIDs(2)  = self % faces(j) % elementIDs(1)
+               self % faces(i) % elementSide(2) = self % faces(j) % elementSide(1)
+               self % faces(i) % FaceType       = HMESH_INTERIOR
+               self % elements(self % faces(i) % elementIDs(1)) % boundaryName(self % faces(i) % elementSide(1)) = emptyBCName
+               self % elements(self % faces(i) % elementIDs(2)) % boundaryName(self % faces(i) % elementSide(2)) = emptyBCName
 !
 !                 To obtain the face rotation, we traduce the right element node IDs to the left
 !                 ------------------------------------------------------------------------------
-                  do k = 1, 4
-                     x1 = self % nodes ( self % faces(i) % nodeIDs(k)) % x
-                     do l = 1, 4
-                        x2 = self % nodes ( self % faces(j) % nodeIDs(l) ) % x
-                        IF (useRelaxTol) THEN
-                            CALL CompareTwoNodesRelax(x1, x2, success, coord, min_edge_length)
-                        ELSE
-                            CALL CompareTwoNodes(x1, x2, success, coord)
-                        END IF
-                        if ( success ) then
-                           slaveNodeIDs(l) = self % faces(i) % nodeIDs(k)
-                        end if
-                     end do
+               do k = 1, 4
+                  x1 = self % nodes ( self % faces(i) % nodeIDs(k)) % x
+                  do l = 1, 4
+                     x2 = self % nodes ( self % faces(j) % nodeIDs(l) ) % x
+                     IF (useRelaxTol) THEN
+                           CALL CompareTwoNodesRelax(x1, x2, success, coord, min_edge_length)
+                     ELSE
+                           CALL CompareTwoNodes(x1, x2, success, coord)
+                     END IF
+                     if ( success ) then
+                        slaveNodeIDs(l) = self % faces(i) % nodeIDs(k)
+                     end if
                   end do
-                  self % faces(i) % rotation = faceRotation(self % faces(i) % nodeIDs, &
-                                                            slaveNodeIDs)
-                  cycle ploop
+               end do
+               self % faces(i) % rotation = faceRotation(self % faces(i) % nodeIDs, &
+                                                         slaveNodeIDs)
+               cycle ploop
 
-               ENDIF
-            end do   mloop ! periodic- faces
+            ENDIF
+         end do   mloop ! periodic- faces
 !
 !           If the code arrives here, the periodic+ face was not able to find a partner
 !           ---------------------------------------------------------------------------
-            print*, "When constructing periodic boundary conditions,"
-            write(STD_OUT,'(A,I0,A,I0,A,I0)') "Face ",i," in zone ",zIDPlus, &
-                  " was not able to find a partner. Element: ", self % faces(i) % elementIDs(1)
-            errorMessage(STD_OUT)
-            error stop
+         print*, "When constructing periodic boundary conditions,"
+         write(STD_OUT,'(A,I0,A,I0,A,I0)') "Face ",i," in zone ",zIDPlus, &
+               " was not able to find a partner. Element: ", self % faces(i) % elementIDs(1)
+         errorMessage(STD_OUT)
+         error stop
 
-            end do   ploop    ! periodic+ faces
-         end do               ! periodic+ zones
+         end do   ploop    ! periodic+ faces
+      end do               ! periodic+ zones
 
-         if ( MPI_Process % isRoot .and. useRelaxTol) print *, "Success: when matching all periodic boundary conditions with relaxed comparison"
+      if ( MPI_Process % isRoot .and. useRelaxTol) print *, "Success: when matching all periodic boundary conditions with relaxed comparison"
 
-      END SUBROUTINE ConstructPeriodicFaces
+   END SUBROUTINE ConstructPeriodicFaces
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      SUBROUTINE CompareTwoNodes(x1, x2, success, coord)
+   SUBROUTINE CompareTwoNodes(x1, x2, success, coord, tol)
+   IMPLICIT NONE
+!
+!-------------------------------------------------------------------
+! Comparison of two nodes. If two of the three coordinates are the
+! same, there is success. If there is success, the coordinate which
+! is not the same is saved. If the initial value of coord is not 0,
+! only that coordinate is checked.
+!-------------------------------------------------------------------
+!
+!
+!     --------------------
+!     External variables
+!     --------------------
+!
+   REAL(KIND=RP) :: x1(3)
+   REAL(KIND=RP) :: x2(3)
+   LOGICAL       :: success
+   INTEGER       :: coord
+   REAL(KIND=RP), OPTIONAL :: tol
+!
+!     --------------------
+!     Local variables
+!     --------------------
+!
+   INTEGER :: i
+   INTEGER :: counter
+
+   counter = 0
+
+   IF (coord == 0) THEN
+
+      DO i = 1,3
+         write(*,*) 'comparing', x1(i), 'with', x2(i)
+         IF ( AlmostEqual( x1(i), x2(i), tol ) ) THEN
+            counter = counter + 1
+         ELSE
+            coord = i
+         ENDIF
+      ENDDO
+
+      IF (counter.ge.2) THEN
+         success = .TRUE.
+      ELSE
+         success = .FALSE.
+      ENDIF
+
+   ELSE
+
+      DO i = 1,3
+         IF (i /= coord) THEN
+            IF ( AlmostEqual( x1(i), x2(i) ) ) THEN
+               counter = counter + 1
+            ENDIF
+         ENDIF
+      ENDDO
+
+      IF (counter.ge.2) THEN
+         success = .TRUE.
+      ELSE
+         success = .FALSE.
+      ENDIF
+
+   ENDIF
+
+
+   END SUBROUTINE CompareTwoNodes
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   SUBROUTINE CompareTwoNodesALL(x1, x2, success, coord, tol)
       IMPLICIT NONE
 !
 !-------------------------------------------------------------------
@@ -756,6 +1149,7 @@ slavecoord:             DO l = 1, 4
       REAL(KIND=RP) :: x2(3)
       LOGICAL       :: success
       INTEGER       :: coord
+      REAL(KIND=RP), OPTIONAL :: tol
 !
 !     --------------------
 !     Local variables
@@ -769,14 +1163,15 @@ slavecoord:             DO l = 1, 4
       IF (coord == 0) THEN
 
          DO i = 1,3
-            IF ( AlmostEqual( x1(i), x2(i) ) ) THEN
+            !write(*,*) 'comparing', x1(i), 'with', x2(i)
+            IF ( AlmostEqual( x1(i), x2(i), tol ) ) THEN
                counter = counter + 1
             ELSE
                coord = i
             ENDIF
          ENDDO
 
-         IF (counter.ge.2) THEN
+         IF (counter==3) THEN
             success = .TRUE.
          ELSE
             success = .FALSE.
@@ -801,12 +1196,11 @@ slavecoord:             DO l = 1, 4
       ENDIF
 
 
-      END SUBROUTINE CompareTwoNodes
-!
-!////////////////////////////////////////////////////////////////////////
-!
-      SUBROUTINE CompareTwoNodesRelax(x1, x2, success, coord, min_edge_length)
-      IMPLICIT NONE
+      END SUBROUTINE CompareTwoNodesALL
+
+
+   SUBROUTINE CompareTwoNodesRelax(x1, x2, success, coord, min_edge_length)
+   IMPLICIT NONE
 !
 !-------------------------------------------------------------------
 ! Similar to CompareTwoNodes, but the comparison of the two nodes
@@ -816,62 +1210,62 @@ slavecoord:             DO l = 1, 4
 !     External variables
 !     --------------------
 !
-      REAL(KIND=RP) :: x1(3)
-      REAL(KIND=RP) :: x2(3)
-      REAL(KIND=RP) :: min_edge_length
-      LOGICAL       :: success
-      INTEGER       :: coord
+   REAL(KIND=RP) :: x1(3)
+   REAL(KIND=RP) :: x2(3)
+   REAL(KIND=RP) :: min_edge_length
+   LOGICAL       :: success
+   INTEGER       :: coord
 !
 !     --------------------
 !     Local variables
 !     --------------------
 !
-      INTEGER :: i
-      INTEGER :: counter
+   INTEGER :: i
+   INTEGER :: counter
 
-      counter = 0
+   counter = 0
 
-      IF (coord == 0) THEN
+   IF (coord == 0) THEN
 
-         DO i = 1,3
-            IF ( AlmostEqualRelax( x1(i), x2(i) , min_edge_length ) ) THEN
-               counter = counter + 1
-            ELSE
-               coord = i
-            ENDIF
-         ENDDO
-
-         IF (counter.ge.2) THEN
-            success = .TRUE.
+      DO i = 1,3
+         IF ( AlmostEqualRelax( x1(i), x2(i) , min_edge_length ) ) THEN
+            counter = counter + 1
          ELSE
-            success = .FALSE.
+            coord = i
          ENDIF
+      ENDDO
 
+      IF (counter.ge.2) THEN
+         success = .TRUE.
       ELSE
-
-         DO i = 1,3
-            IF (i /= coord) THEN
-               IF ( AlmostEqualRelax( x1(i), x2(i) , min_edge_length ) ) THEN
-                  counter = counter + 1
-               ENDIF
-            ENDIF
-         ENDDO
-
-         IF (counter.ge.2) THEN
-            success = .TRUE.
-         ELSE
-            success = .FALSE.
-         ENDIF
-
+         success = .FALSE.
       ENDIF
 
-      END SUBROUTINE CompareTwoNodesRelax
+   ELSE
+
+      DO i = 1,3
+         IF (i /= coord) THEN
+            IF ( AlmostEqualRelax( x1(i), x2(i) , min_edge_length ) ) THEN
+               counter = counter + 1
+            ENDIF
+         ENDIF
+      ENDDO
+
+      IF (counter.ge.2) THEN
+         success = .TRUE.
+      ELSE
+         success = .FALSE.
+      ENDIF
+
+   ENDIF
+
+   END SUBROUTINE CompareTwoNodesRelax
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      SUBROUTINE DeletePeriodicminusfaces(self)
-      use MPI_Face_Class
-      IMPLICIT NONE
+   SUBROUTINE DeletePeriodicminusfaces(self)
+   use MPI_Face_Class
+   IMPLICIT NONE
 !
 !-------------------------------------------------------------------
 ! This subroutine looks for periodic boundary conditions. If they
@@ -885,206 +1279,294 @@ slavecoord:             DO l = 1, 4
 !     External variables
 !     --------------------
 !
-      TYPE(HexMesh) :: self
+   TYPE(HexMesh) :: self
 !
 !     --------------------
 !     Local variables
 !     --------------------
 !
-      TYPE(Face),ALLOCATABLE  :: dummy_faces(:)
-      INTEGER                 :: i, domain
-      INTEGER                 :: iFace, numberOfFaces
-      character(len=LINE_LENGTH)    :: bName
-      integer                 :: newFaceID(self % numberOfFaces)
+   TYPE(Face),ALLOCATABLE  :: dummy_faces(:)
+   INTEGER                 :: i, domain
+   INTEGER                 :: iFace, numberOfFaces
+   character(len=LINE_LENGTH)    :: bName
+   integer                 :: newFaceID(self % numberOfFaces)
 !
 !     This first loop marks which faces will not be deleted
 !     -----------------------------------------------------
-      newFaceID = -1
-      iFace = 0
-      ALLOCATE( dummy_faces(self % numberOfFaces) )
-      DO i = 1, self%numberOfFaces
-         if ( self % faces(i) % faceType .ne. HMESH_UNDEFINED ) then
-            iFace = iFace + 1
-            dummy_faces(iFace) = self%faces(i)
-            dummy_faces(iFace) % ID = iFace
-            newFaceID(i) = iFace
-         elseif (.not. self % zones(self % faces(i) % zone) % toBeDeleted) then
-            iFace = iFace + 1
-            dummy_faces(iFace) = self%faces(i)
-            dummy_faces(iFace) % ID = iFace
-            newFaceID(i) = iFace
-         ENDIF
-      ENDDO
+   newFaceID = -1
+   iFace = 0
+   ALLOCATE( dummy_faces(self % numberOfFaces) )
+   DO i = 1, self%numberOfFaces
+      if ( self % faces(i) % faceType .ne. HMESH_UNDEFINED ) then
+         iFace = iFace + 1
+         dummy_faces(iFace) = self%faces(i)
+         dummy_faces(iFace) % ID = iFace
+         newFaceID(i) = iFace
+      elseif (.not. self % zones(self % faces(i) % zone) % toBeDeleted) then
+         iFace = iFace + 1
+         dummy_faces(iFace) = self%faces(i)
+         dummy_faces(iFace) % ID = iFace
+         newFaceID(i) = iFace
+      ENDIF
+   ENDDO
 
-      numberOfFaces = iFace
+   numberOfFaces = iFace
 
-      DEALLOCATE(self%faces)
-      ALLOCATE(self%faces(numberOfFaces))
+   DEALLOCATE(self%faces)
+   ALLOCATE(self%faces(numberOfFaces))
 
-      self%numberOfFaces = numberOfFaces
+   self%numberOfFaces = numberOfFaces
 
-      DO i = 1, self%numberOfFaces
-         self%faces(i) = dummy_faces(i)
-      ENDDO
+   DO i = 1, self%numberOfFaces
+      self%faces(i) = dummy_faces(i)
+   ENDDO
 !
 !     Update MPI face IDs
 !     -------------------
-      if ( (MPI_Process % doMPIAction) .and. self % MPIfaces % Constructed ) then
-         do domain = 1, MPI_Process % nProcs
-            do iFace = 1, self % MPIfaces % faces(domain) % no_of_faces
-               self % MPIfaces % faces(domain) % faceIDs(iFace) = newFaceID(self % MPIfaces % faces(domain) % faceIDs(iFace))
-            end do
+   if ( (MPI_Process % doMPIAction) .and. self % MPIfaces % Constructed ) then
+      do domain = 1, MPI_Process % nProcs
+         do iFace = 1, self % MPIfaces % faces(domain) % no_of_faces
+            self % MPIfaces % faces(domain) % faceIDs(iFace) = newFaceID(self % MPIfaces % faces(domain) % faceIDs(iFace))
          end do
-      end if
+      end do
+   end if
 !
 !     Reassign zones
 !     -----------------
-      CALL ReassignZones(self % faces, self % zones)
+   CALL ReassignZones(self % faces, self % zones)
 
-      END SUBROUTINE DeletePeriodicminusfaces
+   END SUBROUTINE DeletePeriodicminusfaces
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexMesh_ProlongSolutionToFaces(self, nEqn, HO_Elements, element_mask, Level)
-         implicit none
-         class(HexMesh),    intent(inout) :: self
-         integer,           intent(in)    :: nEqn
-         logical, optional, intent(in)    :: HO_Elements
-         logical, optional, intent(in)    :: element_mask(:)
-		 integer, optional, intent(in)    :: Level
+   subroutine HexMesh_ProlongSolutionToFaces(self, nEqn, HO_Elements, element_mask, Level)
+      implicit none
+      class(HexMesh),    intent(inout) :: self
+      integer,           intent(in)    :: nEqn
+      logical, optional, intent(in)    :: HO_Elements
+      logical, optional, intent(in)    :: element_mask(:)
+      integer, optional, intent(in)    :: Level
 !
 !        ---------------
 !        Local variables
 !        ---------------
-!
-         integer  :: fIDs(6)
-         integer  :: eID, i, locLevel, lID
-         logical :: HOElements
-         logical  :: compute_element
+!     
+      integer  :: fIDs(6)
+      integer  :: eID, i, locLevel, lID
+      logical :: HOElements
+      logical  :: compute_element
 
-         if (present(HO_Elements)) then
-            HOElements = HO_Elements
-         else
-            HOElements = .false.
-         end if
+      if (present(HO_Elements)) then
+         HOElements = HO_Elements
+      else
+         HOElements = .false.
+      end if
 
-         if (HOElements) then
+      if (HOElements) then
 !$omp do schedule(runtime) private(eID, fIDs)
-            do i = 1, size(self % HO_Elements)
-               eID = self % HO_Elements(i)
-               compute_element = .true.
-               if (present(element_mask)) compute_element = element_mask(eID)
+         do i = 1, size(self % HO_Elements)
+            eID = self % HO_Elements(i)
+            compute_element = .true.
+            if (present(element_mask)) compute_element = element_mask(eID)
 
-               if (compute_element) then
-                  fIDs = self % elements(eID) % faceIDs
+            if (compute_element) then
+               fIDs = self % elements(eID) % faceIDs
+               if (.not.self % slidingMesh % active) then 
+                  if (.not.self%nonconforming) then
+                     call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                        self % faces(fIDs(1)),&
+                                                                        self % faces(fIDs(2)),&
+                                                                        self % faces(fIDs(3)),&
+                                                                        self % faces(fIDs(4)),&
+                                                                        self % faces(fIDs(5)),&
+                                                                        self % faces(fIDs(6)) )
+                  else 
+                     call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                        fFR=self % faces(fIDs(1)),&
+                                                                        fBK=self % faces(fIDs(2)),&
+                                                                        fBOT=self % faces(fIDs(3)),&
+                                                                        fR=self % faces(fIDs(4)),&
+                                                                        fT=self % faces(fIDs(5)),&
+                                                                        fL=self % faces(fIDs(6)),&
+                                                                        faces=self % faces )   
+                  end if 
+               else 
                   call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
-                                                                     self % faces(fIDs(1)),&
-                                                                     self % faces(fIDs(2)),&
-                                                                     self % faces(fIDs(3)),&
-                                                                     self % faces(fIDs(4)),&
-                                                                     self % faces(fIDs(5)),&
-                                                                     self % faces(fIDs(6)) )
-               endif
-            end do
+                                                                     fFR=self % faces(fIDs(1)),&
+                                                                     fBK=self % faces(fIDs(2)),&
+                                                                     fBOT=self % faces(fIDs(3)),&
+                                                                     fR=self % faces(fIDs(4)),&
+                                                                     fT=self % faces(fIDs(5)),&
+                                                                     fL=self % faces(fIDs(6)),&
+                                                                     faces=self % mortar_faces )  
+               end if 
+            endif
+         end do
 !$omp end do
-         else
-		    ! The following differentiation is needed due to problem on AnisFAS NS
-			if (present(Level)) then
-				locLevel = Level
+      else
+         ! The following differentiation is needed due to problem on AnisFAS NS
+if (present(Level)) then
+         locLevel = Level
 !$omp do schedule(runtime) private(fIDs, eID)
-				do lID = 1, self % MLRK % MLIter(locLevel,8)
-				   eID = self % MLRK % MLIter_eIDN(lID)
+         do lID = 1, self % MLRK % MLIter(locLevel,8)
+            eID = self % MLRK % MLIter_eIDN(lID)
 
-				   compute_element = .true.
-				   if (present(element_mask)) compute_element = element_mask(eID)
+            compute_element = .true.
+            if (present(element_mask)) compute_element = element_mask(eID)
 
-				   if (compute_element) then
-					  fIDs = self % elements(eID) % faceIDs
-					  call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
-																		 self % faces(fIDs(1)),&
-																		 self % faces(fIDs(2)),&
-																		 self % faces(fIDs(3)),&
-																		 self % faces(fIDs(4)),&
-																		 self % faces(fIDs(5)),&
-																		 self % faces(fIDs(6)) )
-				   endif
-				end do
+            if (compute_element) then
+               fIDs = self % elements(eID) % faceIDs
+               if (.not.self % slidingMesh % active) then
+                  if (.not.self%nonconforming) then
+                     call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                        self % faces(fIDs(1)),&
+                                                                        self % faces(fIDs(2)),&
+                                                                        self % faces(fIDs(3)),&
+                                                                        self % faces(fIDs(4)),&
+                                                                        self % faces(fIDs(5)),&
+                                                                        self % faces(fIDs(6)) )
+                  else
+                     call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                        fFR=self % faces(fIDs(1)),&
+                                                                        fBK=self % faces(fIDs(2)),&
+                                                                        fBOT=self % faces(fIDs(3)),&
+                                                                        fR=self % faces(fIDs(4)),&
+                                                                        fT=self % faces(fIDs(5)),&
+                                                                        fL=self % faces(fIDs(6)),&
+                                                                        faces=self % faces )
+                  end if
+               else
+                  call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                     fFR=self % faces(fIDs(1)),&
+                                                                     fBK=self % faces(fIDs(2)),&
+                                                                     fBOT=self % faces(fIDs(3)),&
+                                                                     fR=self % faces(fIDs(4)),&
+                                                                     fT=self % faces(fIDs(5)),&
+                                                                     fL=self % faces(fIDs(6)),&
+                                                                     faces=self % mortar_faces )
+               end if
+            endif
+         end do
 !$omp end do
-			else
+      else
 !$omp do schedule(runtime) private(fIDs)
-				do eID = 1, size(self % elements)
-											  
+         do eID = 1, size(self % elements)
+                                 
 
-				   compute_element = .true.
-				   if (present(element_mask)) compute_element = element_mask(eID)
+            compute_element = .true.
+            if (present(element_mask)) compute_element = element_mask(eID)
 
-				   if (compute_element) then
-					  fIDs = self % elements(eID) % faceIDs
-					  call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
-																		 self % faces(fIDs(1)),&
-																		 self % faces(fIDs(2)),&
-																		 self % faces(fIDs(3)),&
-																		 self % faces(fIDs(4)),&
-																		 self % faces(fIDs(5)),&
-																		 self % faces(fIDs(6)) )
-				   endif
-				end do
+            if (compute_element) then
+               fIDs = self % elements(eID) % faceIDs
+               if (.not.self % slidingMesh % active) then 
+                  if (.not.self%nonconforming) then
+                     call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                        self % faces(fIDs(1)),&
+                                                                        self % faces(fIDs(2)),&
+                                                                        self % faces(fIDs(3)),&
+                                                                        self % faces(fIDs(4)),&
+                                                                        self % faces(fIDs(5)),&
+                                                                        self % faces(fIDs(6)) )
+                  else 
+                     call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                        fFR=self % faces(fIDs(1)),&
+                                                                        fBK=self % faces(fIDs(2)),&
+                                                                        fBOT=self % faces(fIDs(3)),&
+                                                                        fR=self % faces(fIDs(4)),&
+                                                                        fT=self % faces(fIDs(5)),&
+                                                                        fL=self % faces(fIDs(6)),&
+                                                                        faces=self % faces )
+                  end if
+               else 
+                  call self % elements(eID) % ProlongSolutionToFaces(nEqn, &
+                                                                     fFR=self % faces(fIDs(1)),&
+                                                                     fBK=self % faces(fIDs(2)),&
+                                                                     fBOT=self % faces(fIDs(3)),&
+                                                                     fR=self % faces(fIDs(4)),&
+                                                                     fT=self % faces(fIDs(5)),&
+                                                                     fL=self % faces(fIDs(6)),&
+                                                                     faces=self % mortar_faces )
+               end if
+            endif
+         end do
 !$omp end do
-			end if 
-         end if
+      end if ! present(Level)
+      end if ! HOElements
 
-      end subroutine HexMesh_ProlongSolutionToFaces
+   end subroutine HexMesh_ProlongSolutionToFaces
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexMesh_ProlongGradientsToFaces(self, nGradEqn, Level)
-         implicit none
-         class(HexMesh),   intent(inout)  :: self
-         integer,          intent(in)     :: nGradEqn
-		 integer, optional, intent(in)    :: Level
+   subroutine HexMesh_ProlongGradientsToFaces(self, nGradEqn, Level)
+      implicit none
+      class(HexMesh),   intent(inout)  :: self
+      integer,          intent(in)     :: nGradEqn
+      integer, optional, intent(in)    :: Level
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer  :: fIDs(6)
-         integer  :: eID, lID
-		 integer  :: locLevel
-		 
-		 if (present(Level)) then
-            locLevel = Level
-			
+      integer  :: fIDs(6)
+      integer  :: eID, lID
+      integer  :: locLevel
+      
+      if (present(Level)) then
+         locLevel = Level
+      
 !$omp do schedule(runtime) private(fIDs, eID)
-			 do lID = 1, self % MLRK % MLIter(locLevel,8)
-				eID = self % MLRK % MLIter_eIDN(lID)
-				fIDs = self % elements(eID) % faceIDs
-				call self % elements(eID) % ProlongGradientsToFaces(nGradEqn, &
-																	self % faces(fIDs(1)),&
-																	self % faces(fIDs(2)),&
-																	self % faces(fIDs(3)),&
-																	self % faces(fIDs(4)),&
-																	self % faces(fIDs(5)),&
-																	self % faces(fIDs(6)) )
-			 end do
+         do lID = 1, self % MLRK % MLIter(locLevel,8)
+         eID = self % MLRK % MLIter_eIDN(lID)
+         fIDs = self % elements(eID) % faceIDs
+         call self % elements(eID) % ProlongGradientsToFaces(nGradEqn, &
+                                                self % faces(fIDs(1)),&
+                                                self % faces(fIDs(2)),&
+                                                self % faces(fIDs(3)),&
+                                                self % faces(fIDs(4)),&
+                                                self % faces(fIDs(5)),&
+                                                self % faces(fIDs(6)) )
+         end do
 !$omp end do
 
-         else
+      else
 !$omp do schedule(runtime)
-			 do eID = 1, size(self % elements)
-										   
-				fIDs = self % elements(eID) % faceIDs
-				call self % elements(eID) % ProlongGradientsToFaces(nGradEqn, &
-																	self % faces(fIDs(1)),&
-																	self % faces(fIDs(2)),&
-																	self % faces(fIDs(3)),&
-																	self % faces(fIDs(4)),&
-																	self % faces(fIDs(5)),&
-																	self % faces(fIDs(6)) )
-			 end do
+         do eID = 1, size(self % elements)
+                              
+         fIDs = self % elements(eID) % faceIDs
+         if (.not.self % slidingMesh % active) then 
+            if (.not.self%nonconforming) then 
+               call self % elements(eID) % ProlongGradientsToFaces(nGradEqn, &
+                                                               fFR=self % faces(fIDs(1)),&
+                                                               fBK=self % faces(fIDs(2)),&
+                                                               fBOT=self % faces(fIDs(3)),&
+                                                               fR=self % faces(fIDs(4)),&
+                                                               fT=self % faces(fIDs(5)),&
+                                                               fL=self % faces(fIDs(6)))
+            else 
+               call self % elements(eID) % ProlongGradientsToFaces(nGradEqn, &
+                                                               fFR=self % faces(fIDs(1)),&
+                                                               fBK=self % faces(fIDs(2)),&
+                                                               fBOT=self % faces(fIDs(3)),&
+                                                               fR=self % faces(fIDs(4)),&
+                                                               fT=self % faces(fIDs(5)),&
+                                                               fL=self % faces(fIDs(6)),&
+                                                               faces=self % faces )
+            end if 
+         else 
+            call self % elements(eID) % ProlongGradientsToFaces(nGradEqn, &
+                                                               fFR=self % faces(fIDs(1)),&
+                                                               fBK=self % faces(fIDs(2)),&
+                                                               fBOT=self % faces(fIDs(3)),&
+                                                               fR=self % faces(fIDs(4)),&
+                                                               fT=self % faces(fIDs(5)),&
+                                                               fL=self % faces(fIDs(6)),&
+                                                               faces=self % mortar_faces )
+         end if 
+         end do
 !$omp end do
-         end if
+      end if
 
-      end subroutine HexMesh_ProlongGradientsToFaces
+   end subroutine HexMesh_ProlongGradientsToFaces
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -1101,95 +1583,95 @@ slavecoord:             DO l = 1, 4
 !           eNzeta:  Polynomial order 3 for neighbor element
 !           eGlobID: Global ID of neighbor element
 !     ------------------------------------------------------------------------------------
-      subroutine HexMesh_UpdateMPIFacesPolynomial(self)
-         use MPI_Face_Class
-         implicit none
-         !-arguments----------------------------------------------------------
-         class(HexMesh)         :: self
+   subroutine HexMesh_UpdateMPIFacesPolynomial(self)
+      use MPI_Face_Class
+      implicit none
+      !-arguments----------------------------------------------------------
+      class(HexMesh)         :: self
 #ifdef _HAS_MPI_
-         !-local-variables----------------------------------------------------
-         integer            :: mpifID, fID, thisSide, domain, ierr
-         integer            :: i, j, k, counter
-		 integer 			:: nShared, nreqs, idx_send
-		 integer, allocatable :: all_reqs(:)
-         !--------------------------------------------------------------------
+      !-local-variables----------------------------------------------------
+      integer            :: mpifID, fID, thisSide, domain, ierr
+      integer            :: i, j, k, counter
+      integer 			:: nShared, nreqs, idx_send
+      integer, allocatable :: all_reqs(:)
+      !--------------------------------------------------------------------
 
-         if ( .not. MPI_Process % doMPIAction .or. .not. (self % MPIfaces % constructed)  ) return
+      if ( .not. MPI_Process % doMPIAction .or. .not. (self % MPIfaces % constructed)  ) return
 
-		 nShared = self % MPIfaces % nDomainShared
-		 ! Return when no faces are shared
-		 if (nShared <= 0) return
+      nShared = self % MPIfaces % nDomainShared
+      ! Return when no faces are shared
+      if (nShared <= 0) return
 
-		associate (MPIfaces => self % MPIfaces)
-		
-		 ! Allocate and initialize combined request array (recv slots first, then send slots)
-		 nreqs = 2 * nShared
-		 allocate(all_reqs(nreqs))
-		 all_reqs = MPI_REQUEST_NULL
+   associate (MPIfaces => self % MPIfaces)
+   
+      ! Allocate and initialize combined request array (recv slots first, then send slots)
+      nreqs = 2 * nShared
+      allocate(all_reqs(nreqs))
+      all_reqs = MPI_REQUEST_NULL
 !
 !        ***************************
 !        Perform the receive request
 !        ***************************
 !
-         do k = 1, nShared
-			domain = MPIfaces % listDomain(k)
-			if (MPIfaces % faces(domain) % no_of_faces > 0) then
-				call MPIfaces % faces(domain) % RecvN(domain, all_reqs(k))
-			end if 
-         end do
+      do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces > 0) then
+         call MPIfaces % faces(domain) % RecvN(domain, all_reqs(k))
+      end if 
+      end do
 !
 !        *********************
 !        Send faces polynomial
 !        *********************
 !
-		 idx_send = nShared + 1
-         do k = 1, nShared
-			domain = MPIfaces % listDomain(k)
-			
-			if (MPIfaces % faces(domain) % no_of_faces <= 0) then
-				idx_send = idx_send + 1
-				cycle
-			end if
+      idx_send = nShared + 1
+      do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      
+      if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+         idx_send = idx_send + 1
+         cycle
+      end if
 !
 !           -----------------------
 !           Gather faces polynomial
 !           -----------------------
 !
-            counter = 1
-			
-            do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
-               fID = MPIfaces % faces(domain) % faceIDs(mpifID)
-               thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
-			   
-               associate( f => self % faces(fID))
-               associate( e => self % elements(maxval(f % elementIDs)) )
-               MPIfaces % faces(domain) % Nsend(counter:counter+1  ) = e % Nxyz(axisMap(:,f % elementSide(thisSide)))
-               MPIfaces % faces(domain) % Nsend(counter+2:counter+4) = e % Nxyz
-               MPIfaces % faces(domain) % Nsend(counter+5)           = e % globID
+         counter = 1
+      
+         do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+            fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+         
+            associate( f => self % faces(fID))
+            associate( e => self % elements(maxval(f % elementIDs)) )
+            MPIfaces % faces(domain) % Nsend(counter:counter+1  ) = e % Nxyz(axisMap(:,f % elementSide(thisSide)))
+            MPIfaces % faces(domain) % Nsend(counter+2:counter+4) = e % Nxyz
+            MPIfaces % faces(domain) % Nsend(counter+5)           = e % globID
 
-               counter = counter + 6
-               end associate
-               end associate
-            end do
+            counter = counter + 6
+            end associate
+            end associate
+         end do
 !
 !           ---------------------
 !           Send faces polynomial
 !           ---------------------
 !
-            call self % MPIfaces % faces(domain) % SendN(domain, all_reqs(idx_send))
-			idx_send = idx_send + 1
-         end do
+         call self % MPIfaces % faces(domain) % SendN(domain, all_reqs(idx_send))
+      idx_send = idx_send + 1
+      end do
 !
 !        ********************************************
 !        Wait for all posted operations (recv + send)
 !        ********************************************
 !
-		 call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
-		 
-		 deallocate(all_reqs)
-		end associate
+      call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+      
+      deallocate(all_reqs)
+   end associate
 #endif
-      end subroutine HexMesh_UpdateMPIFacesPolynomial
+   end subroutine HexMesh_UpdateMPIFacesPolynomial
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -1355,6 +1837,7 @@ slavecoord:             DO l = 1, 4
                fID = MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
                associate(f => self % faces(fID))
+
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   MPIfaces % faces(domain) % U_xyzsend(counter:counter+nEqn-1) = f % storage(thisSide) % U_x(1:nEqn,i,j)
                   counter = counter + nEqn
@@ -1486,6 +1969,7 @@ slavecoord:             DO l = 1, 4
 		end associate
 #endif
       end subroutine HexMesh_UpdateMPIFacesAviscFlux
+
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -1582,12 +2066,313 @@ slavecoord:             DO l = 1, 4
       end subroutine HexMesh_UpdateMPIFacesBaseSolution
 #endif
 !
+      !////////////////////////////////////////////////////////////////////////
+!
+subroutine HexMesh_UpdateMPIFacesMortarFlux(self, nEqn)
+         use MPI_Face_Class
+         implicit none
+         class(HexMesh)         :: self
+         integer,    intent(in) :: nEqn
+#ifdef _HAS_MPI_
+         integer            :: mpifID, fID, thisSide, domain
+         integer            :: i, j, counter, k, ierr
+         integer            :: nShared, nreqs, idx_send
+         integer, allocatable :: all_reqs(:)
+
+         if ( .not. MPI_Process % doMPIAction ) return
+
+         nShared = self % MPIfaces % nDomainShared
+         if (nShared <= 0) return
+
+         associate (MPIfaces => self % MPIfaces)
+
+         nreqs = 2 * nShared
+         allocate(all_reqs(nreqs))
+         all_reqs = MPI_REQUEST_NULL
+!
+!        Receive
+!
+         do k = 1, nShared
+            domain = MPIfaces % listDomain(k)
+            if (MPIfaces % faces(domain) % no_of_faces > 0) then
+               call MPIfaces % faces(domain) % RecvMortarFlux(domain, nEqn, all_reqs(k))
+            end if
+         end do
+!
+!        Send
+!
+         idx_send = nShared + 1
+         do k = 1, nShared
+            domain = MPIfaces % listDomain(k)
+            if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+               idx_send = idx_send + 1
+               cycle
+            end if
+
+            counter = 1
+            do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+               fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+               thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+               associate(f => self % faces(fID))
+               if (f % MortarType == MORTAR_SMALL4) then
+                  do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                     MPIfaces % faces(domain) % Flux_M_Send(counter:counter+nEqn-1) = &
+                        f % storage(1) % MortarFlux(:,i,j)
+                     counter = counter + nEqn
+                  end do               ; end do
+               end if
+               end associate
+            end do
+
+            call MPIfaces % faces(domain) % SendMortarFlux(domain, nEqn, all_reqs(idx_send))
+            idx_send = idx_send + 1
+         end do
+
+         call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+         deallocate(all_reqs)
+         end associate
+#endif
+end subroutine HexMesh_UpdateMPIFacesMortarFlux
+!
+!////////////////////////////////////////////////////////////////////////
+!
+subroutine HexMesh_UpdateMPIFacesGradMortarFlux(self, nEqn)
+   use MPI_Face_Class
+   implicit none
+   class(HexMesh)         :: self
+   integer,    intent(in) :: nEqn
+#ifdef _HAS_MPI_
+   integer            :: mpifID, fID, thisSide, domain
+   integer            :: i, j, counter, k, ierr
+   integer            :: nShared, nreqs, idx_send
+   integer, allocatable :: all_reqs(:)
+
+   if ( .not. MPI_Process % doMPIAction ) return
+
+   nShared = self % MPIfaces % nDomainShared
+   if (nShared <= 0) return
+
+   associate (MPIfaces => self % MPIfaces)
+
+   nreqs = 2 * nShared
+   allocate(all_reqs(nreqs))
+   all_reqs = MPI_REQUEST_NULL
+!
+!        Receive
+!
+   do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces > 0) then
+         call MPIfaces % faces(domain) % RecvMortarGradFlux(domain, nEqn, all_reqs(k))
+      end if
+   end do
+!
+!        Send
+!
+   idx_send = nShared + 1
+   do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+         idx_send = idx_send + 1
+         cycle
+      end if
+
+      counter = 1
+      do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+         fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+         thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+         associate(f => self % faces(fID))
+         if (f % MortarType == MORTAR_SMALL4) then
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
+                  f % storage(1) % GradMortarFlux(:,1,i,j)
+               counter = counter + nEqn
+            end do               ; end do
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
+                  f % storage(1) % GradMortarFlux(:,2,i,j)
+               counter = counter + nEqn
+            end do               ; end do
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
+                  f % storage(1) % GradMortarFlux(:,3,i,j)
+               counter = counter + nEqn
+            end do               ; end do
+         end if
+         end associate
+      end do
+
+      call MPIfaces % faces(domain) % SendMortarGradFlux(domain, nEqn, all_reqs(idx_send))
+      idx_send = idx_send + 1
+   end do
+
+   call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+
+   deallocate(all_reqs)
+   
+   end associate
+#endif
+end subroutine HexMesh_UpdateMPIFacesGradMortarFlux
+!
+!////////////////////////////////////////////////////////////////////////
+!
+subroutine HexMesh_UpdateMPIFacesMortarFluxJac(self, nEqn)
+         use MPI_Face_Class
+         implicit none
+         class(HexMesh)         :: self
+         integer,    intent(in) :: nEqn
+#ifdef _HAS_MPI_
+#ifdef NAVIERSTOKES
+         integer            :: mpifID, fID, thisSide, domain
+         integer            :: i, j, counter, k, ierr
+         integer            :: nShared, nreqs, idx_send
+         integer, allocatable :: all_reqs(:)
+
+         if ( .not. MPI_Process % doMPIAction ) return
+
+         nShared = self % MPIfaces % nDomainShared
+         if (nShared <= 0) return
+
+         associate (MPIfaces => self % MPIfaces)
+
+         nreqs = 2 * nShared
+         allocate(all_reqs(nreqs))
+         all_reqs = MPI_REQUEST_NULL
+!
+!        Receive
+!
+         do k = 1, nShared
+            domain = MPIfaces % listDomain(k)
+            if (MPIfaces % faces(domain) % no_of_faces > 0) then
+               call MPIfaces % faces(domain) % RecvMortarFluxJac(domain, nEqn, all_reqs(k))
+            end if
+         end do
+!
+!        Send
+!
+         idx_send = nShared + 1
+         do k = 1, nShared
+            domain = MPIfaces % listDomain(k)
+            if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+               idx_send = idx_send + 1
+               cycle
+            end if
+
+            counter = 1
+            do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+               fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+               thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+               associate(f => self % faces(fID))
+               if (f % MortarType == MORTAR_SMALL4) then
+                  do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                     MPIfaces % faces(domain) % FluxJac_M_Send(counter:counter+nEqn*nEqn-1) = &
+                         reshape( f % storage(1) % MortarFlux_J(:,:,i,j), [nEqn*nEqn] )
+                     counter = counter + nEqn*nEqn
+                  end do               ; end do
+               end if
+               end associate
+            end do
+
+            call MPIfaces % faces(domain) % SendMortarFluxJac(domain, nEqn, all_reqs(idx_send))
+            idx_send = idx_send + 1
+         end do
+
+         call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+         deallocate(all_reqs)
+         end associate
+#endif
+#endif 
+end subroutine HexMesh_UpdateMPIFacesMortarFluxJac
+!
+!////////////////////////////////////////////////////////////////////////
+!
+subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac(self, nEqn)
+   use MPI_Face_Class
+   implicit none
+   class(HexMesh)         :: self
+   integer,    intent(in) :: nEqn
+#ifdef _HAS_MPI_
+#ifdef NAVIERSTOKES
+   integer            :: mpifID, fID, thisSide, domain
+   integer            :: i, j, counter, k, ierr
+   integer            :: nShared, nreqs, idx_send
+   integer, allocatable :: all_reqs(:)
+
+   if ( .not. MPI_Process % doMPIAction ) return
+
+   nShared = self % MPIfaces % nDomainShared
+   if (nShared <= 0) return
+
+   associate (MPIfaces => self % MPIfaces)
+
+   nreqs = 2 * nShared
+   allocate(all_reqs(nreqs))
+   all_reqs = MPI_REQUEST_NULL
+!
+!        Receive
+!
+   do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces > 0) then
+         call MPIfaces % faces(domain) % RecvMortarGradFluxJac(domain, nEqn, all_reqs(k))
+      end if
+   end do
+!
+!        Send
+!
+   idx_send = nShared + 1
+   do k = 1, nShared
+      domain = MPIfaces % listDomain(k)
+      if (MPIfaces % faces(domain) % no_of_faces <= 0) then
+         idx_send = idx_send + 1
+         cycle
+      end if
+
+      counter = 1
+      do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
+         fID = MPIfaces % faces(domain) % faceIDs(mpifID)
+         thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+         associate(f => self % faces(fID))
+         if (f % MortarType == MORTAR_SMALL4) then
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFluxJac_M_Send(counter:counter+nEqn*nEqn-1) = &
+                  reshape( f % storage(1) % GradMortarFlux_J(:,:,1,i,j), [nEqn*nEqn] )
+               counter = counter + nEqn*nEqn
+            end do               ; end do
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFluxJac_M_Send(counter:counter+nEqn*nEqn-1) = &
+                  reshape( f % storage(1) % GradMortarFlux_J(:,:,2,i,j), [nEqn*nEqn] )
+               counter = counter + nEqn*nEqn
+            end do               ; end do
+            do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+               MPIfaces % faces(domain) % GradFluxJac_M_Send(counter:counter+nEqn*nEqn-1) = &
+                  reshape( f % storage(1) % GradMortarFlux_J(:,:,3,i,j), [nEqn*nEqn] )
+               counter = counter + nEqn*nEqn
+            end do               ; end do
+         end if
+         end associate
+      end do
+
+      call MPIfaces % faces(domain) % SendMortarGradFluxJac(domain, nEqn, all_reqs(idx_send))
+      idx_send = idx_send + 1
+   end do
+
+   call MPI_Waitall(nreqs, all_reqs, MPI_STATUSES_IGNORE, ierr)
+
+   deallocate(all_reqs)
+   
+   end associate
+#endif
+#endif 
+end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
+!
 !////////////////////////////////////////////////////////////////////////
 !
 !     --------------------------------------------------------------------------------
 !     Subroutine to gather the MPIFaces solution Q (From MPI Storage to Faces Storage)
 !     --------------------------------------------------------------------------------
       subroutine HexMesh_GatherMPIFacesSolution(self, nEqn)
+         use FaceClass
          implicit none
          !-arguments----------------------------------------------------------
          class(HexMesh)    :: self
@@ -1619,6 +2404,9 @@ slavecoord:             DO l = 1, 4
                   f % storage(otherSide(thisSide)) % Q(1:nEqn,i,j) = self % MPIfaces % faces(domain) % Qrecv(counter:counter+nEqn-1)
                   counter = counter + nEqn
                end do               ; end do
+               if (f % MortarType == MORTAR_SMALL4) then 
+                  call f % Interpolatebig2small(nEqn, f)
+               end if 
                end associate
             end do
          end do
@@ -1638,7 +2426,7 @@ slavecoord:             DO l = 1, 4
 #ifdef _HAS_MPI_
          !-local-variables----------------------------------------------------
          integer            :: mpifID, fID, thisSide, domain
-         integer            :: i, j, k, counter
+         integer            :: i, j, k, l, counter
          integer, parameter :: otherSide(2) = (/2,1/)
          !--------------------------------------------------------------------
 
@@ -1672,6 +2460,12 @@ slavecoord:             DO l = 1, 4
                   f % storage(otherSide(thisSide)) % U_z(1:nEqn,i,j) = self % MPIfaces % faces(domain) % U_xyzrecv(counter:counter+nEqn-1)
                   counter = counter + nEqn
                end do               ; end do
+
+               if (f % MortarType == MORTAR_SMALL4) then 
+                   do l=1,3
+                      call f % Interpolatebig2small(nEqn, f,grad=l)
+                   end do 
+                end if 
                end associate
             end do
          end do
@@ -1760,12 +2554,231 @@ slavecoord:             DO l = 1, 4
                   f % storage(otherSide(thisSide)) % Qbase(:,i,j) = self % MPIfaces % faces(domain) % QBaseRecv(counter:counter+nEqn-1)
                   counter = counter + nEqn
                end do               ; end do
+               if (f % MortarType == MORTAR_SMALL4) then
+                  call f % Interpolatebig2smallacoustic(nEqn, f)
+               end if 
                end associate
             end do
          end do
 #endif
       end subroutine HexMesh_GatherMPIFacesBaseSolution
 #endif
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   subroutine HexMesh_GatherMPIFacesMortarFlux(self, nEqn)
+      implicit none
+      class(HexMesh)      :: self
+      integer, intent(in) :: nEqn
+#ifdef _HAS_MPI_
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+      integer            :: mpifID, fID, thisSide, domain
+      integer            :: i, j, counter,p, ierr, k
+      integer, parameter :: otherSide(2) = [2, 1]
+
+      if ( .not. MPI_Process % doMPIAction ) return
+!
+!        ***************
+!        Gather solution
+!        ***************
+!
+      do k = 1, self % MPIfaces % nDomainShared
+         domain = self % MPIfaces % listDomain(k)
+         if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle
+         counter = 1
+
+         do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+            fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            associate(f => self % faces(fID))
+               if (f%MortarType == MORTAR_BIG) then 
+
+                  associate(fStar => f % storage(1) % Fstar)
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        fStar(:,i,j) = fStar(:,i,j) + &
+                           self % MPIfaces % faces(domain) % Flux_M_Recv(counter:counter+nEqn-1)
+                        counter = counter + nEqn
+                     end do               ; end do
+
+                  end associate
+               end if 
+            end associate
+         end do
+
+      end do
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+
+#endif
+   end subroutine HexMesh_GatherMPIFacesMortarFlux
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   subroutine HexMesh_GatherMPIFacesGradMortarFlux(self, nEqn)
+      implicit none
+      class(HexMesh)      :: self
+      integer, intent(in) :: nEqn
+#ifdef _HAS_MPI_
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+      integer            :: mpifID, fID, thisSide, domain
+      integer            :: i, j, counter, d, ierr, k
+      integer, parameter :: otherSide(2) = [2, 1]
+
+      if ( .not. MPI_Process % doMPIAction ) return
+!
+!        ***************
+!        Gather solution
+!        ***************
+!
+      do k = 1, self % MPIfaces % nDomainShared
+         domain = self % MPIfaces % listDomain(k)
+         if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle
+
+         counter = 1
+         do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+            fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            associate(f => self % faces(fID))
+               if (f%MortarType == MORTAR_BIG) then 
+
+                  associate(unStar => f % storage(1) % unStar)
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
+                        unStar(:,1,i,j) = unStar(:,1,i,j) + &
+                           self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
+                        counter = counter + nEqn
+                     end do               ; end do       
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
+                        unStar(:,2,i,j) = unStar(:,2,i,j) + &
+                           self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
+                        counter = counter + nEqn
+                     end do               ; end do  
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1) 
+                        unStar(:,3,i,j) = unStar(:,3,i,j) + &
+                           self % MPIfaces % faces(domain) % GradFlux_M_Recv(counter:counter+nEqn-1)
+                        counter = counter + nEqn
+                     end do               ; end do  
+
+                  end associate
+         end if 
+            end associate
+         end do
+      end do
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+#endif
+   end subroutine HexMesh_GatherMPIFacesGradMortarFlux
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   subroutine HexMesh_GatherMPIFacesMortarFluxJac(self, nEqn)
+      implicit none
+      class(HexMesh)      :: self
+      integer, intent(in) :: nEqn
+#ifdef _HAS_MPI_
+#ifdef NAVIERSTOKES
+   !
+   !        ---------------
+   !        Local variables
+   !        ---------------
+   !
+      integer            :: mpifID, fID, thisSide, domain
+      integer            :: i, j, counter,p, ierr, k
+      integer, parameter :: otherSide(2) = [2, 1]
+   
+      if ( .not. MPI_Process % doMPIAction ) return
+   !
+   !        ***************
+   !        Gather solution
+   !        ***************
+   !
+      do k = 1, self % MPIfaces % nDomainShared
+         domain = self % MPIfaces % listDomain(k)
+         if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle
+         counter = 1
+   
+         do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+            fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            associate(f => self % faces(fID))
+               if (f%MortarType == MORTAR_BIG) then 
+                  associate(dFStar_dqEl => f % storage(1) % dFStar_dqEl)
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        dFStar_dqEl(:,:,i,j,2) = dFStar_dqEl(:,:,i,j,2) + reshape( &
+                             self % MPIfaces % faces(domain) % FluxJac_M_Recv(counter:counter+nEqn*nEqn-1), &
+                             [nEqn,nEqn] )
+                        counter = counter + nEqn*nEqn
+                     end do               ; end do
+                  end associate
+               end if 
+            end associate
+         end do
+   
+      end do
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+   
+#endif
+#endif 
+   end subroutine HexMesh_GatherMPIFacesMortarFluxJac
+!
+!////////////////////////////////////////////////////////////////////////
+!
+   subroutine HexMesh_GatherMPIFacesGradMortarFluxJac(self, nEqn)
+      implicit none
+      class(HexMesh)      :: self
+      integer, intent(in) :: nEqn
+#ifdef _HAS_MPI_
+#ifdef NAVIERSTOKES
+      integer            :: mpifID, fID, thisSide, domain
+      integer            :: i, j, counter, d, ierr, k
+      integer, parameter :: otherSide(2) = [2, 1]
+   
+      if ( .not. MPI_Process % doMPIAction ) return
+   
+      do k = 1, self % MPIfaces % nDomainShared
+         domain = self % MPIfaces % listDomain(k)
+         if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle
+   
+         counter = 1
+         do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
+            fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
+            thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+            associate(f => self % faces(fID))
+               if (f%MortarType == MORTAR_BIG) then 
+   
+                  associate(dFv_dGradQEl => f % storage(1) % dFv_dGradQEl)
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        dFv_dGradQEl(:,:,1,i,j,2) = dFv_dGradQEl(:,:,1,i,j,2) + reshape( &
+                             self % MPIfaces % faces(domain) % GradFluxJac_M_Recv(counter:counter+nEqn*nEqn-1), &
+                             [nEqn,nEqn] )
+                        counter = counter + nEqn*nEqn
+                     end do               ; end do
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        dFv_dGradQEl(:,:,2,i,j,2) = dFv_dGradQEl(:,:,2,i,j,2) + reshape( &
+                             self % MPIfaces % faces(domain) % GradFluxJac_M_Recv(counter:counter+nEqn*nEqn-1), &
+                             [nEqn,nEqn] )
+                        counter = counter + nEqn*nEqn
+                     end do               ; end do
+                     do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
+                        dFv_dGradQEl(:,:,3,i,j,2) = dFv_dGradQEl(:,:,3,i,j,2) + reshape( &
+                             self % MPIfaces % faces(domain) % GradFluxJac_M_Recv(counter:counter+nEqn*nEqn-1), &
+                             [nEqn,nEqn] )
+                        counter = counter + nEqn*nEqn
+                     end do               ; end do
+                  end associate
+               end if 
+            end associate
+         end do
+      end do
+      call MPI_Barrier(MPI_COMM_WORLD, ierr)
+#endif
+#endif
+   end subroutine HexMesh_GatherMPIFacesGradMortarFluxJac
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -1899,6 +2912,14 @@ slavecoord:             DO l = 1, 4
       write(STD_OUT,'(30X,A,A28,I10)') "->" , "Number of boundary faces: " , no_of_bdry_faces
       write(STD_OUT,'(30X,A,A28,I10)') "->" , "Order of curved faces: " , bFaceOrder
       write(STD_OUT,'(30X,A,A28,L10)') "->" , "2D extruded mesh: " , self % meshIs2D
+      if (self % nonconforming) then
+         write(STD_OUT,'(/)')
+         call Section_Header("Non-conforming interfaces")
+         write(STD_OUT,'(/)')
+         write(STD_OUT,'(30X,A,A28,I10)') "->", "Master mortars: ", self % nMasterMortars
+         write(STD_OUT,'(30X,A,A28,I10)') "->", "Slave faces: ",    self % nSlaveFaces
+      end if
+
 
 !     Describe the zones
 !     ------------------
@@ -2403,88 +3424,135 @@ slavecoord:             DO l = 1, 4
          integer               , intent(in)    :: nodes
          integer, optional     , intent(in)    :: facesList(:)
          !-local-variables----------------------------------------------
-         integer  :: fID, SideL, SideR, side, counter
+         integer  :: fID, SideL, SideR, side, counter, l
          integer  :: NelL(2), NelR(2)    ! Polynomial orders on left and right of a face
          integer  :: Nel(2,2)            ! Polynomial orders on left and right of a face - for MPI
          integer  :: globID
          integer  :: Nxyz(NDIM)
          integer  :: domain, MPI_NDOFS(MPI_Process % nProcs), mpifID
+         integer  :: MPI_MNDOFS(MPI_Process % nProcs)
          integer  :: num_of_Faces, ii, k
          integer, parameter :: other(2) = [2, 1]
+         real(kind=RP) :: offset(2)
          !--------------------------------------------------------------
 
-         if ( present(facesList) ) then
-            num_of_Faces = size(facesList)
-         else
-            num_of_Faces = size(self % faces)
-         end if
+        if ( present(facesList) ) then
+           num_of_Faces = size(facesList)
+        else
+           num_of_Faces = size(self % faces)
+        end if
 !
 !        ---------------------------------------------------------------------------
 !        Send polynomial orders across MPI faces
 !           -> Currently doing for all MPI faces (not taking into account facesList)
 !        ---------------------------------------------------------------------------
 !
-         if (mpi_partition % Constructed) call self % UpdateMPIFacesPolynomial
+        if (mpi_partition % Constructed) call self % UpdateMPIFacesPolynomial
 !
 !        ------------------------
 !        Link faces with elements
 !        ------------------------
 !
-         do ii = 1, num_of_Faces
+        do ii = 1, num_of_Faces
 
-            if ( present(facesList) ) then
-               fID = facesList(ii)
-            else
-               fID = ii
-            end if
-            associate (  f => self % faces(fID)   )
+           if ( present(facesList) ) then
+              fID = facesList(ii)
+           else
+              fID = ii
+           end if
+           associate (  f => self % faces(fID)   )
 
-            select case (f % faceType)
-            case (HMESH_INTERIOR)
-               associate(eL => self % elements(f % elementIDs(1)), &
-                         eR => self % elements(f % elementIDs(2))   )
+           select case (f % faceType)
+           case (HMESH_INTERIOR)
+              select case (f % MortarType)
+              case (0, 2)   
+               if (f % elementIDs(1)==0) then 
+                  associate(eR => self % elements(f % elementIDs(2))   )
+                     NelR = eR % Nxyz(axisMap(:, f % elementSide(2)))
+                     NelL = NelR
+                  end associate 
+               end if 
+               if (f % elementIDs(2)==0) then 
+                  associate(eL => self % elements(f % elementIDs(1))   )
+                     NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
+                     NelR = NelL
+                  end associate 
+                  end if 
+               if ((f % elementIDs(1) .ne. 0) .and.  (f % elementIDs(2) .ne. 0) ) then 
+                 associate(eL => self % elements(f % elementIDs(1)), &
+                             eR => self % elements(f % elementIDs(2))   )
+!
+!                 Get polynomial orders of elements
+!                 ---------------------------------
+                 NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
+                 NelR = eR % Nxyz(axisMap(:, f % elementSide(2)))
+!
+!                 Fill connectivity of element type
+!                 ---------------------------------
+                 SideL = f % elementSide(1)
+                 SideR = f % elementSide(2)
+!
+!                 Construct connectivity
+!                 ----------------------
+
+                 eL % NumberOfConnections(SideL) = 1
+                 call eL % Connection(SideL) % Construct(eR % GlobID, eR % Nxyz)
+
+                 eR % NumberOfConnections(SideR) = 1
+                 call eR % Connection(SideR) % Construct(eL % GlobID, eL % Nxyz)
+                 end associate
+               end if 
+                 if (f % MortarType == MORTAR_SMALL4) then 
+                 offset(1)=0.5_RP
+                 offset(2)=0.5_RP
+                  call f % LinkWithElements(NelL, NelR, nodes, offset)
+   
+                 elseif (f % MortarType == MORTAR_NONE) then 
+                 call f % LinkWithElements(NelL, NelR, nodes)
+                 end if 
+               
+              case (1, 3) 
+             
+                 associate(eL => self % elements(f % elementIDs(1)))
+!
+!                 Get polynomial orders of elements
+!                 ---------------------------------
+                 NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
+                 NelR = NelL
+   
+                 end associate
+                  if (NelL(1)==-1 .or. NelL(2)==-1) then 
+                     if (f%MortarType == MORTAR_SLIDING) then 
+                        associate(eL => self % elements(f % elementIDs(2)))
+                           NelL = eL % Nxyz(axisMap(:, f % elementSide(2)))
+                           NelR = NelL
+                        end associate 
+                     end if 
+                  end if 
+                 call f % LinkWithElements(NelL, NelR, nodes)   
+
+              end select  
+
+           case (HMESH_BOUNDARY)
+              associate(eL => self % elements(f % elementIDs(1)))
 !
 !              Get polynomial orders of elements
 !              ---------------------------------
-               NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
-               NelR = eR % Nxyz(axisMap(:, f % elementSide(2)))
-!
-!              Fill connectivity of element type
-!              ---------------------------------
-               SideL = f % elementSide(1)
-               SideR = f % elementSide(2)
-!
-!              Construct connectivity
-!              ----------------------
-               eL % NumberOfConnections(SideL) = 1
-               call eL % Connection(SideL) % Construct(eR % GlobID, eR % Nxyz)
+              NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
+              NelR = NelL
 
-               eR % NumberOfConnections(SideR) = 1
-               call eR % Connection(SideR) % Construct(eL % GlobID, eL % Nxyz)
-               end associate
+              ! Default NumberOfConnections = 0
+              end associate
 
-               call f % LinkWithElements(NelL, NelR, nodes)
-
-            case (HMESH_BOUNDARY)
-               associate(eL => self % elements(f % elementIDs(1)))
-!
-!              Get polynomial orders of elements
-!              ---------------------------------
-               NelL = eL % Nxyz(axisMap(:, f % elementSide(1)))
-               NelR = NelL
-
-               ! Default NumberOfConnections = 0
-               end associate
-
-               call f % LinkWithElements(NelL, NelR, nodes)
+              call f % LinkWithElements(NelL, NelR, nodes)
 
 !           case (HMESH_MPI): Do nothing. MPI faces are constructed in the next step.
 
-            end select
+           end select
 
 
-            end associate
-         end do
+           end associate
+        end do
 !
 !        -----------------------------------------------
 !        Gather faces polynomial and link MPI faces
@@ -2504,28 +3572,43 @@ slavecoord:             DO l = 1, 4
                   fID  = self % MPIfaces % faces(domain) % faceIDs(mpifID)
                   side = self % MPIfaces % faces(domain) % elementSide(mpifID)   ! face side 1/2
 
-                  associate( f => self % faces(fID) )
-                  associate( e => self % elements(maxval(f % elementIDs)) )
-
+                 associate( f => self % faces(fID) )
+                 associate( e => self % elements(maxval(f % elementIDs)) )
+                  select case (f % MortarType)
+                  case (0, 2)   
                   sideL = f % elementSide(side)                                  ! element side 1/2/3/4/5/6
-
                   Nel(:,      side ) = e % Nxyz(axisMap(:,sideL))
                   Nel(:,other(side)) = self % MPIfaces % faces(domain) % Nrecv(counter:counter+1)
-
-                  call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes)
-
-                  Nxyz   = self % MPIfaces % faces(domain) % Nrecv(counter+2:counter+4)
+                  if (f % MortarType == MORTAR_SMALL4) then 
+                   offset=0.5_RP
+                   call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes, offset)
+                  elseif (f % MortarType == MORTAR_NONE ) then 
+                   call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes)
+                  end if 
+                   Nxyz   = self % MPIfaces % faces(domain) % Nrecv(counter+2:counter+4)
                   globID = self % MPIfaces % faces(domain) % Nrecv(counter+5)
-
+ 
                   e % NumberOfConnections (sideL) = 1
                   call e % Connection(sideL) % construct (globID,Nxyz)
                   counter = counter + 6
+               case (1)
+                 sideL = f % elementSide(side)                                  ! element side 1/2/3/4/5/6
 
-                  end associate
-                  end associate
-               end do
-            end do
-         end if
+                 Nel(:,      side ) = e % Nxyz(axisMap(:,sideL))
+                 Nel(:,other(side))= Nel(:,      side ) 
+                 call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes)
+
+                 Nxyz   = self % MPIfaces % faces(domain) % Nrecv(counter+2:counter+4)
+                 globID = self % MPIfaces % faces(domain) % Nrecv(counter+5)
+
+                 e % NumberOfConnections (sideL) = 1
+                 call e % Connection(sideL) % construct (globID,Nxyz)
+               end select 
+                 end associate
+                 end associate
+              end do
+           end do
+        end if
 #endif
 !
 !        --------------------------
@@ -2533,11 +3616,11 @@ slavecoord:             DO l = 1, 4
 !           TODO: This can be optimized when facesList is present
 !        --------------------------
 !
-         if ( MPI_Process % doMPIAction ) then
-            if ( .not. allocated(self % MPIfaces % faces) ) return
+        if ( MPI_Process % doMPIAction ) then
+           if ( .not. allocated(self % MPIfaces % faces) ) return
 #if _HAS_MPI_
             MPI_NDOFS = 0
-
+            MPI_MNDOFS = 0
             do domain = 1, MPI_Process % nProcs
 			   if (self % MPIfaces % faces(domain) % no_of_faces <= 0) cycle 
 			   
@@ -2545,26 +3628,49 @@ slavecoord:             DO l = 1, 4
                   fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
                   associate( fc => self % faces(fID) )
                   MPI_NDOFS(domain) = MPI_NDOFS(domain) + product(fc % Nf + 1)
+                  if (fc % MortarType == MORTAR_BIG .OR. fc % MortarType == MORTAR_SMALL4) then 
+                        MPI_MNDOFS(domain) = MPI_MNDOFS(domain) + product(fc % Nf + 1)
+                  end if 
                   end associate
                end do
             end do
 
 #if defined(NAVIERSTOKES)
-            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NGRAD, MPI_NDOFS)
+         if (.not.self % nonconforming) then 
+           call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NGRAD, MPI_NDOFS)
+         else 
+            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NGRAD, MPI_NDOFS, MPI_MNDOFS)
+         end if 
 #elif defined(INCNS)
+         if (.not.self % nonconforming) then             
             call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS)
-#elif defined(CAHNHILLIARD) && !defined(MULTIPHASE)
-            call ConstructMPIFacesStorage(self % MPIfaces, NCOMP, NCOMP, MPI_NDOFS)
-#elif defined(MULTIPHASE)
-            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS)
-#elif defined(ACOUSTIC)
-            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS, NCONSB_in=NCONSB)
-#endif
-
-#endif
+         else
+            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS, MPI_MNDOFS)
          end if
+#elif defined(CAHNHILLIARD) && !defined(MULTIPHASE)
+         if (.not.self % nonconforming) then 
+            call ConstructMPIFacesStorage(self % MPIfaces, NCOMP, NCOMP, MPI_NDOFS)
+         else
+            call ConstructMPIFacesStorage(self % MPIfaces, NCOMP, NCOMP, MPI_NDOFS, MPI_MNDOFS)
+         end if
+#elif defined(MULTIPHASE)
+         if (.not.self % nonconforming) then 
+            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS)
+         else
+            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS, MPI_MNDOFS)
+         end if
+#elif defined(ACOUSTIC)
+         if (.not.self % nonconforming) then 
+            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS, NCONSB_in=NCONSB)
+         else
+            call ConstructMPIFacesStorage(self % MPIfaces, NCONS, NCONS, MPI_NDOFS, MPI_MNDOFS, NCONSB_in=NCONSB)
+         end if
+#endif
 
-      end subroutine HexMesh_SetConnectivitiesAndLinkFaces
+#endif
+        end if
+
+     end subroutine HexMesh_SetConnectivitiesAndLinkFaces
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -2615,13 +3721,14 @@ slavecoord:             DO l = 1, 4
 		 sharedDomain = 0
          do domain = 1, MPI_Process % nProcs
             if ( no_of_mpifaces(domain) .ne. 0 ) then
+
                call self % MPIfaces % faces(domain) % Construct(no_of_mpifaces(domain))
 			   
 			   self % MPIfaces % nDomainShared = self % MPIfaces % nDomainShared+1
 			   sharedDomain(self % MPIfaces % nDomainShared) = domain
             end if
          end do
-		 ! Reallocate listDomain
+         ! Reallocate listDomain
 		 safedeallocate(self % MPIfaces % listDomain)
 		 allocate(self % MPIfaces % listDomain(self % MPIfaces % nDomainShared))
 		 self % MPIfaces % listDomain    = sharedDomain(1:self % MPIfaces % nDomainShared)
@@ -2639,17 +3746,19 @@ slavecoord:             DO l = 1, 4
             side = partition % element_mpifaceSide(bFace)
             eSide = partition % mpiface_elementSide(bFace)
             fID = self % elements(eID) % faceIDs(side)
+
 !
 !           Change the face to a HMESH_MPI
 !           ------------------------------
             associate(f => self % faces(fID))
             f % faceType = HMESH_MPI
             f % rotation = partition % mpiface_rotation(bFace)
+
             f % elementIDs(eSide) = eID
+
             f % elementIDs(otherSide(eSide)) = HMESH_NONE   ! This makes sense since elementIDs are in local numbering...
             f % elementSide(eSide) = side
             f % elementSide(otherSide(eSide)) = partition % element_mpifaceSideOther(bFace)
-
             if (eSide == RIGHT) f % nodeIDs = f % nodeIDs (invRot (:,f % rotation) )
             end associate
 
@@ -2664,7 +3773,7 @@ slavecoord:             DO l = 1, 4
             self % MPIfaces % faces(domain) % elementSide(no_of_mpifaces(domain)) = eSide
 
          end do
-
+      
       end subroutine HexMesh_UpdateFacesWithPartition
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2719,7 +3828,10 @@ slavecoord:             DO l = 1, 4
 !
 !        Generate a local copy of SurfInfo
 !        ---------------------------------
+         !write(*,*) 'allocating surInfo line 3262'
          allocate ( SurfInfo(self % no_of_elements) )
+         !write(*,*) 'allocated surInfo line 3262'
+
          do ii=1, num_of_elements
             if ( present(elementList) ) then
                eID = elementList(ii)
@@ -2809,66 +3921,122 @@ slavecoord:             DO l = 1, 4
             select case (f % faceType)
 
             case (HMESH_INTERIOR)
-               eIDLeft  = f % elementIDs(1)
-               SideIDL  = f % elementSide(1)
-               NSurfL   = SurfInfo(eIDLeft) % facePatches(SideIDL) % noOfKnots - 1
+               if (f % MortarType == MORTAR_NONE .OR. f % MortarType == MORTAR_SMALL4) then
+                  eIDLeft  = f % elementIDs(1)
+                  SideIDL  = f % elementSide(1)
+                  NSurfL   = SurfInfo(eIDLeft) % facePatches(SideIDL) % noOfKnots - 1
+                  
 
-               eIDRight = f % elementIDs(2)
-               SideIDR  = f % elementSide(2)
-               NSurfR   = SurfInfo(eIDRight) % facePatches(SideIDR) % noOfKnots - 1
+                  eIDRight = f % elementIDs(2)
+                  SideIDR  = f % elementSide(2)
+                  NSurfR   = SurfInfo(eIDRight) % facePatches(SideIDR) % noOfKnots - 1
 
 !              If both surfaces are of order 1.. There's no need to continue analyzing face
 !              ----------------------------------------------------------------------------
-               if     ((SurfInfo(eIDLeft)  % IsHex8) .and. (SurfInfo(eIDRight) % IsHex8)) then
-                  cycle
-               elseif ((SurfInfo(eIDLeft)  % IsHex8) .and. all(NSurfR == 1) ) then
-                  cycle
-               elseif ((SurfInfo(eIDRight) % IsHex8) .and. all(NSurfL == 1) ) then
-                  cycle
-               elseif (all(NSurfL == 1) .and. all(NSurfR == 1) ) then
-                  cycle
-               elseif (any(NSurfL /= NSurfR)) then ! Only works for mesh files with isotropic boundary orders
-                  write(STD_OUT,*) 'WARNING: Curved face definitions in mesh are not consistent.'
-                  write(STD_OUT,*) '   Face:    ', fID
-                  write(STD_OUT,*) '   Elements:', f % elementIDs
-                  write(STD_OUT,*) '   N Left:  ', SurfInfo(eIDLeft)  % facePatches(SideIDL) % noOfKnots - 1
-                  write(STD_OUT,*) '   N Right: ', SurfInfo(eIDRight) % facePatches(SideIDR) % noOfKnots - 1
-               end if
+                  if     ((SurfInfo(eIDLeft)  % IsHex8) .and. (SurfInfo(eIDRight) % IsHex8)) then
+                     cycle
+                  elseif ((SurfInfo(eIDLeft)  % IsHex8) .and. all(NSurfR == 1) ) then
+                     cycle
+                  elseif ((SurfInfo(eIDRight) % IsHex8) .and. all(NSurfL == 1) ) then
+                     cycle
+                  elseif (all(NSurfL == 1) .and. all(NSurfR == 1) ) then
+                     cycle
+                  elseif (any(NSurfL /= NSurfR)) then ! Only works for mesh files with isotropic boundary orders
+                     write(STD_OUT,*) 'WARNING: Curved face definitions in mesh are not consistent.'
+                     write(STD_OUT,*) '   Face:    ', fID
+                     write(STD_OUT,*) '   Elements:', f % elementIDs
+                     write(STD_OUT,*) '   N Left:  ', SurfInfo(eIDLeft)  % facePatches(SideIDL) % noOfKnots - 1
+                     write(STD_OUT,*) '   N Right: ', SurfInfo(eIDRight) % facePatches(SideIDR) % noOfKnots - 1
+                  end if
 
-               CLN(1) = min(f % NfLeft(1),f % NfRight(1))
-               CLN(2) = min(f % NfLeft(2),f % NfRight(2))
+                  CLN(1) = min(f % NfLeft(1),f % NfRight(1))
+                  CLN(2) = min(f % NfLeft(2),f % NfRight(2))
 !
 !              Adapt the curved face order to the polynomial order
 !              ---------------------------------------------------
-               if ( any(CLN < NSurfL) ) then
-                  allocate(faceCL(1:3,CLN(1)+1,CLN(2)+1))
-                  call ProjectFaceToNewPoints(SurfInfo(eIDLeft) % facePatches(SideIDL), CLN(1), NodalStorage(CLN(1)) % xCGL, &
-                                                                                        CLN(2), NodalStorage(CLN(2)) % xCGL, faceCL)
-                  call SurfInfo(eIDLeft) % facePatches(SideIDL) % Destruct()
-                  call SurfInfo(eIDLeft) % facePatches(SideIDL) % Construct(NodalStorage(CLN(1)) % xCGL, &
-                                                                            NodalStorage(CLN(2)) % xCGL,faceCL)
-                  deallocate(faceCL)
-               end if
+                  if ( any(CLN < NSurfL) ) then
+                     allocate(faceCL(1:3,CLN(1)+1,CLN(2)+1))
+                     call ProjectFaceToNewPoints(SurfInfo(eIDLeft) % facePatches(SideIDL), CLN(1), NodalStorage(CLN(1)) % xCGL, &
+                                                                                          CLN(2), NodalStorage(CLN(2)) % xCGL, faceCL)
+                     call SurfInfo(eIDLeft) % facePatches(SideIDL) % Destruct()
+                     call SurfInfo(eIDLeft) % facePatches(SideIDL) % Construct(NodalStorage(CLN(1)) % xCGL, &
+                                                                              NodalStorage(CLN(2)) % xCGL,faceCL)
 
-               select case ( f % rotation )
-               case ( 1, 3, 4, 6 ) ! Local x and y axis are perpendicular
-                  if (CLN(1) /= CLN(2)) then
-                     buffer = CLN(1)
-                     CLN(1) = CLN(2)
-                     CLN(2) = buffer
+                     deallocate(faceCL)
                   end if
-               end select
 
-               if ( any(CLN < NSurfR) ) then       ! TODO JMT: I have added this.. is correct?      
-                  allocate(faceCL(1:3,CLN(1)+1,CLN(2)+1))
-                  call ProjectFaceToNewPoints(SurfInfo(eIDRight) % facePatches(SideIDR), CLN(1), NodalStorage(CLN(1)) % xCGL, &
-                                                                                         CLN(2), NodalStorage(CLN(2)) % xCGL, faceCL)
-                  call SurfInfo(eIDRight) % facePatches(SideIDR) % Destruct()
-                  call SurfInfo(eIDRight) % facePatches(SideIDR) % Construct(NodalStorage(CLN(1)) % xCGL,&
-                                                                             NodalStorage(CLN(2)) % xCGL,faceCL)
-                  deallocate(faceCL)
-               end if
+                  select case ( f % rotation )
+                  case ( 1, 3, 4, 6 ) ! Local x and y axis are perpendicular
+                     if (CLN(1) /= CLN(2)) then
+                        buffer = CLN(1)
+                        CLN(1) = CLN(2)
+                        CLN(2) = buffer
+                     end if
+                  end select
 
+                  if ( any(CLN < NSurfR) ) then       ! TODO JMT: I have added this.. is correct?      
+                     allocate(faceCL(1:3,CLN(1)+1,CLN(2)+1))
+                     call ProjectFaceToNewPoints(SurfInfo(eIDRight) % facePatches(SideIDR), CLN(1), NodalStorage(CLN(1)) % xCGL, &
+                                                                                          CLN(2), NodalStorage(CLN(2)) % xCGL, faceCL)
+                     call SurfInfo(eIDRight) % facePatches(SideIDR) % Destruct()
+                     call SurfInfo(eIDRight) % facePatches(SideIDR) % Construct(NodalStorage(CLN(1)) % xCGL,&
+                                                                              NodalStorage(CLN(2)) % xCGL,faceCL)
+                     deallocate(faceCL)
+                  end if
+               end if 
+               if (f % MortarType == MORTAR_BIG .OR. f % MortarType == MORTAR_SLIDING) then 
+                  if (f % elementIDs(1) > 0) then
+                     thisSide = 1
+                  else
+                     thisSide = 2
+                  end if
+
+                  eIDLeft  = f % elementIDs(thisSide)
+                  SideIDL  = f % elementSide(thisSide)
+                  if (eIDLeft <= 0) then
+                     write(STD_OUT,*) 'Mortar face has no local element, fID=', fID, &
+                                      ' elementIDs=', f % elementIDs
+                     error stop
+                  end if
+                  NSurfL   = SurfInfo(eIDLeft)  % facePatches(SideIDL) % noOfKnots - 1
+   
+                  if     (SurfInfo(eIDLeft) % IsHex8 .or. all(NSurfL == 1)) cycle
+   
+                  if (self % anisotropic  .and. (.not. self % meshIs2D) ) then
+                     CLN = bfOrder(f % zone)
+                  else
+                     if (thisSide == 1) then
+                        CLN(1) = f % NfLeft(1)
+                        CLN(2) = f % NfLeft(2)
+                     else
+                        CLN(1) = f % NfRight(1)
+                        CLN(2) = f % NfRight(2)
+                     end if
+                  end if
+
+                  if ( thisSide == 2 ) then    ! right faces need to be rotated
+                     select case ( f % rotation )
+                     case ( 1, 3, 4, 6 )       ! local x and y axis are perpendicular
+                        if (CLN(1) /= CLN(2)) then
+                           buffer = CLN(1)
+                           CLN(1) = CLN(2)
+                           CLN(2) = buffer
+                        end if
+                     end select
+                  end if
+   !
+   !              Adapt the curved face order to the polynomial order
+   !              ---------------------------------------------------
+                  if ( any(CLN < NSurfL) ) then
+                     allocate(faceCL(1:3,CLN(1)+1,CLN(2)+1))
+                     call ProjectFaceToNewPoints(SurfInfo(eIDLeft) % facePatches(SideIDL), CLN(1), NodalStorage(CLN(1)) % xCGL, &
+                                                                                           CLN(2), NodalStorage(CLN(2)) % xCGL, faceCL)
+                     call SurfInfo(eIDLeft) % facePatches(SideIDL) % Destruct()
+                     call SurfInfo(eIDLeft) % facePatches(SideIDL) % Construct(NodalStorage(CLN(1)) % xCGL, &
+                                                                               NodalStorage(CLN(2)) % xCGL,faceCL)
+                     deallocate(faceCL)
+                  end if
+               end if 
             case (HMESH_BOUNDARY)
                eIDLeft  = f % elementIDs(1)
                SideIDL  = f % elementSide(1)
@@ -2980,12 +4148,43 @@ slavecoord:             DO l = 1, 4
             associate(f => self % faces(fID))
             select case(f % faceType)
             case(HMESH_INTERIOR, HMESH_BOUNDARY)
+               if (self%nonconforming) then
+               select case (f % MortarType)
+               case (0, 1)
                associate(eL => self % elements(f % elementIDs(1)))
+
                call f % geom % construct(f % Nf, f % NelLeft, f % NfLeft, eL % Nxyz, &
                                          eL % geom, eL % hexMap, f % elementSide(1), &
                                          f % projectionType(1), 1, 0 )
                end associate
+               case (2) 
+               associate(eR => self % elements(f % elementIDs(2)))
+  
+               call f % geom % construct(f % Nf, f % NelRight, f % NfRight, eR % Nxyz, &
+                                         eR % geom, eR % hexMap, f % elementSide(2), &
+                                         f % projectionType(2), 2, 0 )
+               end associate
+               end select 
+            else 
+               if (f % elementIDs(1) > 0) then
+                  side = 1
+                  Nel  = f % NelLeft
+                  Nelf = f % NfLeft
+                  rot  = 0
+               else
+                  side = 2
+                  Nel  = f % NelRight
+                  Nelf = f % NfRight
+                  rot  = f % rotation
+               end if
 
+               associate(e => self % elements(f % elementIDs(side)))
+
+               call f % geom % construct(f % Nf, Nelf, Nel, e % Nxyz, &
+                                         e % geom, e % hexMap, f % elementSide(side), &
+                                         f % projectionType(side), side, rot )
+               end associate
+            end if
             case(HMESH_MPI)
                side = maxloc(f % elementIDs, dim=1)
 
@@ -3027,9 +4226,20 @@ slavecoord:             DO l = 1, 4
             associate(f => self % faces(fID))
             select case(f % faceType)
             case(HMESH_INTERIOR)
+               if (f % MortarType == MORTAR_NONE .OR. f % MortarType == MORTAR_SMALL4) then 
                f % geom % h = min(minval(self % elements(f % elementIDs(1)) % geom % jacobian), &
                                   minval(self % elements(f % elementIDs(2)) % geom % jacobian)) &
                         / maxval(f % geom % jacobian)
+
+               elseif(f % MortarType == MORTAR_BIG .or. f % MortarType == MORTAR_SLIDING) then 
+                  if (f % elementIDs(1) > 0) then
+                     thisSide = 1
+                  else
+                     thisSide = 2
+                  end if
+                  f % geom % h = minval(self % elements(f % elementIDs(thisSide)) % geom % jacobian) &
+                  / maxval(f % geom % jacobian)
+               end if
             case(HMESH_BOUNDARY)
                f % geom % h = minval(self % elements(f % elementIDs(1)) % geom % jacobian) &
                         / maxval(f % geom % jacobian)
@@ -3415,13 +4625,6 @@ slavecoord:             DO l = 1, 4
          refs(V_REF)     = refValues      % V
          refs(T_REF)     = 0.0_RP
          refs(MACH_REF)  = 0.0_RP
-#elif defined(ACOUSTIC)
-         refs(GAMMA_REF) = thermodynamics % gamma
-         refs(RGAS_REF)  = thermodynamics % R
-         refs(RHO_REF)   = refValues      % rho
-         refs(V_REF)     = refValues      % V
-         refs(T_REF)     = refValues      % T
-         refs(MACH_REF)  = dimensionless  % Mach
 #else
          refs = 0.0_RP
 #endif
@@ -4905,12 +6108,11 @@ slavecoord:             DO l = 1, 4
          if (present(with_gradients) ) with_gradients = gradients
 
       END SUBROUTINE HexMesh_LoadSolution
-!
-!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-!
+
+
 #if defined(ACOUSTIC)
 
-   subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
+subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
       use Physics_CAAKeywordsModule
       use FileReadingUtilities, only: getRealArrayFromString
       Implicit None
@@ -4977,13 +6179,11 @@ slavecoord:             DO l = 1, 4
       end if
 !
    end subroutine HexMesh_InitializeBaseFlow
-!
-!////////////////////////////////////////////////////////////////////////
-!
+   
     Subroutine HexMesh_SetUniformBaseFlow(self,Q_in)
         Implicit None
          CLASS(HexMesh)                  :: self
-         real(kind=RP), dimension(1:NCONSB), intent(in)  :: Q_in
+         real(kind=RP), dimension(1:NCONS), intent(in)  :: Q_in
 !
 !        ---------------
 !        Local variables
@@ -4991,7 +6191,7 @@ slavecoord:             DO l = 1, 4
          INTEGER                        :: eID, eq
 
          do eID = 1, size(self % elements)
-            do eq = 1,NCONSB
+            do eq = 1,NCONS
                 self % elements(eID) % storage % Qbase(eq,:,:,:) = Q_in(eq)
             end do
          end do
@@ -5385,7 +6585,7 @@ slavecoord:             DO l = 1, 4
 
 !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexMesh_ProlongBaseSolutionToFaces(self, nEqn)
+subroutine HexMesh_ProlongBaseSolutionToFaces(self, nEqn)
          implicit none
          class(HexMesh),    intent(inout) :: self
          integer,           intent(in)    :: nEqn
@@ -5395,23 +6595,46 @@ slavecoord:             DO l = 1, 4
 !        ---------------
 !
          integer  :: fIDs(6)
-         integer  :: eID, i
+         integer  :: eID
 
 !$omp do schedule(runtime) private(fIDs)
          do eID = 1, size(self % elements)
             fIDs = self % elements(eID) % faceIDs
-            call self % elements(eID) % ProlongBaseSolutionToFaces(nEqn, &
-                                                                   self % faces(fIDs(1)),&
-                                                                   self % faces(fIDs(2)),&
-                                                                   self % faces(fIDs(3)),&
-                                                                   self % faces(fIDs(4)),&
-                                                                   self % faces(fIDs(5)),&
-                                                                   self % faces(fIDs(6)) )
+            if (.not.self % slidingMesh % active) then
+               if (.not.self%nonconforming) then
+                  call self % elements(eID) % ProlongBaseSolutionToFaces(nEqn, &
+                                                                     self % faces(fIDs(1)),&
+                                                                     self % faces(fIDs(2)),&
+                                                                     self % faces(fIDs(3)),&
+                                                                     self % faces(fIDs(4)),&
+                                                                     self % faces(fIDs(5)),&
+                                                                     self % faces(fIDs(6)) )
+               else
+                  call self % elements(eID) % ProlongBaseSolutionToFaces(nEqn, &
+                                                                     fFR=self % faces(fIDs(1)),&
+                                                                     fBK=self % faces(fIDs(2)),&
+                                                                     fBOT=self % faces(fIDs(3)),&
+                                                                     fR=self % faces(fIDs(4)),&
+                                                                     fT=self % faces(fIDs(5)),&
+                                                                     fL=self % faces(fIDs(6)),&
+                                                                     faces=self % faces )
+               end if
+            else
+               call self % elements(eID) % ProlongBaseSolutionToFaces(nEqn, &
+                                                                  fFR=self % faces(fIDs(1)),&
+                                                                  fBK=self % faces(fIDs(2)),&
+                                                                  fBOT=self % faces(fIDs(3)),&
+                                                                  fR=self % faces(fIDs(4)),&
+                                                                  fT=self % faces(fIDs(5)),&
+                                                                  fL=self % faces(fIDs(6)),&
+                                                                  faces=self % mortar_faces )
+            end if
          end do
 !$omp end do
 
       end subroutine HexMesh_ProlongBaseSolutionToFaces
 #endif
+  !
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -5667,10 +6890,23 @@ slavecoord:             DO l = 1, 4
             allocate(fe % geom % dWall(0:fe % Nf(1), 0:fe % Nf(2)))
             if( self% IBM% active ) then
                fe % geom % dWall = huge(1.0_RP)
+               if (fe%MortarType == MORTAR_SLIDING) then 
+                  if(.not. allocated(self%mortar_faces(fe%mortar(1))%geom%dwall)) then 
+                     allocate(self%mortar_faces(fe%mortar(1))% geom % dWall(0:fe % Nf(1), 0:fe % Nf(2)))
+                     self%mortar_faces(fe%mortar(1))%geom%dwall=fe % geom % dWall
+                  end if 
+                  if (size(fe%mortar)==2) then 
+                  if(.not. allocated(self%mortar_faces(fe%mortar(2))%geom%dwall)) then 
+                     allocate(self%mortar_faces(fe%mortar(2))% geom % dWall(0:fe % Nf(1), 0:fe % Nf(2)))
+                     self%mortar_faces(fe%mortar(2))%geom%dwall=fe % geom % dWall
+                  end if 
+                  end if 
+               end if 
             endif
             
             if( .not. self% IBM% active ) then
                do j = 0, fe % Nf(2) ; do i = 0, fe % Nf(1)
+                  
                   xP = fe % geom % x(:,i,j)
 
                   minimumDistance = HUGE(1.0_RP)
@@ -5682,6 +6918,18 @@ slavecoord:             DO l = 1, 4
                   fe % geom % dWall(i,j) = sqrt(minimumDistance)
 
                 end do                ; end do
+                if (fe%MortarType == MORTAR_SLIDING) then 
+                  if(.not. allocated(self%mortar_faces(fe%mortar(1))%geom%dwall)) then 
+                     allocate(self%mortar_faces(fe%mortar(1))%geom%dWall(0:fe % Nf(1), 0:fe % Nf(2)))
+                     self%mortar_faces(fe%mortar(1))%geom%dwall=fe % geom % dWall
+                  end if 
+                  if (size(fe%mortar)==2) then 
+                  if(.not. allocated(self%mortar_faces(fe%mortar(2))%geom%dwall)) then 
+                     allocate(self%mortar_faces(fe%mortar(2))%geom%dWall(0:fe % Nf(1), 0:fe % Nf(2)))
+                     self%mortar_faces(fe%mortar(2))%geom%dwall=fe % geom % dWall
+                  end if 
+               end if 
+               end if 
             end if
             
             end associate
@@ -5812,6 +7060,7 @@ slavecoord:             DO l = 1, 4
       logical :: Face_St, FaceComputeQdot
       character(len=LINE_LENGTH) :: time_int
       character(len=LINE_LENGTH) :: mg_smoother
+      real(kind=RP), dimension(:,:,:),     pointer :: Qff
       !-----------------------------------------------------------
 
       if ( present(Face_Storage) ) then
@@ -5872,11 +7121,26 @@ slavecoord:             DO l = 1, 4
       if (Face_St) then
          do fID = 1, size(self % faces)
             associate ( f => self % faces(fID) )
-            call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, .FALSE., FaceComputeQdot)
-            call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, .FALSE., FaceComputeQdot)
+               if (f % MortarType == MORTAR_SMALL4) then 
+                  call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
+                  call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
+               else 
+               call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, .FALSE., FaceComputeQdot)
+               call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, .FALSE., FaceComputeQdot)
+            end if 
+
             end associate
          end do
       end if
+
+      if (self % slidingMesh % active) then 
+         do fID = 1, size(self % mortar_faces)
+            associate ( f => self % mortar_faces(fID) )
+                  call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
+                  call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
+            end associate
+         end do 
+      end if 
 
 !     Point element storage
 !     ---------------------
@@ -6080,7 +7344,7 @@ subroutine HexMesh_pAdapt_MPI (self, NNew, controlVariables)
    type(Face)      , pointer :: f
    real(kind=RP)             :: sensor_value
 
-#if (!defined(NAVIERSTOKES) || !defined(INCNS))
+#if (!defined(NAVIERSTOKES))
    logical, parameter            :: computeGradients = .true.
 #endif
    !---------------------------------------------------
@@ -6255,7 +7519,7 @@ end subroutine HexMesh_pAdapt_MPI
       type(Zone_t)    , pointer :: zone
       type(Element)   , pointer :: e
       type(Face)      , pointer :: f
-#if (!defined(NAVIERSTOKES) || !(defined(INCNS)))
+#if (!defined(NAVIERSTOKES))
       logical, parameter            :: computeGradients = .true.
 #endif
       !---------------------------------------------------
@@ -6511,7 +7775,6 @@ end subroutine HexMesh_pAdapt_MPI
 
 
    end subroutine HexMesh_Assign
-
    subroutine HexMesh_UpdateHOArrays(self)
       implicit none
       !-arguments-----------------------------------------
@@ -6610,8 +7873,8 @@ end subroutine HexMesh_pAdapt_MPI
 call elementMPIList % destruct 
 
    end subroutine HexMesh_UpdateHOArrays
-   
-!
+
+   !
 !////////////////////////////////////////////////////////////////////////
 !  Multi Level Runge-Kutta 
 !////////////////////////////////////////////////////////////////////////
@@ -7040,9 +8303,9 @@ call elementMPIList % destruct
 	if( allocated(self % MLIter_eIDN) )     deallocate(self % MLIter_eIDN)
 	if( allocated(self % MLIter_eIDN_Seq) ) deallocate(self % MLIter_eIDN_Seq)
 
-    if( allocated(self % MLIter_eID_MPI)  ) deallocate(self % MLIter_eID_MPI)
-    if( allocated(self % MLIter_fID_MPI)  ) deallocate(self % MLIter_fID_MPI)
-    if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
+   if( allocated(self % MLIter_eID_MPI)  ) deallocate(self % MLIter_eID_MPI)
+   if( allocated(self % MLIter_fID_MPI)  ) deallocate(self % MLIter_fID_MPI)
+   if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
 	
    end subroutine MultiLevel_RK_Destruct
 !
@@ -7325,4 +8588,188 @@ call elementMPIList % destruct
       intersect = .true.
 
    end function intersect
+
+   subroutine GetSmallFacesRotation(bigFace, smallFaces, nodes, rotations, change_pos)
+      !---------------------------------------------------------
+      ! Computes the rotation of each small face relative to the
+      ! big face (4:1 non-conforming), by:
+      !   1. Splitting the big face into 4 virtual small faces
+      !      using midpoints and center
+      !   2. Matching each real small face to a virtual face
+      !   3. Computing the rotation (0..7) via the HORSES3D
+      !      faceRotation convention
+      !---------------------------------------------------------
+      implicit none
+      type(Face), intent(inout)  :: bigFace
+      type(Face), intent(inout)  :: smallFaces(4)
+      type(Node), intent(in)  :: nodes(:)
+      integer,    intent(out) :: rotations(4)
+      Logical,    intent(inout) :: change_pos
+
+      real(kind=RP), parameter :: TOL = 1.0e-10_RP
+
+      ! Big face corners
+      real(kind=RP) :: xc(3,4)
+
+      ! Midpoints and center
+      real(kind=RP) :: xmid(3,4)
+      real(kind=RP) :: xcenter(3)
+
+      ! 4 virtual small faces — dim1=xyz, dim2=corner, dim3=face
+      real(kind=RP) :: xvirt(3,4,4)
+
+      ! For comparison
+      real(kind=RP) :: xsmall(3,4)
+      real(kind=RP) :: xsmall4(3,4,4)
+
+      integer       :: i, j, k, s, s_match
+      logical       :: match
+
+      integer, dimension(4), parameter :: NEXTNODE = (/2,3,4,1/)
+
+      ! Get physical coordinates of the big face corner
+      do i = 1, 4
+         xc(:,i) = nodes(bigFace%nodeIDs(i))%x
+      end do
+
+      xmid(:,1) = 0.5_RP * (xc(:,1) + xc(:,2))
+      xmid(:,2) = 0.5_RP * (xc(:,2) + xc(:,3))
+      xmid(:,3) = 0.5_RP * (xc(:,3) + xc(:,4))
+      xmid(:,4) = 0.5_RP * (xc(:,1) + xc(:,4))
+      xcenter   = 0.25_RP * (xc(:,1) + xc(:,2) + xc(:,3) + xc(:,4))
+
+      ! Virtual face 1 : bottom-left (shares xc(1))
+      xvirt(:,1,1) = xc(:,1)    
+      xvirt(:,2,1) = xmid(:,1)  
+      xvirt(:,3,1) = xcenter    
+      xvirt(:,4,1) = xmid(:,4) 
+      
+      ! Virtual face 2 : bottom-right (shares xc(2))
+      xvirt(:,1,2) = xmid(:,1)  
+      xvirt(:,2,2) = xc(:,2)    
+      xvirt(:,3,2) = xmid(:,2)  
+      xvirt(:,4,2) = xcenter    
+      
+      ! Virtual face 3 : top-left (shares xc(4))
+      xvirt(:,1,3) = xmid(:,4)  
+      xvirt(:,2,3) = xcenter    
+      xvirt(:,3,3) = xmid(:,3)  
+      xvirt(:,4,3) = xc(:,4)    
+      
+      ! Virtual face 4 : top-right (shares xc(3))
+      xvirt(:,1,4) = xcenter    
+      xvirt(:,2,4) = xmid(:,2)  
+      xvirt(:,3,4) = xc(:,3)   
+      xvirt(:,4,4) = xmid(:,3) 
+
+      ! -------------------------------------------------------
+      ! For each small face, find the matching virtual face
+      ! and compute its rotation
+      ! -------------------------------------------------------
+      rotations = -1
+
+      do s = 1, 4
+
+         do i = 1, 4
+            xsmall(:,i) = nodes(smallFaces(s)%nodeIDs(i))%x
+         end do
+         xsmall4(:,:,s) = xsmall(:,:)
+
+         ! Find which virtual face matches this small face
+         do k = 1, 4
+            match = .false.
+            do i = 1, 4
+               if ( abs(xvirt(1,1,k)-xsmall(1,i)) < TOL .and. &
+                    abs(xvirt(2,1,k)-xsmall(2,i)) < TOL .and. &
+                    abs(xvirt(3,1,k)-xsmall(3,i)) < TOL ) then
+                  match = .true.
+                  exit
+               end if
+            end do
+            if (.not. match) cycle
+
+            ! Find j : position of virtual corner 1 in xsmall
+            do j = 1, 4
+               if ( abs(xvirt(1,1,k)-xsmall(1,j)) < TOL .and. &
+                    abs(xvirt(2,1,k)-xsmall(2,j)) < TOL .and. &
+                    abs(xvirt(3,1,k)-xsmall(3,j)) < TOL ) exit
+            end do
+
+            ! Check orientation using corner 2
+            if ( abs(xvirt(1,2,k)-xsmall(1,NEXTNODE(j))) < TOL .and. &
+                 abs(xvirt(2,2,k)-xsmall(2,NEXTNODE(j))) < TOL .and. &
+                 abs(xvirt(3,2,k)-xsmall(3,NEXTNODE(j))) < TOL ) then
+               rotations(s) = j - 1
+            else
+               rotations(s) = j + 3
+            end if
+
+            exit
+         end do
+
+         if (rotations(s) < 0) then
+            write(*,'(A,I2)') 'GetSmallFacesRotation: no rotation found for small face ', s
+         end if
+
+      end do
+
+      ! -------------------------------------------------------
+      ! Check mortar position consistency.
+      ! For each Mortarpos k (1..4), find the small face whose
+      ! Mortarpos == k, then verify that its corners match the
+      ! virtual face k geometrically.
+      ! -------------------------------------------------------
+      change_pos = .FALSE.
+
+      do k = 1, 4
+
+         ! Find the small face whose Mortarpos == k
+         s_match = -1
+         do s = 1, 4
+            if (smallFaces(s)%Mortarpos == k) then
+               s_match = s
+               exit
+            end if
+         end do
+
+         if (s_match < 0) then
+            write(*,'(A,I2,A)') '=== WARNING: no small face has Mortarpos = ', k, ' ==='
+            change_pos = .TRUE.
+            cycle
+         end if
+
+         ! Get corners of that small face
+         do i = 1, 4
+            xsmall(:,i) = nodes(smallFaces(s_match)%nodeIDs(i))%x
+         end do
+
+         ! Check corner by corner against virtual face k
+         match = .TRUE.
+         do i = 1, 4
+            if ( .not. ( abs(xvirt(1,i,k)-xsmall(1,i)) < TOL .and. &
+                         abs(xvirt(2,i,k)-xsmall(2,i)) < TOL .and. &
+                         abs(xvirt(3,i,k)-xsmall(3,i)) < TOL ) ) then
+               match = .FALSE.
+               exit
+            end if
+         end do
+
+         if (.not. match) then
+            change_pos = .TRUE.
+            write(*,'(A,I2,A,I2,A)') '=== MORTAR POSITION PROBLEM: small face s=', &
+                                      s_match, ' (Mortarpos=', k, ') does not match virtual face k ==='
+            write(*,'(A,I2,A)') '--- Virtual face ', k, ' corners ---'
+            do i = 1, 4
+               write(*,'(A,I2,A,3F20.15)') '  corner ', i, ' : ', xvirt(:,i,k)
+            end do
+            write(*,'(A,I2,A,I2,A)') '--- Small face s=', s_match, ' (Mortarpos=', k, ') corners ---'
+            do i = 1, 4
+               write(*,'(A,I2,A,3F20.15)') '  corner ', i, ' : ', xsmall(:,i)
+            end do
+         end if
+
+      end do
+
+   end subroutine GetSmallFacesRotation
+
 END MODULE HexMeshClass

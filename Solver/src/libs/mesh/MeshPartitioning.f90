@@ -73,6 +73,7 @@ module MeshPartitioning
 !        Local variables
 !        ---------------
 !
+         
          integer, allocatable :: nodesDomain(:)
 		 integer, allocatable :: eID(:)
 		 integer              :: nEleLevel(1), i
@@ -260,7 +261,7 @@ module MeshPartitioning
 !        Local variables
 !        ---------------
 !
-         integer  :: fID, eL, eR, dL, dR, domain
+         integer  :: fID, eL, eR, dL, dR, domain, i
          integer  :: bfaceID(no_of_domains)
 !
 !        *******************************************
@@ -273,9 +274,10 @@ module MeshPartitioning
 !           Cycle non-interior faces
 !           ------------------------
             if ( f % faceType .ne. HMESH_INTERIOR ) cycle
-!
+            if ( f % MortarType == MORTAR_BIG ) cycle
 !           Create references to left and right elements
 !           --------------------------------------------
+
             associate( eL => mesh % elements(f % elementIDs(1)), &
                        eR => mesh % elements(f % elementIDs(2)))
 !
@@ -296,6 +298,7 @@ module MeshPartitioning
             end associate
             end associate
          end do
+
 !
 !        **************************************
 !        Allocate boundary faces-related memory
@@ -323,6 +326,7 @@ module MeshPartitioning
 !           Cycle non-interior faces
 !           ------------------------
             if ( f % faceType .ne. HMESH_INTERIOR ) cycle
+            if ( f % MortarType == MORTAR_BIG ) cycle
 !
 !           Create references to left and right elements
 !           --------------------------------------------
