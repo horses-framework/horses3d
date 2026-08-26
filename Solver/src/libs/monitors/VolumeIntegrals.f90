@@ -117,7 +117,8 @@ module VolumeIntegrals
 !           Compute the integral
 !           --------------------
             val = val + ScalarVolumeIntegral_Local(mesh % elements(eID), &
-                                                           integralType    )
+                                                           integralType,   &
+                                                           IBM = mesh % IBM )
 
          end do
 !$omp end parallel do
@@ -324,6 +325,29 @@ module VolumeIntegrals
             end do            ; end do           ; end do
 
             val = val + e % storage % artificialDiss
+!
+!           Remove the immersed-boundary momentum-source energy contribution
+!           -lambda*rho*(u-u_s)*u, written with u_s is the moving body 0 for now
+!
+            if ( present(IBM) ) then
+               if ( IBM % active ) then
+                  do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
+                     if ( e % isInsideBody(i,j,k) ) then
+
+                        rho = e % storage % Q(IRHO ,i,j,k)
+                        u   = e % storage % Q(IRHOU,i,j,k) * inv_rho(i,j,k)
+                        v   = e % storage % Q(IRHOV,i,j,k) * inv_rho(i,j,k)
+                        w   = e % storage % Q(IRHOW,i,j,k) * inv_rho(i,j,k)
+
+                        val = val + wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) &
+                              * (rho / IBM % penalization(e % eID))                    &
+                              * (  (u - 0.0_RP) * u                                    &
+                                 + (v - 0.0_RP) * v                                    &
+                                 + (w - 0.0_RP) * w )
+                     end if
+                  end do            ; end do           ; end do
+               end if
+            end if
 
 
          case ( ENSTROPHY )
@@ -925,3 +949,4 @@ module VolumeIntegrals
       end subroutine GetSensorRange
 
 end module VolumeIntegrals
+
