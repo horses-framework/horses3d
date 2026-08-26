@@ -123,7 +123,7 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
    use PartitionedMeshClass
    use MPI_Process_Info
    use Headers
-   use NodeClass
+
    implicit none 
    ! =========================
    ! Arguments
@@ -1098,6 +1098,7 @@ end subroutine BuildSlidingMortarConnectivity
 !  First step only.
 ! ---------------------------------------------------------------------------
 subroutine SplitInterfaceNodes(mesh)
+   use NodeClass
    implicit none
    ! =========================
    ! Arguments
