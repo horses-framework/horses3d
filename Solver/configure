@@ -115,7 +115,10 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./Particles/ParticleBoundaryCond \
             ./Acoustic/ManufacturedSolution \
             ./Acoustic/LambVectorTimeInterpolation \
-            ./Acoustic/LambVectorCube "
+            ./Acoustic/LambVectorCube \
+            ./MMS/MMS_NS \
+            ./MMS/MMS_iNS \
+            ./MMS/MMS_MU "
 
 ##################################################
 ## 	GENERATE TUTORIALS			##

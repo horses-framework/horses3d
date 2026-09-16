@@ -1,0 +1,79 @@
+
+!
+!       *******************
+!       Sample control file
+!       *******************
+!
+!-------------------------- Configuration:-
+              Save gradients to solution = .false.
+                              Mesh file name = {MESH_FILE}
+                      Solution file name = {SOLUTION_FILE}
+                                 Restart = .false.
+                       Restart file name = Restart{SOLUTION_FILE}
+
+!-------------------- Physical parameters:-
+!                        ** Navier-Stokes
+                        Density (kg/m^3) = 1.0 !Should match generate_problemfile_iNS
+                       Viscosity (Pa.s)  = 0.001
+                          Flow equations = NS  ! Euler
+                           Froude number = 1.0d+300
+                          Prandtl number = 0.72
+                               AoA Theta = 0.0
+                                 AoA Phi = 0.0
+                    !   Gravity direction = [x,y,z]
+                       Compute gradients = .true.
+
+
+!------------------------- Discretization:-
+                        Polynomial order = {P}
+                    Discretization nodes = Gauss-Lobatto !Has to match generate_problemfile_iNS.py
+                          Riemann solver = Exact  ! Standard Roe/Low dissipation Roe
+                    Lambda stabilization = 1.0
+                 Inviscid discretization = Split-form  ! Split-form
+                               Averaging = Skew-Symmetric 1  ! Pirozzoli/Morinishi/Kennedy-Gruber/Entropy conserving/Entropy and energy conserving
+                  Viscous discretization = BR1   ! IP/BR2
+                       Penalty parameter = 1.0
+                Interior penalty variant = SIPG   ! IIPG/NIPG
+
+!----------------------- Time integration:-
+                        Time integration = Explicit   ! IMEX/Implicit
+                   Convergence tolerance = 1.0e-10
+                         Simulation type = time-accurate
+                           Autosave mode = Iteration  ! Time
+                       Autosave interval = 99999999999   ! 1.0
+                                      dt = {DT}
+                    Number of time steps = {N_STEPS}
+                         Output interval = {N_STEPS}
+
+!
+!-------------------- Boundary conditions:-
+!
+#define boundary bc_xminus
+   type = periodic
+   coupled boundary = bc_xplus
+#end
+
+#define boundary bc_xplus
+   type = periodic
+   coupled boundary = bc_xminus
+#end
+
+#define boundary bc_yminus
+   type = periodic
+   coupled boundary = bc_yplus
+#end
+
+#define boundary bc_yplus
+   type = periodic
+   coupled boundary = bc_yminus
+#end
+
+#define boundary bc_zminus
+   type = periodic
+   coupled boundary = bc_zplus
+#end
+
+#define boundary bc_zplus
+   type = periodic
+   coupled boundary = bc_zminus
+#end
