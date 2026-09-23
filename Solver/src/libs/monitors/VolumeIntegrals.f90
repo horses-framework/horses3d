@@ -118,6 +118,7 @@ module VolumeIntegrals
 !           --------------------
             val = val + ScalarVolumeIntegral_Local(mesh % elements(eID), &
                                                            integralType,   &
+                                                           time = time,    &
                                                            IBM = mesh % IBM )
 
          end do
@@ -209,6 +210,7 @@ module VolumeIntegrals
          real(kind=RP)           :: p, s, ms
          real(kind=RP), pointer  :: Qb(:)
          real(kind=RP)           :: free_en, fchem, entr, area, rho , u , v, w, en, thetaeddy
+         real(kind=RP)           :: u_s, v_s, w_s   ! Prescribed solid velocity at a penalised node
          real(kind=RP)           :: Strain(NDIM,NDIM)
          real(kind=RP)           :: mu
          real(kind=RP)           :: Q_target(NCONS) ! Used for the IB velocity
@@ -327,7 +329,9 @@ module VolumeIntegrals
             val = val + e % storage % artificialDiss
 !
 !           Remove the immersed-boundary momentum-source energy contribution
-!           -lambda*rho*(u-u_s)*u, written with u_s is the moving body 0 for now
+!           -lambda*rho*(u-u_s).u.  u_s is the prescribed solid velocity, taken
+!           from the mask for a moving body and zero otherwise.  `time` must be
+!           supplied for a moving body without it u_s falls back to zero.
 !
             if ( present(IBM) ) then
                if ( IBM % active ) then
@@ -339,11 +343,21 @@ module VolumeIntegrals
                         v   = e % storage % Q(IRHOV,i,j,k) * inv_rho(i,j,k)
                         w   = e % storage % Q(IRHOW,i,j,k) * inv_rho(i,j,k)
 
+                        u_s = 0.0_RP; v_s = 0.0_RP; w_s = 0.0_RP
+                        if ( present(time) ) then
+                           if ( IBM % stl(e % STL(i,j,k)) % move ) then
+                              Q_target = IBM % MaskVelocity( e % storage % Q(:,i,j,k), NCONS, e % STL(i,j,k), e % geom % x(:,i,j,k), time )
+                              u_s = Q_target(IRHOU) * inv_rho(i,j,k)
+                              v_s = Q_target(IRHOV) * inv_rho(i,j,k)
+                              w_s = Q_target(IRHOW) * inv_rho(i,j,k)
+                           end if
+                        end if
+
                         val = val + wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) &
                               * (rho / IBM % penalization(e % eID))                    &
-                              * (  (u - 0.0_RP) * u                                    &
-                                 + (v - 0.0_RP) * v                                    &
-                                 + (w - 0.0_RP) * w )
+                              * (  (u - u_s) * u                                       &
+                                 + (v - v_s) * v                                       &
+                                 + (w - w_s) * w )
                      end if
                   end do            ; end do           ; end do
                end if
@@ -495,7 +509,7 @@ module VolumeIntegrals
                if( e % isInsideBody(i,j,k) ) then
                   if( IBM% stl(e% STL(i,j,k))% move ) then
                      Q_target = IBM % MaskVelocity( e % storage% Q(:,i,j,k), NCONS, e % STL(i,j,k), e % geom% x(:,i,j,k), time )
-                     en = en + (0.5_rp / e % storage % Q(IRHO,i,j,k)) * (POW2(Q_target(IRHOU)) + POW2(Q_target(IRHOV)) + POW2(Q_target(IRHOW))) - &
+                     en = en + (0.5_rp / e % storage % Q(IRHO,i,j,k)) * (POW2(Q_target(IRHOU)) + POW2(Q_target(IRHOV)) + POW2(Q_target(IRHOW))) &
                         - (1.0_rp / e % storage % Q(IRHO,i,j,k)) * (e % storage % Q(IRHOU,i,j,k) * Q_target(IRHOU) + e % storage % Q(IRHOV,i,j,k) * Q_target(IRHOV) + e % storage % Q(IRHOW,i,j,k) * Q_target(IRHOW))
                   end if
                end if
@@ -519,7 +533,7 @@ module VolumeIntegrals
                if( e % isInsideBody(i,j,k) ) then
                   if( IBM % stl(e % STL(i,j,k)) % move ) then
                      Q_target = IBM % MaskVelocity( e % storage% Q(:,i,j,k), NCONS, e % STL(i,j,k), e % geom% x(:,i,j,k), time )
-                     en = en + 0.5_rp / Q_target(IRHO) * (POW2(Q_target(IRHOU)) + POW2(Q_target(IRHOV)) + POW2(Q_target(IRHOW))) - &
+                     en = en + 0.5_rp / Q_target(IRHO) * (POW2(Q_target(IRHOU)) + POW2(Q_target(IRHOV)) + POW2(Q_target(IRHOW))) &
                         - (1.0_rp / e % storage % Q(IRHO,i,j,k)) * (e % storage % Q(IRHOU,i,j,k) * Q_target(IRHOU) + e % storage % Q(IRHOV,i,j,k) * Q_target(IRHOV) + e % storage % Q(IRHOW,i,j,k) * Q_target(IRHOW))
                   end if
                end if
