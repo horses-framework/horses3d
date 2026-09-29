@@ -29,6 +29,7 @@ module SurfaceMonitorClass
       real(kind=RP), allocatable      :: referenceSurface
       real(kind=RP), allocatable      :: values(:)
       real(kind=RP)                   :: dynamicPressure
+      real(kind=RP)                   :: pGauge = 0.0_RP
       character(len=STR_LEN_MONITORS) :: monitorName
       character(len=STR_LEN_MONITORS) :: fileName
       character(len=STR_LEN_MONITORS) :: variable
@@ -61,6 +62,7 @@ module SurfaceMonitorClass
 !              -> Variable: The variable to be monitorized.
 !              -> Reference surface (optional): Reference surface for lift/drag coefficients
 !              -> Direction (optional): Direction in which the forces are computed
+!              -> Gauge pressure (optional): Integrate p - 1/(gamma M^2) instead of p
 !        *****************************************************************************
 !  
          use ParamfileRegions
@@ -85,6 +87,7 @@ module SurfaceMonitorClass
          integer                          :: fID
          integer                          :: zoneID
          real(kind=RP)                    :: directionValue(NDIM)
+         logical, allocatable             :: gaugePressure
 !
 !        Get monitor ID
 !        --------------
@@ -100,6 +103,21 @@ module SurfaceMonitorClass
          call readValueInRegion ( trim ( paramFile )  , "variable"          , self % variable         , in_label , "# end" ) 
          call readValueInRegion ( trim ( paramFile )  , "reference surface" , self % referenceSurface , in_label , "# end" ) 
          call readValueInRegion ( trim ( paramFile )  , "direction"         , directionName        , in_label , "# end" ) 
+         call readValueInRegion ( trim ( paramFile )  , "gauge pressure"    , gaugePressure        , in_label , "# end" ) 
+!
+!        Gauge pressure
+!        --------------
+         self % pGauge = 0.0_RP
+         if ( allocated(gaugePressure) ) then
+            if ( gaugePressure ) then
+#if defined(NAVIERSTOKES)
+               self % pGauge = 1.0_RP / dimensionless % gammaM2
+#else
+               print*, '"gauge pressure" is only available for compressible flows (surface monitor ', self % ID, ').'
+               error stop "error stopped"
+#endif
+            end if
+         end if
 !
 !        Enable the monitor
 !        ------------------
@@ -309,6 +327,10 @@ module SurfaceMonitorClass
                write(fID , '(A20,ES24.10)') "Dynamic pressure: " , self % dynamicPressure
             end if
 
+            if ( self % pGauge .ne. 0.0_RP ) then
+               write(fID , '(A20,ES24.10)') "Gauge pressure:   " , self % pGauge
+            end if
+
             write( fID , * )
             write( fID , '(A10,2X,A24,2X,A24)' ) "Iteration" , "Time" , trim(self % variable)
 
@@ -333,6 +355,10 @@ module SurfaceMonitorClass
          real(kind=RP)                   :: F(NDIM)
          real(kind=RP)                   :: dt
          logical                         :: autosave
+!
+!        Pressure subtracted in the pressure integrals of this monitor
+!        -------------------------------------------------------------
+         pGauge = self % pGauge
          
          select case ( trim ( self % variable ) )
 
@@ -548,6 +574,7 @@ module SurfaceMonitorClass
             to % values          = from % values
             
             to % dynamicPressure = from % dynamicPressure
+            to % pGauge          = from % pGauge
             to % monitorName     = from % monitorName
             to % fileName        = from % fileName
             to % variable        = from % variable
