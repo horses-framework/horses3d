@@ -79,19 +79,37 @@ module SurfaceIntegrals
             fIDs = mesh % elements(eID) % faceIDs
 
 !$omp task depend(inout:elements(eID))
+            if (.not.mesh%nonconforming) then 
             call elements(eID) % ProlongSolutionToFaces(NCONS, mesh % faces(fIDs(1)),&
                                             mesh % faces(fIDs(2)),&
                                             mesh % faces(fIDs(3)),&
                                             mesh % faces(fIDs(4)),&
                                             mesh % faces(fIDs(5)),&
-                                            mesh % faces(fIDs(6)) )
+                                            mesh % faces(fIDs(6)))
+            else 
+               call elements(eID) % ProlongSolutionToFaces(NCONS, mesh % faces(fIDs(1)),&
+                                             mesh % faces(fIDs(2)),&
+                                             mesh % faces(fIDs(3)),&
+                                             mesh % faces(fIDs(4)),&
+                                             mesh % faces(fIDs(5)),&
+                                             mesh % faces(fIDs(6)), faces=mesh % faces)
+            end if 
             if ( computeGradients ) then
+               if (.not.mesh%nonconforming) then
                call elements(eID) % ProlongGradientsToFaces(NGRAD, mesh % faces(fIDs(1)),&
                                                 mesh % faces(fIDs(2)),&
                                                 mesh % faces(fIDs(3)),&
                                                 mesh % faces(fIDs(4)),&
                                                 mesh % faces(fIDs(5)),&
-                                                mesh % faces(fIDs(6)) )
+                                                mesh % faces(fIDs(6)))
+               else 
+                  call elements(eID) % ProlongGradientsToFaces(NGRAD, mesh % faces(fIDs(1)),&
+                                                mesh % faces(fIDs(2)),&
+                                                mesh % faces(fIDs(3)),&
+                                                mesh % faces(fIDs(4)),&
+                                                mesh % faces(fIDs(5)),&
+                                                mesh % faces(fIDs(6)), faces=mesh % faces)
+               end if
             end if
 !$omp end task
          end do
@@ -297,19 +315,37 @@ module SurfaceIntegrals
             fIDs = mesh % elements(eID) % faceIDs
 
 !$omp task depend(inout:elements(eID))
+            if (.not.mesh%nonconforming) then 
             call elements(eID) % ProlongSolutionToFaces(NCONS, mesh % faces(fIDs(1)),&
                                             mesh % faces(fIDs(2)),&
                                             mesh % faces(fIDs(3)),&
                                             mesh % faces(fIDs(4)),&
                                             mesh % faces(fIDs(5)),&
-                                            mesh % faces(fIDs(6)) )
+                                            mesh % faces(fIDs(6)))
+            else 
+            call elements(eID) % ProlongSolutionToFaces(NCONS, mesh % faces(fIDs(1)),&
+                                             mesh % faces(fIDs(2)),&
+                                             mesh % faces(fIDs(3)),&
+                                             mesh % faces(fIDs(4)),&
+                                             mesh % faces(fIDs(5)),&
+                                             mesh % faces(fIDs(6)), faces= mesh % faces)
+            end if 
             if ( computeGradients ) then
+            if (.not.mesh%nonconforming) then
                call elements(eID) % ProlongGradientsToFaces(NGRAD, mesh % faces(fIDs(1)),&
                                                 mesh % faces(fIDs(2)),&
                                                 mesh % faces(fIDs(3)),&
                                                 mesh % faces(fIDs(4)),&
                                                 mesh % faces(fIDs(5)),&
-                                                mesh % faces(fIDs(6)) )
+                                                mesh % faces(fIDs(6)))
+            else 
+            call elements(eID) % ProlongGradientsToFaces(NGRAD, mesh % faces(fIDs(1)),&
+                                                mesh % faces(fIDs(2)),&
+                                                mesh % faces(fIDs(3)),&
+                                                mesh % faces(fIDs(4)),&
+                                                mesh % faces(fIDs(5)),&
+                                                mesh % faces(fIDs(6)), faces=mesh % faces)
+            end if 
             end if
 !$omp end task
          end do

@@ -38,7 +38,7 @@ module GradientsStabilization
 !        Local variables
 !        ---------------
 !
-         integer  :: eID, fID, i, j, k
+         integer  :: eID, fID, i, j, k, m
 !
 !        **************************************************
 !        Compute the face stabilization flux in local faces
@@ -49,8 +49,22 @@ module GradientsStabilization
             associate(f => mesh % faces(fID)) 
             select case (f % faceType) 
             case (HMESH_INTERIOR) 
+
+               if (mesh % faces(fID) % MortarType == MORTAR_BIG) then
+               associate(unStar=>mesh% faces(fID)%storage(1)%unStar)
+                  unStar=0.0_RP
+               end associate
+               associate(unStar=>mesh% faces(fID)%storage(2)%unStar)
+                  unStar=0.0_RP
+               end associate
+               do m=1,4
+                  if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                     call GradientsStabilization_InteriorFace(f=mesh % faces(mesh % faces(fID)%Mortar(m)),masterFace1=f) 
+                  end if 
+               end do 
+               elseif (mesh % faces(fID) % MortarType == MORTAR_NONE) then
                call GradientsStabilization_InteriorFace(f) 
-            
+               end if 
             case (HMESH_BOUNDARY) 
                call GradientsStabilization_BoundaryFace(f, time) 
  
@@ -102,12 +116,33 @@ module GradientsStabilization
             associate(f => mesh % faces(fID)) 
             select case (f % faceType) 
             case (HMESH_MPI) 
-               call GradientsStabilization_MPIFace(f) 
- 
+            if (mesh% faces(fID)%MortarType == MORTAR_BIG) then 
+               associate(unstar=>mesh% faces(fID)%storage(1)%unStar)
+                  unstar=0.0_RP
+               end associate
+               do m=1, 4
+                  if (mesh % faces(fID)%Mortar(m) .ne. 0) then 
+                     call GradientsStabilization_InteriorFace(f=mesh % faces(mesh % faces(fID)%Mortar(m)),masterFace1=f) 
+                  end if 
+               end do 
+            end if 
+            call GradientsStabilization_MPIFace(f) 
             end select 
             end associate 
          end do            
 !$omp end do 
+!$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % UpdateMPIFacesGradMortarflux(NCOMP)
+         end if
+   !$omp end single
+   
+   
+   !$omp single
+         if ( mesh % nonconforming ) then
+            call mesh % GatherMPIFacesGradMortarFlux(NCOMP)
+         end if
+   !$omp end single
 !
 !$omp do schedule(runtime) 
          do eID = 1, size(mesh % elements) 
@@ -147,7 +182,7 @@ module GradientsStabilization
 #endif
       end subroutine StabilizeGradients
 
-      subroutine GradientsStabilization_InteriorFace(f)
+      subroutine GradientsStabilization_InteriorFace(f, masterFace1)
          use Physics  
          use ElementClass
          use FaceClass
@@ -157,18 +192,21 @@ module GradientsStabilization
 !        Arguments
 !        ---------
 !
-         type(Face)    :: f
+         type(Face)             :: f
+         type(Face),optional    :: masterFace1
+
          procedure(LambdaEstimator_f)  :: LambdaEstimator
+         
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer       :: i,j
+         integer       :: i,j, lm
          real(kind=RP) :: cL(NCOMP), cR(NCOMP), uHat(NCOMP)
          real(kind=RP) :: Hflux(NCOMP,NDIM,0:f % Nf(1), 0:f % Nf(2))
          real(kind=RP) :: vAver(NDIM)
-         
+
          do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
             cL = f % storage(1) % c(:,i,j)
             cR = f % storage(2) % c(:,i,j)
@@ -180,8 +218,13 @@ module GradientsStabilization
             Hflux(:,IY,i,j) = Uhat * f % geom % normal(IY,i,j)
             Hflux(:,IZ,i,j) = Uhat * f % geom % normal(IZ,i,j)
          end do               ; end do
-
-         call f % ProjectGradientFluxToElements(NCOMP, HFlux,(/1,2/),-1)
+         if (f % MortarType == MORTAR_NONE) then 
+            call f % ProjectGradientFluxToElements(NCOMP, HFlux,(/1,2/),-1)
+         end if 
+         if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace1)) then 
+            call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=NCOMP, slaveFace=f, HFlux=HFlux,whichElements=(/0,2/),factor=-1)
+            call f % ProjectGradientFluxToElements(NCOMP, HFlux,(/1,2/),-1)
+         end if 
          
       end subroutine GradientsStabilization_InteriorFace   
 
@@ -220,7 +263,12 @@ module GradientsStabilization
 
          thisSide = maxloc(f % elementIDs, dim = 1)
          call f % ProjectGradientFluxToElements(NCOMP, HFlux, (/thisSide, HMESH_NONE/), -1)
-         
+
+         if (f % MortarType == MORTAR_SMALL4) then 
+
+            call f% Interpolatesmall2biggrad(NCOMP, HFlux)
+            
+         end if
       end subroutine GradientsStabilization_MPIFace   
 
       subroutine GradientsStabilization_BoundaryFace(f, time)

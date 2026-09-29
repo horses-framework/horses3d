@@ -1,4 +1,4 @@
-      Module NodeClass 
+Module NodeClass 
       USE SMConstants
       USE MeshTypes
       IMPLICIT NONE 
@@ -13,6 +13,8 @@
       TYPE Node
          integer       :: globID = -1
          REAL(KIND=RP) :: x(3)
+         logical       :: tbrotated=.false.
+         logical       :: rotated=.false.
          contains
             procedure :: construct => ConstructNode
             procedure :: destruct  => Node_Destruct

@@ -16,7 +16,7 @@
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      Module ElementClass
+   Module ElementClass
       USE SMConstants
       USE PolynomialInterpAndDerivsModule
       USE GaussQuadrature
@@ -56,6 +56,7 @@
 !     Main hex-element type
 !     ---------------------
       TYPE Element
+         integer                         :: MortarFaces(6)     !0=Conforming; 1=Master; 2= Slave, 3=Master_sliding; 4= Slave_sliding
          real(kind=RP)                   :: Psvv
          logical                         :: hasSharedFaces
          integer                         :: dir2D
@@ -66,9 +67,9 @@
          INTEGER                         :: nodeIDs(8)
          integer                         :: faceIDs(6)
          integer                         :: faceSide(6)
-		 integer                         :: MLevel            ! RK Level
-		 integer                         :: MLevelwN          ! RK Level with Neighbour
-		 real(kind=RP)                   :: ML_CFL            ! CFL storage for Multi Level RK	
+         integer                         :: MLevel            ! RK Level
+         integer                         :: MLevelwN          ! RK Level with Neighbour
+         real(kind=RP)                   :: ML_CFL            ! CFL storage for Multi Level RK	
          real(kind=RP)                   :: ML_error_ratio    ! Ratio between temporal and spatial error relative to the global ratio
          INTEGER, DIMENSION(3)           :: Nxyz              ! Polynomial orders in every direction (Nx,Ny,Nz)
          real(kind=RP)                   :: hn                ! Ratio of size and polynomial order
@@ -81,7 +82,9 @@
          type(TransfiniteHexMap)         :: hexMap            ! High-order mapper
          logical, dimension(:,:,:), allocatable :: isInsideBody, isForcingPoint ! Immersed boundaty term -> if InsideBody(i,j,k) = true, the point(i,j,k) is inside the body (IB)	
          integer, dimension(:,:,:), allocatable :: STL !STL file the DoFbelongs to if isInsideBody = .true. (IB)
-         integer                                :: IP_index 
+         integer                                :: IP_index
+         logical                                :: sliding
+         logical                                :: sliding_newnodes 
          contains
             procedure   :: Construct               => HexElement_Construct
             procedure   :: Destruct                => HexElement_Destruct
@@ -98,7 +101,7 @@
             procedure   :: EvaluateGradientAtPoint => HexElement_EvaluateGradientAtPoint
             procedure   :: ConstructIBM            => HexElement_ConstructIBM
 #if defined(ACOUSTIC)
-            procedure   :: ProlongBaseSolutionToFaces  => HexElement_ProlongBaseSolutionToFaces
+               procedure   :: ProlongBaseSolutionToFaces  => HexElement_ProlongBaseSolutionToFaces
 #endif
             generic     :: assignment(=)           => copy
       END TYPE Element
@@ -126,8 +129,11 @@
          self % boundaryName        = emptyBCName
          self % hasSharedFaces      = .false.
          self % NumberOfConnections = 0
-		 self % MLevel              = 1
+         self % MLevel              = 1
          self % ML_error_ratio      = 1.0_RP
+         self % MortarFaces         = 0 
+         self % sliding             = .false.
+         self % sliding_newnodes    = .false.
 !
 !        ----------------------------------------
 !        Solution Storage is allocated separately
@@ -230,19 +236,20 @@
 !
 !////////////////////////////////////////////////////////////////////////
 !
-      subroutine HexElement_ProlongSolutionToFaces(self, nEqn, fFR, fBK, fBOT, fR, fT, fL, computeQdot)
+      subroutine HexElement_ProlongSolutionToFaces(self, nEqn, fFR, fBK, fBOT, fR, fT, fL, computeQdot, faces)
          use FaceClass
          implicit none
          class(Element),   intent(in)  :: self
          integer,          intent(in)  :: nEqn
          class(Face),      intent(inout) :: fFR, fBK, fBOT, fR, fT, fL
          logical,optional, intent(in)  :: computeQdot
+         type(Face),optional, intent(inout) :: faces(:)
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer  :: i, j, k, l, N(3)
+         integer  :: i, j, k, l, N(3), m
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(1), 0:self % Nxyz(3)) :: QFR, QBK, QdotFR, QdotBK
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(1), 0:self % Nxyz(2)) :: QBOT, QT, QdotBOT, QdotT
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(2), 0:self % Nxyz(3)) :: QL, QR, QdotL, QdotR
@@ -255,9 +262,9 @@
          spAzeta => NodalStorage(N(3))
 
          if (present(computeQdot)) then
-             prolongQdot = computeQdot
+               prolongQdot = computeQdot
          else
-             prolongQdot = .FALSE.
+               prolongQdot = .FALSE.
          end if
 !
 !        *************************
@@ -268,11 +275,9 @@
          QFR  = 0.0_RP     ; QBK  = 0.0_RP
          QBOT = 0.0_RP     ; QT   = 0.0_RP
 
-         ! if (prolongQdot) then
-             QdotL   = 0.0_RP     ; QdotR   = 0.0_RP
-             QdotFR  = 0.0_RP     ; QdotBK  = 0.0_RP
-             QdotBOT = 0.0_RP     ; QdotT   = 0.0_RP
-         ! end if
+         QdotL   = 0.0_RP     ; QdotR   = 0.0_RP
+         QdotFR  = 0.0_RP     ; QdotBK  = 0.0_RP
+         QdotBOT = 0.0_RP     ; QdotT   = 0.0_RP
 
          do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
             QL  (:,j,k)= QL  (:,j,k)+ self % storage % Q(:,i,j,k)* spAxi % v  (i,LEFT  )
@@ -282,37 +287,148 @@
             QBOT(:,i,j)= QBOT(:,i,j)+ self % storage % Q(:,i,j,k)* spAzeta % v(k,BOTTOM)
             QT  (:,i,j)= QT  (:,i,j)+ self % storage % Q(:,i,j,k)* spAzeta % v(k,TOP   )
             if (prolongQdot) then
-                QdotL  (:,j,k)= QdotL  (:,j,k)+ self % storage % Qdot(:,i,j,k)* spAxi % v  (i,LEFT  )
-                QdotR  (:,j,k)= QdotR  (:,j,k)+ self % storage % Qdot(:,i,j,k)* spAxi % v  (i,RIGHT )
-                QdotFR (:,i,k)= QdotFR (:,i,k)+ self % storage % Qdot(:,i,j,k)* spAeta % v (j,FRONT )
-                QdotBK (:,i,k)= QdotBK (:,i,k)+ self % storage % Qdot(:,i,j,k)* spAeta % v (j,BACK  )
-                QdotBOT(:,i,j)= QdotBOT(:,i,j)+ self % storage % Qdot(:,i,j,k)* spAzeta % v(k,BOTTOM)
-                QdotT  (:,i,j)= QdotT  (:,i,j)+ self % storage % Qdot(:,i,j,k)* spAzeta % v(k,TOP   )
+                  QdotL  (:,j,k)= QdotL  (:,j,k)+ self % storage % Qdot(:,i,j,k)* spAxi % v  (i,LEFT  )
+                  QdotR  (:,j,k)= QdotR  (:,j,k)+ self % storage % Qdot(:,i,j,k)* spAxi % v  (i,RIGHT )
+                  QdotFR (:,i,k)= QdotFR (:,i,k)+ self % storage % Qdot(:,i,j,k)* spAeta % v (j,FRONT )
+                  QdotBK (:,i,k)= QdotBK (:,i,k)+ self % storage % Qdot(:,i,j,k)* spAeta % v (j,BACK  )
+                  QdotBOT(:,i,j)= QdotBOT(:,i,j)+ self % storage % Qdot(:,i,j,k)* spAzeta % v(k,BOTTOM)
+                  QdotT  (:,i,j)= QdotT  (:,i,j)+ self % storage % Qdot(:,i,j,k)* spAzeta % v(k,TOP   )
             end if
          end do                   ; end do                   ; end do
          nullify (spAxi, spAeta, spAzeta)
-
-         call fL   % AdaptSolutionToFace(nEqn, N(2), N(3), QL   , self % faceSide(ELEFT  ), QdotL, computeQdot)
-         call fR   % AdaptSolutionToFace(nEqn, N(2), N(3), QR   , self % faceSide(ERIGHT ), QdotR, computeQdot)
-         call fFR  % AdaptSolutionToFace(nEqn, N(1), N(3), QFR  , self % faceSide(EFRONT ), QdotFR, computeQdot)
-         call fBK  % AdaptSolutionToFace(nEqn, N(1), N(3), QBK  , self % faceSide(EBACK  ), QdotBK, computeQdot)
-         call fBOT % AdaptSolutionToFace(nEqn, N(1), N(2), QBOT , self % faceSide(EBOTTOM), QdotBOT, computeQdot)
-         call fT   % AdaptSolutionToFace(nEqn, N(1), N(2), QT   , self % faceSide(ETOP   ), QdotT, computeQdot)
+         if (present(faces)) then 
+            if (fL % MortarType == MORTAR_BIG) then 
+               if (fL % n_mpi_mortar .ne. 0) then 
+                  call fL   % AdaptSolutionToFace(nEqn, N(2), N(3), QL   , self % faceSide(ELEFT  ), QdotL, computeQdot)
+               end if 
+               do m=1,4
+                  if (fL % Mortar(m) .ne. 0) then 
+                     call fL % AdaptSolutionToMortarFace(nEqn, N(2), N(3), QL   , self % faceSide(ELEFT  ), QdotL, computeQdot,&
+                     faces(fL % Mortar(m)))
+                  end if 
+               end do 
+            elseif (fL % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fL%Mortar)
+                  call fL % AdaptSolutionToMortarFace(nEqn, N(2), N(3), QL   , self % faceSide(ELEFT  ), QdotL, computeQdot,&
+                     faces(fL % Mortar(m)), .true.)
+               end do 
+            else 
+               call fL   % AdaptSolutionToFace(nEqn, N(2), N(3), QL   , self % faceSide(ELEFT  ), QdotL, computeQdot)
+            end if 
+            if (fR % MortarType == MORTAR_BIG) then 
+               if (fR % n_mpi_mortar .ne. 0) then 
+                  call fR   % AdaptSolutionToFace(nEqn, N(2), N(3), QR   , self % faceSide(ERIGHT ), QdotR, computeQdot)
+               end if 
+               do m=1,4
+                  if (fR % Mortar(m) .ne. 0) then 
+                     call fR % AdaptSolutionToMortarFace(nEqn, N(2), N(3), QR   , self % faceSide(ERIGHT  ), QdotR, computeQdot,&
+                     faces(fR % Mortar(m)))
+                  end if 
+               end do 
+            elseif (fR % MortarType == MORTAR_SLIDING) then 
+                  do m=1,size(fR%Mortar)
+                     call fR % AdaptSolutionToMortarFace(nEqn, N(2), N(3), QR   , self % faceSide(ERIGHT  ), QdotR, computeQdot,&
+                        faces(fR % Mortar(m)), .true.)
+                  end do 
+            else 
+               call fR   % AdaptSolutionToFace(nEqn, N(2), N(3), QR   , self % faceSide(ERIGHT ), QdotR, computeQdot)
+            end if 
+            if (fFR % MortarType == MORTAR_BIG) then 
+               if (fFR % n_mpi_mortar .ne. 0) then 
+                  call fFR   % AdaptSolutionToFace(nEqn, N(1), N(3), QFR   , self % faceSide(EFRONT ), QdotFR, computeQdot)
+               end if 
+               do m=1,4
+                  if (fFR % Mortar(m) .ne. 0) then 
+                     call fFR % AdaptSolutionToMortarFace(nEqn, N(1), N(3), QFR   , self % faceSide(EFRONT  ), QdotFR, computeQdot,&
+                     faces(fFR % Mortar(m)))
+                  end if 
+               end do 
+               elseif (fFR % MortarType == MORTAR_SLIDING) then 
+                  do m=1,size(fFR%Mortar)
+                     call fFR % AdaptSolutionToMortarFace(nEqn, N(1), N(3), QFR   , self % faceSide(EFRONT  ), QdotFR, computeQdot,&
+                        faces(fFR % Mortar(m)), .true.)
+                  end do 
+            else 
+               call fFR   % AdaptSolutionToFace(nEqn, N(1), N(3), QFR   , self % faceSide(EFRONT ), QdotFR, computeQdot)
+            end if 
+            if (fBK % MortarType == MORTAR_BIG) then 
+               if (fBK % n_mpi_mortar .ne. 0) then 
+                  call fBK   % AdaptSolutionToFace(nEqn, N(1), N(3), QBK   , self % faceSide(EBACK  ), QdotBK, computeQdot)
+               end if 
+               do m=1,4
+                  if (fBK% Mortar(m) .ne. 0) then 
+                     call fBK % AdaptSolutionToMortarFace(nEqn, N(1), N(3), QBK   , self % faceSide(EBACK  ), QdotBK, computeQdot,&
+                     faces(fBK % Mortar(m)))
+                  end if
+               end do 
+               elseif (fBK % MortarType == MORTAR_SLIDING) then 
+                  do m=1,size(fBK%Mortar)
+                     call fBK % AdaptSolutionToMortarFace(nEqn, N(1), N(3), QBK   , self % faceSide(EBACK  ), QdotBK, computeQdot,&
+                        faces(fBK % Mortar(m)), .true.)
+                  end do 
+            else 
+               call fBK   % AdaptSolutionToFace(nEqn, N(1), N(3), QBK   , self % faceSide(EBACK  ), QdotBK, computeQdot)
+            end if 
+            if (fBOT % MortarType == MORTAR_BIG) then 
+               if (fBOT % n_mpi_mortar .ne. 0) then 
+                  call fBOT   % AdaptSolutionToFace(nEqn, N(1), N(2), QBOT   , self % faceSide(EBOTTOM), QdotBOT, computeQdot)
+               end if 
+               do m=1,4
+                  if (fBOT % Mortar(m) .ne. 0) then 
+                     call fBOT % AdaptSolutionToMortarFace(nEqn, N(1), N(2), QBOT   , self % faceSide(EBOTTOM  ), QdotBOT, computeQdot,&
+                     faces(fBOT % Mortar(m)))
+                  end if 
+               end do 
+               elseif (fBOT % MortarType == MORTAR_SLIDING) then 
+                  do m=1,size(fBOT%Mortar)
+                     call fBOT % AdaptSolutionToMortarFace(nEqn, N(1), N(2), QBOT   , self % faceSide(EBOTTOM  ), QdotBOT, computeQdot,&
+                        faces(fBOT % Mortar(m)), .true.)
+                  end do 
+            else 
+               call fBOT   % AdaptSolutionToFace(nEqn, N(1), N(2), QBOT   , self % faceSide(EBOTTOM), QdotBOT, computeQdot)
+            end if 
+            if (fT % MortarType == MORTAR_BIG) then 
+               if (fT % n_mpi_mortar .ne. 0) then 
+                  call fT   % AdaptSolutionToFace(nEqn, N(1), N(2), QT   , self % faceSide(ETOP   ), QdotT, computeQdot)
+               end if 
+               do m=1,4
+                  if (fT% Mortar(m) .ne. 0) then 
+                     call fT % AdaptSolutionToMortarFace(nEqn, N(1), N(2), QT   , self % faceSide(ETOP  ), QdotT, computeQdot,&
+                     faces(fT % Mortar(m)))
+                  end if 
+               end do 
+               elseif (fT % MortarType == MORTAR_SLIDING) then 
+                  do m=1,size(fT%Mortar)
+                     call fT % AdaptSolutionToMortarFace(nEqn, N(1), N(2), QT   , self % faceSide(ETOP  ), QdotT, computeQdot,&
+                        faces(fT % Mortar(m)), .true.)
+                  end do 
+            else 
+               call fT   % AdaptSolutionToFace(nEqn, N(1), N(2), QT   , self % faceSide(ETOP   ), QdotT, computeQdot)
+            end if 
+         else
+            call fL   % AdaptSolutionToFace(nEqn, N(2), N(3), QL   , self % faceSide(ELEFT  ), QdotL, computeQdot)
+            call fR   % AdaptSolutionToFace(nEqn, N(2), N(3), QR   , self % faceSide(ERIGHT ), QdotR, computeQdot)
+            call fFR  % AdaptSolutionToFace(nEqn, N(1), N(3), QFR  , self % faceSide(EFRONT ), QdotFR, computeQdot)
+            call fBK  % AdaptSolutionToFace(nEqn, N(1), N(3), QBK  , self % faceSide(EBACK  ), QdotBK, computeQdot)
+            call fBOT % AdaptSolutionToFace(nEqn, N(1), N(2), QBOT , self % faceSide(EBOTTOM), QdotBOT, computeQdot)
+            call fT   % AdaptSolutionToFace(nEqn, N(1), N(2), QT   , self % faceSide(ETOP   ), QdotT, computeQdot)
+         end if
 
       end subroutine HexElement_ProlongSolutionToFaces
 
-      subroutine HexElement_ProlongGradientsToFaces(self, nGradEqn, fFR, fBK, fBOT, fR, fT, fL)
+      subroutine HexElement_ProlongGradientsToFaces(self, nGradEqn, fFR, fBK, fBOT, fR, fT, fL, faces)
          use FaceClass
          implicit none
          class(Element),   intent(in)  :: self
          integer,          intent(in)  :: nGradEqn
          class(Face),      intent(inout) :: fFR, fBK, fBOT, fR, fT, fL
+         type(Face),optional, intent(inout) :: faces(:)
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer  :: i, j, k, l, N(3)
+         integer  :: i, j, k, l, m, N(3)
          real(kind=RP), dimension(nGradEqn, 0:self % Nxyz(1), 0:self % Nxyz(3)) :: UxFR, UyFR, UzFR
          real(kind=RP), dimension(nGradEqn, 0:self % Nxyz(1), 0:self % Nxyz(3)) :: UxBK, UyBK, UzBK
          real(kind=RP), dimension(nGradEqn, 0:self % Nxyz(1), 0:self % Nxyz(2)) :: UxBT, UyBT, UzBT
@@ -360,30 +476,136 @@
             UzT (:,i,j) = UzT (:,i,j) + self % storage % U_z(:,i,j,k)* spAzeta % v (k,TOP   )
 
          end do                   ; end do                   ; end do
-         nullify (spAxi, spAeta, spAzeta)
 
-         call fL   % AdaptGradientsToFace(nGradEqn, N(2), N(3), UxL , UyL , UzL , self % faceSide(ELEFT  ))
-         call fR   % AdaptGradientsToFace(nGradEqn, N(2), N(3), UxR , UyR , UzR , self % faceSide(ERIGHT ))
-         call fFR  % AdaptGradientsToFace(nGradEqn, N(1), N(3), UxFR, UyFR, UzFR, self % faceSide(EFRONT ))
-         call fBK  % AdaptGradientsToFace(nGradEqn, N(1), N(3), UxBK, UyBK, UzBK, self % faceSide(EBACK  ))
-         call fBOT % AdaptGradientsToFace(nGradEqn, N(1), N(2), UxBT, UyBT, UzBT, self % faceSide(EBOTTOM))
-         call fT   % AdaptGradientsToFace(nGradEqn, N(1), N(2), UxT , UyT , UzT , self % faceSide(ETOP   ))
+         nullify (spAxi, spAeta, spAzeta)
+         if (present(faces)) then 
+            if (fL % MortarType == MORTAR_BIG) then 
+               if (fL % n_mpi_mortar .ne. 0) then 
+                  call fL   % AdaptGradientsToFace(nGradEqn, N(2), N(3), UxL , UyL , UzL , self % faceSide(ELEFT  ))
+               end if 
+               do m=1,4
+                  if (fL % Mortar(m) .ne. 0) then 
+                     call fL % AdaptGradientsToMortarFace(nGradEqn, N(2), N(3), UxL , UyL , UzL , self % faceSide(ELEFT), faces(fL % Mortar(m)))
+                  end if 
+               end do 
+            elseif(fL % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fL%Mortar)
+                  call fL % AdaptGradientsToMortarFace(nGradEqn, N(2), N(3), UxL , UyL , UzL , self % faceSide(ELEFT), faces(fL % Mortar(m)), .true.)
+               end do 
+            else 
+               call fL   % AdaptGradientsToFace(nGradEqn, N(2), N(3), UxL , UyL , UzL , self % faceSide(ELEFT  ))
+            end if 
+
+            if (fR % MortarType == MORTAR_BIG) then 
+               if (fR % n_mpi_mortar .ne. 0) then 
+                  call fR   % AdaptGradientsToFace(nGradEqn, N(2), N(3), UxR , UyR , UzR , self % faceSide(ERIGHT  ))
+               end if 
+               do m=1,4
+                  if (fR % Mortar(m) .ne. 0) then 
+                     call fR % AdaptGradientsToMortarFace(nGradEqn, N(2), N(3), UxR , UyR , UzR , self % faceSide(ERIGHT), faces(fR % Mortar(m)))
+                  end if 
+               end do 
+            elseif(fR % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fR%Mortar)
+                  call fR % AdaptGradientsToMortarFace(nGradEqn, N(2), N(3), UxR , UyR , UzR , self % faceSide(ERIGHT), faces(fR % Mortar(m)), .true.)
+               end do 
+            else 
+               call fR   % AdaptGradientsToFace(nGradEqn, N(2), N(3), UxR , UyR , UzR , self % faceSide(ERIGHT  ))
+            end if 
+
+            if (fFR % MortarType == MORTAR_BIG) then 
+               if (fFR % n_mpi_mortar .ne. 0) then 
+                  call fFR   % AdaptGradientsToFace(nGradEqn, N(1), N(3), UxFR , UyFR , UzFR , self % faceSide(EFRONT  ))
+               end if 
+               do m=1,4
+                  if (fFR % Mortar(m) .ne. 0) then 
+                     call fFR % AdaptGradientsToMortarFace(nGradEqn, N(1), N(3), UxFR , UyFR , UzFR , self % faceSide(EFRONT), faces(fFR % Mortar(m)))
+                  end if 
+               end do 
+            elseif(fFR % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fFR%Mortar)
+                  call fFR % AdaptGradientsToMortarFace(nGradEqn, N(1), N(3), UxFR , UyFR , UzFR , self % faceSide(EFRONT), faces(fFR % Mortar(m)), .true.)
+               end do 
+            else 
+               call fFR   % AdaptGradientsToFace(nGradEqn, N(1), N(3), UxFR , UyFR , UzFR , self % faceSide(EFRONT  ))
+            end if 
+
+            if (fBK % MortarType == MORTAR_BIG) then 
+               if (fBK % n_mpi_mortar .ne. 0) then 
+                  call fBK   % AdaptGradientsToFace(nGradEqn, N(1), N(3), UxBK , UyBK , UzBK , self % faceSide(EBACK  ))
+               end if 
+               do m=1,4
+                  if (fBK % Mortar(m) .ne. 0) then 
+                     call fBK % AdaptGradientsToMortarFace(nGradEqn, N(1), N(3), UxBK , UyBK , UzBK , self % faceSide(EBACK), faces(fBK % Mortar(m)))
+                  end if 
+               end do 
+            elseif(fBK % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fBK%Mortar)
+                  call fBK % AdaptGradientsToMortarFace(nGradEqn, N(1), N(3), UxBK , UyBK , UzBK , self % faceSide(EBACK), faces(fBK % Mortar(m)), .true.)
+               end do 
+            else 
+               call fBK   % AdaptGradientsToFace(nGradEqn, N(1), N(3), UxBK , UyBK , UzBK , self % faceSide(EBACK  ))
+            end if 
+
+            if (fBOT % MortarType == MORTAR_BIG) then 
+               if (fBOT % n_mpi_mortar .ne. 0) then 
+                  call fBOT   % AdaptGradientsToFace(nGradEqn, N(1), N(2), UxBT , UyBT , UzBT , self % faceSide(EBOTTOM  ))
+               end if 
+               do m=1,4
+                  if (fBOT % Mortar(m) .ne. 0) then 
+                     call fBOT % AdaptGradientsToMortarFace(nGradEqn, N(1), N(2), UxBT , UyBT , UzBT , self % faceSide(EBOTTOM), faces(fBOT % Mortar(m)))
+                  end if 
+               end do 
+            elseif(fBOT % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fBOT%Mortar)
+                  call fBOT % AdaptGradientsToMortarFace(nGradEqn, N(1), N(2), UxBT , UyBT , UzBT , self % faceSide(EBOTTOM), faces(fBOT % Mortar(m)), .true.)
+               end do 
+            else 
+               call fBOT   % AdaptGradientsToFace(nGradEqn, N(1), N(2), UxBT , UyBT , UzBT , self % faceSide(EBOTTOM  ))
+            end if 
+
+            if (fT % MortarType == MORTAR_BIG) then 
+               if (fT % n_mpi_mortar .ne. 0) then 
+                  call fT   % AdaptGradientsToFace(nGradEqn, N(1), N(2), UxT , UyT , UzT , self % faceSide(ETOP  ))
+               end if 
+               do m=1,4
+                  if (fT % Mortar(m) .ne. 0) then 
+                     call fT % AdaptGradientsToMortarFace(nGradEqn, N(1), N(2), UxT , UyT , UzT , self % faceSide(ETOP), faces(fT % Mortar(m)))
+                  end if 
+               end do 
+            elseif(fT % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fT%Mortar)
+                  call fT % AdaptGradientsToMortarFace(nGradEqn, N(1), N(2), UxT , UyT , UzT , self % faceSide(ETOP), faces(fT % Mortar(m)), .true.)
+               end do 
+            else 
+               call fT   % AdaptGradientsToFace(nGradEqn, N(1), N(2), UxT , UyT , UzT , self % faceSide(ETOP  ))
+            end if 
+            
+         else
+            call fL   % AdaptGradientsToFace(nGradEqn, N(2), N(3), UxL , UyL , UzL , self % faceSide(ELEFT  ))
+            call fR   % AdaptGradientsToFace(nGradEqn, N(2), N(3), UxR , UyR , UzR , self % faceSide(ERIGHT ))
+            call fFR  % AdaptGradientsToFace(nGradEqn, N(1), N(3), UxFR, UyFR, UzFR, self % faceSide(EFRONT ))
+            call fBK  % AdaptGradientsToFace(nGradEqn, N(1), N(3), UxBK, UyBK, UzBK, self % faceSide(EBACK  ))
+            call fBOT % AdaptGradientsToFace(nGradEqn, N(1), N(2), UxBT, UyBT, UzBT, self % faceSide(EBOTTOM))
+            call fT   % AdaptGradientsToFace(nGradEqn, N(1), N(2), UxT , UyT , UzT , self % faceSide(ETOP   ))
+         end if
 
       end subroutine HexElement_ProlongGradientsToFaces
 
-      subroutine HexElement_ProlongAviscFluxToFaces(self, nEqn, AVflux, fFR, fBK, fBOT, fR, fT, fL)
+      subroutine HexElement_ProlongAviscFluxToFaces(self, nEqn, AVflux, fFR, fBK, fBOT, fR, fT, fL, faces)
          use FaceClass
          implicit none
          class(Element),   intent(in)    :: self
          integer,          intent(in)    :: nEqn
          real(kind=RP) ,   intent(in)    :: AVflux(1:NCONS, 0:self%Nxyz(1), 0:self%Nxyz(2), 0:self%Nxyz(3), 1:NDIM)
          class(Face),      intent(inout) :: fFR, fBK, fBOT, fR, fT, fL
+         type(Face),optional, intent(inout) :: faces(:)
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer                                                              :: i, j, k, l, N(3)
+         integer                                                              :: i, j, k, l, m, N(3)
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(1), 0:self % Nxyz(3)) :: VFR, VBK
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(1), 0:self % Nxyz(2)) :: VBOT, VT
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(2), 0:self % Nxyz(3)) :: VL, VR
@@ -411,16 +633,120 @@
             VT  (:,i,j) = VT  (:,i,j) + AVflux(:,i,j,k,IZ) * spAzeta % v(k,TOP   )
          end do                   ; end do                   ; end do
          nullify (spAxi, spAeta, spAzeta)
+         if (present(faces)) then 
 
-         call fL   % AdaptAviscFluxToFace(nEqn, N(2), N(3), VL   , self % faceSide(ELEFT  ))
-         call fR   % AdaptAviscFluxToFace(nEqn, N(2), N(3), VR   , self % faceSide(ERIGHT ))
-         call fFR  % AdaptAviscFluxToFace(nEqn, N(1), N(3), VFR  , self % faceSide(EFRONT ))
-         call fBK  % AdaptAviscFluxToFace(nEqn, N(1), N(3), VBK  , self % faceSide(EBACK  ))
-         call fBOT % AdaptAviscFluxToFace(nEqn, N(1), N(2), VBOT , self % faceSide(EBOTTOM))
-         call fT   % AdaptAviscFluxToFace(nEqn, N(1), N(2), VT   , self % faceSide(ETOP   ))
+            if (fL % MortarType == MORTAR_BIG) then 
+               if (fL % n_mpi_mortar .ne. 0) then 
+                  call fL   % AdaptAviscFluxToFace(nEqn, N(2), N(3), VL, self % faceSide(ELEFT  ))
+               end if 
+               do m=1,4
+                  if (fL % Mortar(m) .ne. 0) then 
+                     call fL % AdaptAviscFluxToMortarFace(nEqn, N(2), N(3), VL, self % faceSide(ELEFT), faces(fL % Mortar(m)))
+                  end if 
+               end do 
+            elseif (fL % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fL%Mortar)
+                  call fL % AdaptAviscFluxToMortarFace(nEqn, N(2), N(3), VL, self % faceSide(ELEFT), faces(fL % Mortar(m)), .true.)
+               end do 
+            else 
+               call fL   % AdaptAviscFluxToFace(nEqn, N(2), N(3), VL, self % faceSide(ELEFT  ))
+            end if 
+
+            if (fR % MortarType == MORTAR_BIG) then 
+               if (fR % n_mpi_mortar .ne. 0) then 
+                  call fR   % AdaptAviscFluxToFace(nEqn, N(2), N(3), VR, self % faceSide(ERIGHT  ))
+               end if 
+               do m=1,4
+                  if (fR % Mortar(m) .ne. 0) then 
+                     call fR % AdaptAviscFluxToMortarFace(nEqn, N(2), N(3), VR, self % faceSide(ERIGHT), faces(fR % Mortar(m)))
+                  end if 
+               end do 
+            elseif (fR % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fR%Mortar)
+                  call fR % AdaptAviscFluxToMortarFace(nEqn, N(2), N(3), VR, self % faceSide(ERIGHT), faces(fR % Mortar(m)), .true.)
+               end do 
+            else 
+               call fR   % AdaptAviscFluxToFace(nEqn, N(2), N(3), VR, self % faceSide(ERIGHT  ))
+            end if 
+
+            if (fFR % MortarType == MORTAR_BIG) then 
+               if (fFR % n_mpi_mortar .ne. 0) then 
+                  call fFR   % AdaptAviscFluxToFace(nEqn, N(1), N(3), VFR, self % faceSide(EFRONT  ))
+               end if 
+               do m=1,4
+                  if (fFR % Mortar(m) .ne. 0) then 
+                     call fFR % AdaptAviscFluxToMortarFace(nEqn, N(1), N(3), VFR, self % faceSide(EFRONT), faces(fFR % Mortar(m)))
+                  end if 
+               end do 
+            elseif (fFR % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fFR%Mortar)
+                  call fFR % AdaptAviscFluxToMortarFace(nEqn, N(1), N(3), VFR, self % faceSide(EFRONT), faces(fFR % Mortar(m)), .true.)
+               end do 
+            else 
+               call fFR   % AdaptAviscFluxToFace(nEqn, N(1), N(3), VFR, self % faceSide(EFRONT  ))
+            end if 
+
+            if (fBK % MortarType == MORTAR_BIG) then 
+               if (fBK % n_mpi_mortar .ne. 0) then 
+                  call fBK   % AdaptAviscFluxToFace(nEqn, N(1), N(3), VBK, self % faceSide(EBACK  ))
+               end if 
+               do m=1,4
+                  if (fBK % Mortar(m) .ne. 0) then 
+                     call fBK % AdaptAviscFluxToMortarFace(nEqn, N(1), N(3), VBK, self % faceSide(EBACK), faces(fBK % Mortar(m)))
+                  end if 
+               end do 
+            elseif (fBK % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fBK%Mortar)
+                  call fBK % AdaptAviscFluxToMortarFace(nEqn, N(1), N(3), VBK, self % faceSide(EBACK), faces(fBK % Mortar(m)), .true.)
+               end do 
+            else 
+               call fBK   % AdaptAviscFluxToFace(nEqn, N(1), N(3), VBK, self % faceSide(EBACK  ))
+            end if 
+
+            if (fBOT % MortarType == MORTAR_BIG) then 
+               if (fBOT % n_mpi_mortar .ne. 0) then 
+                  call fBOT   % AdaptAviscFluxToFace(nEqn, N(1), N(2), VBOT, self % faceSide(EBOTTOM  ))
+               end if 
+               do m=1,4
+                  if (fBOT % Mortar(m) .ne. 0) then 
+                     call fBOT % AdaptAviscFluxToMortarFace(nEqn, N(1), N(2), VBOT, self % faceSide(EBOTTOM), faces(fBOT % Mortar(m)))
+                  end if 
+               end do 
+            elseif (fBOT % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fBOT%Mortar)
+                  call fBOT % AdaptAviscFluxToMortarFace(nEqn, N(1), N(2), VBOT, self % faceSide(EBOTTOM), faces(fBOT % Mortar(m)), .true.)
+               end do 
+            else 
+               call fBOT   % AdaptAviscFluxToFace(nEqn, N(1), N(2), VBOT, self % faceSide(EBOTTOM  ))
+            end if 
+
+            if (fT % MortarType == MORTAR_BIG) then 
+               if (fT % n_mpi_mortar .ne. 0) then 
+                  call fT   % AdaptAviscFluxToFace(nEqn, N(1), N(2), VT, self % faceSide(ETOP  ))
+               end if 
+               do m=1,4
+                  if (fT % Mortar(m) .ne. 0) then 
+                     call fT % AdaptAviscFluxToMortarFace(nEqn, N(1), N(2), VT, self % faceSide(ETOP), faces(fT % Mortar(m)))
+                  end if 
+               end do 
+            elseif (fT % MortarType == MORTAR_SLIDING) then 
+               do m=1,size(fT%Mortar)
+                  call fT % AdaptAviscFluxToMortarFace(nEqn, N(1), N(2), VT, self % faceSide(ETOP), faces(fT % Mortar(m)), .true.)
+               end do 
+            else 
+               call fT   % AdaptAviscFluxToFace(nEqn, N(1), N(2), VT, self % faceSide(ETOP  ))
+            end if 
+
+         else
+            call fL   % AdaptAviscFluxToFace(nEqn, N(2), N(3), VL   , self % faceSide(ELEFT  ))
+            call fR   % AdaptAviscFluxToFace(nEqn, N(2), N(3), VR   , self % faceSide(ERIGHT ))
+            call fFR  % AdaptAviscFluxToFace(nEqn, N(1), N(3), VFR  , self % faceSide(EFRONT ))
+            call fBK  % AdaptAviscFluxToFace(nEqn, N(1), N(3), VBK  , self % faceSide(EBACK  ))
+            call fBOT % AdaptAviscFluxToFace(nEqn, N(1), N(2), VBOT , self % faceSide(EBOTTOM))
+            call fT   % AdaptAviscFluxToFace(nEqn, N(1), N(2), VT   , self % faceSide(ETOP   ))
+         end if
 
       end subroutine HexElement_ProlongAviscFluxToFaces
-
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -461,15 +787,15 @@
 !        **********************
 !
 #ifdef MULTIPHASE
-         do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
-            call GetGradientValues(nEqn, nGradEqn, self % storage % Q(:,i,j,k), U(:,i,j,k), self % storage % rho(i,j,k) )
-         end do         ; end do         ; end do
+            do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
+               call GetGradientValues(nEqn, nGradEqn, self % storage % Q(:,i,j,k), U(:,i,j,k), self % storage % rho(i,j,k) )
+            end do         ; end do         ; end do
 #else
-         do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
-            call GetGradientValues(nEqn, nGradEqn, self % storage % Q(:,i,j,k), U(:,i,j,k))
-         end do         ; end do         ; end do
+            do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
+               call GetGradientValues(nEqn, nGradEqn, self % storage % Q(:,i,j,k), U(:,i,j,k))
+            end do         ; end do         ; end do
 #endif
-
+   
 #ifdef MULTIPHASE
 !
 !        The multiphase solver needs the Chemical potential as first entropy variable
@@ -512,29 +838,29 @@
 !
          do k = 0, N(3) ; do j = 0, N(2)  ; do i = 0, N(1)
             self % storage % U_x(:,i,j,k) = (   U_xi(:,i,j,k) * self % geom % jGradXi(1,i,j,k) &
-                                              + U_eta(:,i,j,k) * self % geom % jGradEta(1,i,j,k) &
-                                              + U_zeta(:,i,j,k) * self % geom % jGradZeta(1,i,j,k))&
+                                                + U_eta(:,i,j,k) * self % geom % jGradEta(1,i,j,k) &
+                                                + U_zeta(:,i,j,k) * self % geom % jGradZeta(1,i,j,k))&
                                              * self % geom % InvJacobian(i,j,k)
 
             self % storage % U_y(:,i,j,k) = (    U_xi(:,i,j,k) * self % geom % jGradXi(2,i,j,k) &
-                                              + U_eta(:,i,j,k) * self % geom % jGradEta(2,i,j,k) &
-                                              + U_zeta(:,i,j,k) * self % geom % jGradZeta(2,i,j,k))&
-                                            * self % geom % InvJacobian(i,j,k)
+                                                + U_eta(:,i,j,k) * self % geom % jGradEta(2,i,j,k) &
+                                                + U_zeta(:,i,j,k) * self % geom % jGradZeta(2,i,j,k))&
+                                             * self % geom % InvJacobian(i,j,k)
 
             self % storage % U_z(:,i,j,k) = (    U_xi(:,i,j,k) * self % geom % jGradXi(3,i,j,k) &
-                                              + U_eta(:,i,j,k) * self % geom % jGradEta(3,i,j,k) &
-                                              + U_zeta(:,i,j,k) * self % geom % jGradZeta(3,i,j,k))&
-                                            * self % geom % InvJacobian(i,j,k)
+                                                + U_eta(:,i,j,k) * self % geom % jGradEta(3,i,j,k) &
+                                                + U_zeta(:,i,j,k) * self % geom % jGradZeta(3,i,j,k))&
+                                             * self % geom % InvJacobian(i,j,k)
          end do         ; end do          ; end do
          end associate
 
       end subroutine HexElement_ComputeLocalGradient
-!
-!////////////////////////////////////////////////////////////////////////
-!
-!     ----------------------------------------------------------------------------
-!     Checks if a point is inside a linearized version of the element (flat faces)
-!     ----------------------------------------------------------------------------
+   !
+   !////////////////////////////////////////////////////////////////////////
+   !
+   !     ----------------------------------------------------------------------------
+   !     Checks if a point is inside a linearized version of the element (flat faces)
+   !     ----------------------------------------------------------------------------
       logical function HexElement_FindPointInLinearizedElement(self, x, nodes)
          use NodeClass, only: Node
          use Utilities, only: SolveThreeEquationLinearSystem
@@ -592,8 +918,8 @@
          end do
 
          if ( (abs(xi(1)) .lt. 1.0_RP + INSIDE_TOL) .and. &
-              (abs(xi(2)) .lt. 1.0_RP + INSIDE_TOL) .and. &
-              (abs(xi(3)) .lt. 1.0_RP + INSIDE_TOL)          ) then
+               (abs(xi(2)) .lt. 1.0_RP + INSIDE_TOL) .and. &
+               (abs(xi(3)) .lt. 1.0_RP + INSIDE_TOL)          ) then
 !
 !           Solution is valid
 !           -----------------
@@ -721,8 +1047,8 @@
          nullify (spAxi, spAeta, spAzeta)
 
          if ( (abs(xi(1)) .lt. 1.0_RP + INSIDE_TOL) .and. &
-              (abs(xi(2)) .lt. 1.0_RP + INSIDE_TOL) .and. &
-              (abs(xi(3)) .lt. 1.0_RP + INSIDE_TOL)          ) then
+               (abs(xi(2)) .lt. 1.0_RP + INSIDE_TOL) .and. &
+               (abs(xi(3)) .lt. 1.0_RP + INSIDE_TOL)          ) then
 !
 !           Solution is valid
 !           -----------------
@@ -737,7 +1063,7 @@
          end if
 
       end function HexElement_FindPointWithCoords
-
+   
       function HexElement_EvaluateSolutionAtPoint(self, nEqn, xi)
          implicit none
          class(Element),   intent(in)    :: self
@@ -779,7 +1105,6 @@
          nullify (spAxi, spAeta, spAzeta)
       end function HexElement_EvaluateSolutionAtPoint
 
-      
       function HexElement_EvaluateGradientAtPoint(self, nEqn, xi, dir)
          implicit none
          class(Element),   intent(in)    :: self
@@ -886,32 +1211,32 @@
          call self % facePatches % destruct
       end subroutine SurfInfo_Destruct
 
-         elemental subroutine HexElement_Assign(to, from)
-            implicit none
-            class(Element), intent(inout) :: to
-            class(Element), intent(in)    :: from
+      elemental subroutine HexElement_Assign(to, from)
+         implicit none
+         class(Element), intent(inout) :: to
+         class(Element), intent(in)    :: from
 
-            to % hasSharedFaces = from % hasSharedFaces
-            to % dir2D = from % dir2D
-            to % globDir = from % globDir
-            to % eID = from % eID
-            to % globID = from % globID
-            to % offsetIO = from % offsetIO
-            to % nodeIDs = from % nodeIDs
-            to % faceIDs = from % faceIDs
-            to % faceSide = from % faceSide
-            to % Nxyz = from % Nxyz
-            to % hn = from % hn
-            to % geom = from % geom
-            to % boundaryName = from % boundaryName
-            to % NumberOfConnections = from % NumberOfConnections
-            to % Connection = from % Connection
-            to % hexMap = from % hexMap
-            to % SurfInfo = from % SurfInfo
+         to % hasSharedFaces = from % hasSharedFaces
+         to % dir2D = from % dir2D
+         to % globDir = from % globDir
+         to % eID = from % eID
+         to % globID = from % globID
+         to % offsetIO = from % offsetIO
+         to % nodeIDs = from % nodeIDs
+         to % faceIDs = from % faceIDs
+         to % faceSide = from % faceSide
+         to % Nxyz = from % Nxyz
+         to % hn = from % hn
+         to % geom = from % geom
+         to % boundaryName = from % boundaryName
+         to % NumberOfConnections = from % NumberOfConnections
+         to % Connection = from % Connection
+         to % hexMap = from % hexMap
+         to % SurfInfo = from % SurfInfo
 !~            IGNORE to % storage
 
-         end subroutine HexElement_Assign
-      !
+      end subroutine HexElement_Assign
+!
 !////////////////////////////////////////////////////////////////////////
 !
       subroutine HexElement_ConstructIBM( self, Nx, Ny, Nz, NumOfSTL )
@@ -927,22 +1252,22 @@
          self% isForcingPoint = .false.
          self% STL            = 0
          self% IP_index       = 0
-
-      end subroutine HexElement_ConstructIBM
-
+   
+         end subroutine HexElement_ConstructIBM
 #if defined(ACOUSTIC)
-      subroutine HexElement_ProlongBaseSolutionToFaces(self, nEqn, fFR, fBK, fBOT, fR, fT, fL)
+subroutine HexElement_ProlongBaseSolutionToFaces(self, nEqn, fFR, fBK, fBOT, fR, fT, fL, faces)
          use FaceClass
          implicit none
          class(Element),   intent(in)  :: self
          integer,          intent(in)  :: nEqn
          class(Face),      intent(inout) :: fFR, fBK, fBOT, fR, fT, fL
+         type(Face),optional, intent(inout) :: faces(:)
 !
 !        ---------------
 !        Local variables
 !        ---------------
 !
-         integer  :: i, j, k, l, N(3)
+         integer  :: i, j, k, N(3), m
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(1), 0:self % Nxyz(3)) :: QFR, QBK
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(1), 0:self % Nxyz(2)) :: QBOT, QT
          real(kind=RP), dimension(1:nEqn, 0:self % Nxyz(2), 0:self % Nxyz(3)) :: QL, QR
@@ -952,7 +1277,6 @@
          spAxi   => NodalStorage(N(1))
          spAeta  => NodalStorage(N(2))
          spAzeta => NodalStorage(N(3))
-
 !
 !        *************************
 !        Prolong solution to faces
@@ -972,14 +1296,102 @@
          end do                   ; end do                   ; end do
          nullify (spAxi, spAeta, spAzeta)
 
-         call fL   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QL  , self % faceSide(ELEFT  ) )
-         call fR   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QR  , self % faceSide(ERIGHT ) )
-         call fFR  % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QFR , self % faceSide(EFRONT ) )
-         call fBK  % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QBK , self % faceSide(EBACK  ) )
-         call fBOT % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM) )
-         call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT  , self % faceSide(ETOP   ) )
+         if (present(faces)) then
+            if (fL % MortarType == MORTAR_BIG) then
+               if (fL % n_mpi_mortar .ne. 0) then
+                  call fL   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QL, self % faceSide(ELEFT  ))
+               end if
+               do m=1,4
+                  if (fL % Mortar(m) .ne. 0) then
+                     call fL % AdaptBaseSolutionToMortarFace(nEqn, N(2), N(3), QL, self % faceSide(ELEFT  ), faces(fL % Mortar(m)))
+                  end if
+               end do
+            elseif (fL % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fL   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QL, self % faceSide(ELEFT  ))
+            end if
+            if (fR % MortarType == MORTAR_BIG) then
+               if (fR % n_mpi_mortar .ne. 0) then
+                  call fR   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QR, self % faceSide(ERIGHT ))
+               end if
+               do m=1,4
+                  if (fR % Mortar(m) .ne. 0) then
+                     call fR % AdaptBaseSolutionToMortarFace(nEqn, N(2), N(3), QR, self % faceSide(ERIGHT ), faces(fR % Mortar(m)))
+                  end if
+               end do
+            elseif (fR % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fR   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QR, self % faceSide(ERIGHT ))
+            end if
+            if (fFR % MortarType == MORTAR_BIG) then
+               if (fFR % n_mpi_mortar .ne. 0) then
+                  call fFR   % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QFR, self % faceSide(EFRONT ))
+               end if
+               do m=1,4
+                  if (fFR % Mortar(m) .ne. 0) then
+                     call fFR % AdaptBaseSolutionToMortarFace(nEqn, N(1), N(3), QFR, self % faceSide(EFRONT ), faces(fFR % Mortar(m)))
+                  end if
+               end do
+            elseif (fFR % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fFR   % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QFR, self % faceSide(EFRONT ))
+            end if
+            if (fBK % MortarType == MORTAR_BIG) then
+               if (fBK % n_mpi_mortar .ne. 0) then
+                  call fBK   % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QBK, self % faceSide(EBACK  ))
+               end if
+               do m=1,4
+                  if (fBK % Mortar(m) .ne. 0) then
+                     call fBK % AdaptBaseSolutionToMortarFace(nEqn, N(1), N(3), QBK, self % faceSide(EBACK  ), faces(fBK % Mortar(m)))
+                  end if
+               end do
+            elseif (fBK % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fBK   % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QBK, self % faceSide(EBACK  ))
+            end if
+            if (fBOT % MortarType == MORTAR_BIG) then
+               if (fBOT % n_mpi_mortar .ne. 0) then
+                  call fBOT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM))
+               end if
+               do m=1,4
+                  if (fBOT % Mortar(m) .ne. 0) then
+                     call fBOT % AdaptBaseSolutionToMortarFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM), faces(fBOT % Mortar(m)))
+                  end if
+               end do
+            elseif (fBOT % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fBOT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM))
+            end if
+            if (fT % MortarType == MORTAR_BIG) then
+               if (fT % n_mpi_mortar .ne. 0) then
+                  call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT, self % faceSide(ETOP   ))
+               end if
+               do m=1,4
+                  if (fT % Mortar(m) .ne. 0) then
+                     call fT % AdaptBaseSolutionToMortarFace(nEqn, N(1), N(2), QT, self % faceSide(ETOP  ), faces(fT % Mortar(m)))
+                  end if
+               end do
+            elseif (fT % MortarType == MORTAR_SLIDING) then
+               error stop 'ProlongBaseSolutionToFaces: sliding mortars not supported for base solution'
+            else
+               call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT, self % faceSide(ETOP   ))
+            end if
+         else
+            call fL   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QL  , self % faceSide(ELEFT  ))
+            call fR   % AdaptBaseSolutionToFace(nEqn, N(2), N(3), QR  , self % faceSide(ERIGHT ))
+            call fFR  % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QFR , self % faceSide(EFRONT ))
+            call fBK  % AdaptBaseSolutionToFace(nEqn, N(1), N(3), QBK , self % faceSide(EBACK  ))
+            call fBOT % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QBOT, self % faceSide(EBOTTOM))
+            call fT   % AdaptBaseSolutionToFace(nEqn, N(1), N(2), QT  , self % faceSide(ETOP   ))
+         end if
 
       end subroutine HexElement_ProlongBaseSolutionToFaces
 #endif
-!
-      END Module ElementClass
+! 
+END Module ElementClass
+   
