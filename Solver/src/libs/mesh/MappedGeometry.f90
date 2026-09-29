@@ -487,7 +487,7 @@ Module MappedGeometryClass
 !  -----------------------------------------
 !  Computation of the metric terms on a face
 !  -----------------------------------------
-   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, mortar_position, scale, slidingDir)
+   subroutine ConstructMappedGeometryFace(self, Nf, Nelf, Nel, Nel3D, geom, hexMap, side, projType, eSide, rot, sliding, slidingMInt, scale, slidingDir)
       use PhysicsStorage
       use InterpolationMatrices
       implicit none
@@ -504,7 +504,7 @@ Module MappedGeometryClass
       integer,                   intent(in)     :: rot
 
       logical,   optional,       intent(in)     :: sliding 
-      integer,   optional,       intent(in)     :: mortar_position 
+      real(kind=RP), optional,   intent(in)     :: slidingMInt(0:,0:)   ! side-1 sliding matrix of this mortar 
       real(kind=RP), optional,   intent(in)     :: scale
       integer, optional,         intent(in)     :: slidingDir
 !
@@ -749,7 +749,7 @@ Module MappedGeometryClass
 !     Perform h/p-Adaption if it's a sliding mesh
 !     ------------------------------------------
 
-      if (present(sliding) .and. present(mortar_position) .and. present(scale) .and. present(slidingDir)) then 
+         if (present(sliding) .and. present(slidingMInt) .and. present(scale) .and. present(slidingDir)) then 
          if (sliding) then 
 
             xrot=self % x 
@@ -758,24 +758,23 @@ Module MappedGeometryClass
             self % GradXi   = 0.0_RP
             self % GradEta  = 0.0_RP
             self % GradZeta = 0.0_RP
-            im = merge(3, 1, mortar_position == 1)
 
             if (slidingDir == 2) then
                do l = 0, Nelf(2) ; do j = 0, Nf(2) ; do i = 0, Nf(1)
-                  self % x (:,i,j) = self % x (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * xrot (:,i,l)
-                  self % normal (:,i,j) = self % normal (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * dSRot (:,i,l)
-                  self % GradXi (:,i,j) = self % GradXi (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradXiRot (:,i,l)
-                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradEtaRot (:,i,l)
-                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(j,l) * GradZetaRot(:,i,l)
+                  self % x (:,i,j) = self % x (:,i,j) + slidingMInt(j,l) * xrot (:,i,l)
+                  self % normal (:,i,j) = self % normal (:,i,j) + slidingMInt(j,l) * dSRot (:,i,l)
+                  self % GradXi (:,i,j) = self % GradXi (:,i,j) + slidingMInt(j,l) * GradXiRot (:,i,l)
+                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + slidingMInt(j,l) * GradEtaRot (:,i,l)
+                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + slidingMInt(j,l) * GradZetaRot(:,i,l)
                end do ; end do ; end do
 
             else
                do l = 0, Nelf(1) ; do j = 0, Nf(2) ; do i = 0, Nf(1)
-                  self % x (:,i,j) = self % x (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * xrot (:,l,j)
-                  self % normal (:,i,j) = self % normal (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * dSRot (:,l,j)
-                  self % GradXi (:,i,j) = self % GradXi (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradXiRot (:,l,j)
-                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradEtaRot (:,l,j)
-                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + TsetM(Nelf(1),Nf(1),im,1) % T(i,l) * GradZetaRot(:,l,j)
+                  self % x (:,i,j) = self % x (:,i,j) + slidingMInt(i,l) * xrot (:,l,j)
+                  self % normal (:,i,j) = self % normal (:,i,j) + slidingMInt(i,l) * dSRot (:,l,j)
+                  self % GradXi (:,i,j) = self % GradXi (:,i,j) + slidingMInt(i,l) * GradXiRot (:,l,j)
+                  self % GradEta (:,i,j) = self % GradEta (:,i,j) + slidingMInt(i,l) * GradEtaRot (:,l,j)
+                  self % GradZeta(:,i,j) = self % GradZeta(:,i,j) + slidingMInt(i,l) * GradZetaRot(:,l,j)
                end do ; end do ; end do
             end if
             self % GradXi=self % GradXi*scale

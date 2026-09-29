@@ -18,7 +18,7 @@
          use StorageClass                    , only: FaceStorage_t
          use PhysicsStorage
          use NodalStorageClass
-         use InterpolationMatrices           , only: Tset, TsetM
+         use InterpolationMatrices           , only: Tset, TsetM, InterpolationMatrix_t
          IMPLICIT NONE 
    
          private
@@ -88,6 +88,8 @@
       integer                         :: n_mpi_mortar
       real(kind=RP)                   :: offset(2)                   
       real(kind=RP)                   :: s(2)
+      real(kind=RP), allocatable      :: MIntSliding(:,:,:)   ! sliding: face -> mortar, one per side
+      real(kind=RP), allocatable      :: MoutSliding(:,:,:)   ! sliding: mortar -> face, one per side
 
          contains
             procedure   :: Construct                     => ConstructFace
@@ -188,6 +190,9 @@
          
          call self % geom % Destruct
          call self % storage % Destruct
+         
+         if (allocated(self % MIntSliding)) deallocate(self % MIntSliding)
+         if (allocated(self % MoutSliding)) deallocate(self % MoutSliding)
 
          !safedeallocate(self % Mortar)
 
@@ -297,24 +302,11 @@
          call TsetM(self % NfLeft(2), self % Nf(2), 1, 1) % construct(self % NfLeft(2), self % Nf(2), -0.5_RP, 0.5_RP, big2small)  
          call TsetM(self % Nf(2), self % NfLeft(2), 1, 2) % construct(self % Nf(2), self % NfLeft(2), -0.5_RP, 0.5_RP, small2big)  
       end if 
+
       if (present(offset) .and. present(s)) then !Sliding
-         if (self% Mortarpos==0) then
-            call TsetM(self % NfLeft(1), self % Nf(1), 1, 1) % construct(self % NfLeft(1), self % Nf(1), offset(2), s(1), big2small)
-            call TsetM(self % Nf(1), self % NfLeft(1), 1, 2) % construct(self % Nf(1), self % NfLeft(1), offset(2), s(1), small2big)
-
-            call TsetM(self % NfLeft(1), self % Nf(1), 2, 1) % construct(self % NfLeft(1), self % Nf(1), offset(1), s(2), big2small)    
-            call TsetM(self % Nf(1), self % NfLeft(1), 2, 2) % construct(self % Nf(1), self % NfLeft(1), offset(1), s(2), small2big)
-         else if (self%Mortarpos==1)  then
-            call TsetM(self % NfLeft(1), self % Nf(1), 3, 1) % construct(self % NfLeft(1), self % Nf(1), offset(2), s(1), big2small)       
-            call TsetM(self % Nf(1), self % NfLeft(1), 3, 2) % construct(self % Nf(1), self % NfLeft(1), offset(2), s(1), small2big)
-
-            call TsetM(self % NfLeft(1), self % Nf(1), 4, 1) % construct(self % NfLeft(1), self % Nf(1), offset(1), s(2), big2small)    
-            call TsetM(self % Nf(1), self % NfLeft(1), 4, 2) % construct(self % Nf(1), self % NfLeft(1), offset(1), s(2), small2big)
-         end if 
-      end if 
+         call BuildSlidingMatrices(self, offset, s)
+      end if
       
-
-   
 !
 !     -----------------------  0- no projection
 !     Set the projection type: 1- x needs projection
@@ -2183,12 +2175,54 @@
       to % MortarType = from % MortarType
       to % Mortarpos = from % Mortarpos
       to % slidingDir = from % slidingDir
-
+      if (allocated(from % MIntSliding)) to % MIntSliding = from % MIntSliding
+      if (allocated(from % MoutSliding)) to % MoutSliding = from % MoutSliding
+      if (allocated(from % Mortar)) to % Mortar = from % Mortar
+      to % n_mpi_mortar = from % n_mpi_mortar
+      to % offset       = from % offset
+      to % s            = from % s
    end subroutine Face_Assign
-
 !
 !////////////////////////////////////////////////////////////////////////
 !
+!  Builds the projection matrices of a sliding mortar, one pair per side:
+!  side k maps [offset(k) - s(k), offset(k) + s(k)] of its element face onto
+!  the mortar and back.
+!
+   subroutine BuildSlidingMatrices(self, offset, s)
+      implicit none
+      class(Face),   intent(inout) :: self
+      real(kind=RP), intent(in)    :: offset(2), s(2)
+
+      type(InterpolationMatrix_t)  :: tmp
+      integer                      :: side
+
+!     Reallocate only if the order changed (p-adaptation); the contents are
+!     recomputed below on every call.
+      if (allocated(self % MIntSliding)) then
+         if (any(shape(self % MIntSliding) /= [self % Nf(1)+1, self % NfLeft(1)+1, 2])) &
+            deallocate(self % MIntSliding, self % MoutSliding)
+      end if
+      if (.not. allocated(self % MIntSliding)) then
+         allocate(self % MIntSliding(0:self % Nf(1),     0:self % NfLeft(1), 2))
+         allocate(self % MoutSliding(0:self % NfLeft(1), 0:self % Nf(1),     2))
+      end if
+
+      do side = 1, 2
+         call tmp % construct(self % NfLeft(1), self % Nf(1), offset(side), s(side), big2small)
+         self % MIntSliding(:,:,side) = tmp % T
+         call tmp % destruct
+
+         call tmp % construct(self % Nf(1), self % NfLeft(1), offset(side), s(side), small2big)
+         self % MoutSliding(:,:,side) = tmp % T
+         call tmp % destruct
+      end do
+
+   end subroutine BuildSlidingMatrices
+!
+!////////////////////////////////////////////////////////////////////////
+!
+
 !  Get the projection matrices for sliding mortars
 !
    subroutine GetSlidingMInt(fma, MInt)
@@ -2196,13 +2230,7 @@
       type(Face),    intent(in)  :: fma
       real(kind=RP), intent(out) :: MInt(0:fma%Nf(1), 0:fma%NfLeft(1), 1:2)
 
-      if (fma % Mortarpos == 0) then
-         MInt(:,:,1) = TsetM(fma % NfLeft(1), fma % Nf(1), 1, 1) % T
-         MInt(:,:,2) = TsetM(fma % NfLeft(1), fma % Nf(1), 2, 1) % T
-      else if (fma % Mortarpos == 1) then
-         MInt(:,:,1) = TsetM(fma % NfLeft(1), fma % Nf(1), 3, 1) % T
-         MInt(:,:,2) = TsetM(fma % NfLeft(1), fma % Nf(1), 4, 1) % T
-      end if
+      MInt = fma % MIntSliding
 
    end subroutine GetSlidingMInt
 !
@@ -2213,13 +2241,7 @@
       type(Face),    intent(in)  :: fma
       real(kind=RP), intent(out) :: Mout(0:fma%NfLeft(1), 0:fma%Nf(1), 1:2)
 
-      if (fma % Mortarpos == 0) then
-         Mout(:,:,1) = TsetM(fma % Nf(1), fma % NfLeft(1), 1, 2) % T
-         Mout(:,:,2) = TsetM(fma % Nf(1), fma % NfLeft(1), 2, 2) % T
-      else if (fma % Mortarpos == 1) then
-         Mout(:,:,1) = TsetM(fma % Nf(1), fma % NfLeft(1), 3, 2) % T
-         Mout(:,:,2) = TsetM(fma % Nf(1), fma % NfLeft(1), 4, 2) % T
-      end if
+      Mout = fma % MoutSliding
 
    end subroutine GetSlidingMout
 !

@@ -1330,6 +1330,15 @@ slavecoord:             DO l = 1, 4
          end do
       end do
    end if
+
+   do i = 1, self % numberOfFaces
+      if (.not. allocated(self % faces(i) % Mortar)) cycle
+      do iFace = 1, size(self % faces(i) % Mortar)
+         if (self % faces(i) % Mortar(iFace) > 0) then
+            self % faces(i) % Mortar(iFace) = newFaceID(self % faces(i) % Mortar(iFace))
+         end if
+      end do
+   end do
 !
 !     Reassign zones
 !     -----------------

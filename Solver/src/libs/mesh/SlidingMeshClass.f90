@@ -69,6 +69,7 @@ MODULE SlidingMeshClass
       integer       :: side     = 0        ! local face index 1..6 on the owner
       integer       :: rotation = 0        ! face rotation index
       integer       :: dir      = 0        ! azimuthal local direction, see SlidingFaceDir
+      integer       :: quad(4) = 0         ! corner quadrants (phi,zeta), localFaceNode order
       real(kind=RP) :: phi      = 0.0_RP   ! azimuth of the face centroid, IN ITS OWN FRAME
       real(kind=RP) :: zeta     = 0.0_RP   ! axial coordinate of the face centroid
       real(kind=RP) :: jacMin   = 0.0_RP   ! min jacobian of the owning element
@@ -80,7 +81,7 @@ MODULE SlidingMeshClass
    end type SlidingRingEntry
    
 
-   integer, parameter :: SM_RING_NINT  = 7      
+   integer, parameter :: SM_RING_NINT = 11      
    integer, parameter :: SM_RING_NREAL = 3
 
     type SlidingMesh
@@ -100,6 +101,9 @@ MODULE SlidingMeshClass
         !     (1),(4),(7) : element, local face and rotation of the rotating side of Mortarpos 1
         !     (2),(5),(8) : the same for Mortarpos 0
         !     (3),(6),(9) : element, local face and rotation of the static side, the master, shared by both families
+        !     (10:13)     : orientation tag of the Mortarpos 1 slave
+        !     (14:17)     : orientation tag of the Mortarpos 0 slave
+        !     (18:21)     : orientation tag of the master
         integer                                :: numBFacePoints
         integer                                :: numSlidingElements
         integer                                :: numSlidingInterfaceElements 
@@ -275,6 +279,7 @@ subroutine SlidingMesh_GetInfo( self, controlVariables )
     
     self % iR1 = mod(self % iAx + 1, 3) + 1
     self % iR2 = mod(self % iAx, 3) + 1
+    
     self % isConfigured = .true.
 
 end subroutine SlidingMesh_GetInfo
@@ -305,7 +310,7 @@ subroutine SlidingMesh_Initialize(self, numLocalInterfaceElements, numLocalSlidi
     if (.not. allocated(self % mortarNeighborElems))             allocate(self % mortarNeighborElems(numLocalInterfaceElements))
     if (.not. allocated(self % slidingMortarElems))              allocate(self % slidingMortarElems(numLocalInterfaceElements))
     if (.not. allocated(self % pureSlidingElems))                allocate(self % pureSlidingElems(numLocalSlidingElements))
-    if (.not. allocated(self % slidingMortarConnectivity))       allocate(self % slidingMortarConnectivity(numLocalInterfaceElements, 9))
+    if (.not. allocated(self % slidingMortarConnectivity))       allocate(self % slidingMortarConnectivity(numLocalInterfaceElements, 21))
     
     !========================
     ! Initialization (first pass only)
