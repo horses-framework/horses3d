@@ -505,14 +505,25 @@ module VolumeIntegrals
             KinEn = 0.5_RP * KinEn / e % storage % Q(IRHO,:,:,:)
 
             do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
-               en = kinEn(i,j,k)
-               if( e % isInsideBody(i,j,k) ) then
-                  if( IBM% stl(e% STL(i,j,k))% move ) then
-                     Q_target = IBM % MaskVelocity( e % storage% Q(:,i,j,k), NCONS, e % STL(i,j,k), e % geom% x(:,i,j,k), time )
-                     en = en + (0.5_rp / e % storage % Q(IRHO,i,j,k)) * (POW2(Q_target(IRHOU)) + POW2(Q_target(IRHOV)) + POW2(Q_target(IRHOW))) &
-                        - (1.0_rp / e % storage % Q(IRHO,i,j,k)) * (e % storage % Q(IRHOU,i,j,k) * Q_target(IRHOU) + e % storage % Q(IRHOV,i,j,k) * Q_target(IRHOV) + e % storage % Q(IRHOW,i,j,k) * Q_target(IRHOW))
+
+               rho = e % storage % Q(IRHO,i,j,k)
+
+               u_s = 0.0_RP; v_s = 0.0_RP; w_s = 0.0_RP
+               if ( present(IBM) .and. present(time) ) then
+                  if ( IBM % active ) then
+                     if ( IBM % stl(1) % move ) then
+                        Q_target = IBM % MaskVelocity( e % storage % Q(:,i,j,k), NCONS, 1, e % geom % x(:,i,j,k), time )
+                        u_s = Q_target(IRHOU) / rho
+                        v_s = Q_target(IRHOV) / rho
+                        w_s = Q_target(IRHOW) / rho
+                     end if
                   end if
                end if
+
+               en = 0.5_RP / rho * (  POW2( e % storage % Q(IRHOU,i,j,k) - rho * u_s ) &
+                                    + POW2( e % storage % Q(IRHOV,i,j,k) - rho * v_s ) &
+                                    + POW2( e % storage % Q(IRHOW,i,j,k) - rho * w_s ) )
+
                val = val +   wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * en
             end do            ; end do           ; end do
 
@@ -529,15 +540,28 @@ module VolumeIntegrals
 !
 
            do k = 0, Nel(3)  ; do j = 0, Nel(2) ; do i = 0, Nel(1)
-               en = e % storage % Q(IRHOE,i,j,k)
-               if( e % isInsideBody(i,j,k) ) then
-                  if( IBM % stl(e % STL(i,j,k)) % move ) then
-                     Q_target = IBM % MaskVelocity( e % storage% Q(:,i,j,k), NCONS, e % STL(i,j,k), e % geom% x(:,i,j,k), time )
-                     en = en + 0.5_rp / Q_target(IRHO) * (POW2(Q_target(IRHOU)) + POW2(Q_target(IRHOV)) + POW2(Q_target(IRHOW))) &
-                        - (1.0_rp / e % storage % Q(IRHO,i,j,k)) * (e % storage % Q(IRHOU,i,j,k) * Q_target(IRHOU) + e % storage % Q(IRHOV,i,j,k) * Q_target(IRHOV) + e % storage % Q(IRHOW,i,j,k) * Q_target(IRHOW))
+
+               rho = e % storage % Q(IRHO,i,j,k)
+
+               u_s = 0.0_RP; v_s = 0.0_RP; w_s = 0.0_RP
+               if ( present(IBM) .and. present(time) ) then
+                  if ( IBM % active ) then
+                     if ( IBM % stl(1) % move ) then
+                        Q_target = IBM % MaskVelocity( e % storage % Q(:,i,j,k), NCONS, 1, e % geom % x(:,i,j,k), time )
+                        u_s = Q_target(IRHOU) / rho
+                        v_s = Q_target(IRHOV) / rho
+                        w_s = Q_target(IRHOW) / rho
+                     end if
                   end if
                end if
-               val = val +   wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * en 
+
+               en = e % storage % Q(IRHOE,i,j,k)                    &
+                  - (  e % storage % Q(IRHOU,i,j,k) * u_s           &
+                     + e % storage % Q(IRHOV,i,j,k) * v_s           &
+                     + e % storage % Q(IRHOW,i,j,k) * w_s )         &
+                  + 0.5_RP * rho * ( POW2(u_s) + POW2(v_s) + POW2(w_s) )
+
+               val = val +   wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k) * en
             end do            ; end do           ; end do
 #endif
 
