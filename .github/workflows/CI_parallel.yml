@@ -44,6 +44,7 @@ jobs:
       - name: install openmpi
         if: (matrix.compiler == 'gfortran')
         run: |
+          sudo apt-get update
           sudo apt-get install openmpi-bin libopenmpi-dev
 
       # IF COMPILER = IFORT -> INSTALL IFORT #
