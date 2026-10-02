@@ -27,6 +27,10 @@ module SurfaceIntegrals
    integer, parameter   :: PRESSURE_DISTRIBUTION = 7
    integer, parameter   :: USER_DEFINED = 99
 !
+!  Pressure subtracted in all pressure integrals (0 = absolute pressure by default).
+!  Set by a logical flag in the constrol file. Value har set inside SurfaceMonitor_Initialization
+   real(kind=RP), public :: pGauge = 0.0_RP
+!
 !  ========
    contains
 !  ========
@@ -220,14 +224,14 @@ module SurfaceIntegrals
 !
 !           ***********************************
 !           Computes the pressure integral
-!              val = \int pdS
+!              val = \int (p - pGauge) dS
 !           ***********************************
 !
             do j = 0, f % Nf(2) ;    do i = 0, f % Nf(1)
 !
 !              Compute the integral
 !              --------------------
-               p = Pressure(Q(:,i,j))
+               p = Pressure(Q(:,i,j)) - pGauge
                val = val + p * spAxi % w(i) * spAeta % w(j) * f % geom % jacobian(i,j)
             end do          ;    end do
 
@@ -387,14 +391,14 @@ module SurfaceIntegrals
 !
 !           ************************************************
 !           Computes the total force experienced by the zone
-!              F = \int p \vec{n}ds - \int tau'·\vec{n}ds
+!              F = \int (p - pGauge) \vec{n}ds - \int tau'·\vec{n}ds
 !           ************************************************
 !
             do j = 0, f % Nf(2) ;    do i = 0, f % Nf(1)
 !
 !              Compute the integral
 !              --------------------
-               p = Pressure(Q(:,i,j))
+               p = Pressure(Q(:,i,j)) - pGauge
                call getStressTensor(Q(:,i,j),U_x(:,i,j),U_y(:,i,j),U_z(:,i,j), tau)
 
                val = val + ( p * f % geom % normal(:,i,j) - matmul(tau,f % geom % normal(:,i,j)) ) &
@@ -406,14 +410,14 @@ module SurfaceIntegrals
 !
 !           ****************************************************
 !           Computes the pressure forces experienced by the zone
-!              F = \int p \vec{n}ds
+!              F = \int (p - pGauge) \vec{n}ds
 !           ****************************************************
 !
             do j = 0, f % Nf(2) ;    do i = 0, f % Nf(1)
 !
 !              Compute the integral
 !              --------------------
-               p = Pressure(Q(:,i,j))
+               p = Pressure(Q(:,i,j)) - pGauge
 
                val = val + ( p * f % geom % normal(:,i,j) ) * f % geom % jacobian(i,j) &
                          * spAxi % w(i) * spAeta % w(j)
@@ -890,7 +894,7 @@ module SurfaceIntegrals
                viscStress = matmul(tau,normal)
             end if
             
-            outvalue = -P * normal + viscStress   
+            outvalue = -(P - pGauge) * normal + viscStress   
                   
          case( PRESSURE_FORCE )
 
@@ -900,7 +904,7 @@ module SurfaceIntegrals
 
             P = pressure(Qi)
             
-            outvalue = -P * normal
+            outvalue = -(P - pGauge) * normal
             
          case( VISCOUS_FORCE )
 
