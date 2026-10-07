@@ -12,6 +12,7 @@ module Mesh2PltModule
    contains
       subroutine Mesh2Plt(meshFile, mode)
          use getTask, only: MODE_MULTIZONE, MODE_FINITEELM
+         use OutputVariables
          implicit none
          character(len=*), intent(in)     :: meshFile
          integer,          intent(in)     :: mode
@@ -41,7 +42,15 @@ module Mesh2PltModule
 !        Write the title and variables
 !        -----------------------------
          write(fid,'(A,A,A)') 'TITLE = "',trim(meshFile),'"'
-         write(fid,'(A)') 'VARIABLES = "x","y","z"'
+
+         if (hasMPIranks) then
+            no_of_outputVariables = 1
+            allocate( outputVariableNames(no_of_outputVariables) )
+            outputVariableNames(1) = MPIRANK_V
+            write(fid,'(A,A)') 'VARIABLES = "x","y","z"', trim(getOutputVariablesLabel())
+         else
+            write(fid,'(A)') 'VARIABLES = "x","y","z"'
+         end if
 
 !
 !        Write elements
@@ -91,7 +100,11 @@ module Mesh2PltModule
          formatout = getFormat()
 
          do k = 0, e % Nmesh(3)   ; do j = 0, e % Nmesh(2)    ; do i = 0, e % Nmesh(1)
-            write(fid,trim(formatout)) e % x(:,i,j,k)
+            if (hasMPIranks) then
+               write(fid,trim(formatout)) e % x(:,i,j,k), real(e % mpi_rank, kind=rp)
+            else
+               write(fid,trim(formatout)) e % x(:,i,j,k)
+            end if
          end do               ; end do                ; end do
 
       end subroutine WriteElementToTecplot
@@ -153,7 +166,11 @@ module Mesh2PltModule
          do eID = 1, size(mesh % elements)
             associate ( e => mesh % elements(eID) )
             do k = 0, e % Nmesh(3) ; do j = 0, e % Nmesh(2) ; do i = 0, e % Nmesh(1)
-               write(fid,trim(formatout)) e % x(:,i,j,k)
+               if (hasMPIranks) then
+                  write(fid,trim(formatout)) e % x(:,i,j,k), real(e % mpi_rank, kind=rp)
+               else
+                  write(fid,trim(formatout)) e % x(:,i,j,k)
+               end if
             end do                ; end do                ; end do
             end associate
          end do
@@ -194,7 +211,7 @@ module Mesh2PltModule
 
          getFormat = ""
 
-         write(getFormat,'(A,I0,A,A)') "(",3,PRECISION_FORMAT,")"
+         write(getFormat,'(A,I0,A,A)') "(",3+no_of_outputVariables,PRECISION_FORMAT,")"
 
       end function getFormat
 
