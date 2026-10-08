@@ -3601,17 +3601,18 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                   call e % Connection(sideL) % construct (globID,Nxyz)
                   counter = counter + 6
                case (1)
-                 sideL = f % elementSide(side)                                  ! element side 1/2/3/4/5/6
-
-                 Nel(:,      side ) = e % Nxyz(axisMap(:,sideL))
-                 Nel(:,other(side))= Nel(:,      side ) 
-                 call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes)
-
-                 Nxyz   = self % MPIfaces % faces(domain) % Nrecv(counter+2:counter+4)
-                 globID = self % MPIfaces % faces(domain) % Nrecv(counter+5)
-
-                 e % NumberOfConnections (sideL) = 1
-                 call e % Connection(sideL) % construct (globID,Nxyz)
+                  sideL = f % elementSide(side)                                  ! element side 1/2/3/4/5/6
+ 
+                  Nel(:,      side ) = e % Nxyz(axisMap(:,sideL))
+                  Nel(:,other(side))= Nel(:,      side ) 
+                  call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes)
+ 
+                  Nxyz   = self % MPIfaces % faces(domain) % Nrecv(counter+2:counter+4)
+                  globID = self % MPIfaces % faces(domain) % Nrecv(counter+5)
+ 
+                  e % NumberOfConnections (sideL) = 1
+                  call e % Connection(sideL) % construct (globID,Nxyz)
+                  counter = counter + 6 
                end select 
                  end associate
                  end associate
