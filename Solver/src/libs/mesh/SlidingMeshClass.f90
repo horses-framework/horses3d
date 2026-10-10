@@ -721,5 +721,34 @@ integer function SlidingMaxSlaveRows(SM) result(nMax)
     end do
 
 end function SlidingMaxSlaveRows
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+! ---------------------------------------------------------------------------
+!  MortarSlot
+!
+!  Slot of a mortar in mesh % mortar_faces. m is the position of the static
+!  ring row in myMasterRows (full mortars) or mySlaveRows (reduced records).
+!  A rank holds one kind or the other, never both (strategies 1 and 2), so
+!  both kinds share the same range.
+! ---------------------------------------------------------------------------
+pure integer function MortarSlot(SM, Mortarpos, m) result(slot)
+    implicit none
+    type(SlidingMesh), intent(in) :: SM
+    integer,           intent(in) :: Mortarpos, m
+
+    slot = Mortarpos * SM % numSlidingInterfaceElements + m
+
+end function MortarSlot
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+pure integer function MortarSlotCount(SM) result(n)
+    implicit none
+    type(SlidingMesh), intent(in) :: SM
+
+    n = 2 * SM % numSlidingInterfaceElements
+
+end function MortarSlotCount
  
 END MODULE SlidingMeshClass

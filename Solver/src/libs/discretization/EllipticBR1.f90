@@ -559,7 +559,16 @@ module EllipticBR1
 	!           Prolong gradients
 	!           -----------------
 				fIDs = e % faceIDs
-				if ( .not.mesh % nonconforming ) then
+				if (mesh % SlidingMesh % active) then
+               call e % ProlongGradientsToFaces(nGradEqn, &
+                                                fFR=mesh % faces(fIDs(1)),&
+                                                fBK=mesh % faces(fIDs(2)),&
+                                                fBOT=mesh % faces(fIDs(3)),&
+                                                fR=mesh % faces(fIDs(4)),&
+                                                fT=mesh % faces(fIDs(5)),&
+                                                fL=mesh % faces(fIDs(6)),&
+                                                faces=mesh % mortar_faces )
+				else if ( .not.mesh % nonconforming ) then
                call e % ProlongGradientsToFaces(nGradEqn, mesh % faces(fIDs(1)),&
                                                 mesh % faces(fIDs(2)),&
                                                 mesh % faces(fIDs(3)),&

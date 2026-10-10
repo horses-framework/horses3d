@@ -609,10 +609,14 @@ module SpatialDiscretization
                      end if 
                   end do 
                end if 
-               call computeMPIFaceFlux(mesh % faces(fID))
+
+               if ( mesh % slidingflux .and. mesh % elements(maxval(mesh % faces(fID) % elementIDs)) % sliding ) then
+                  call computeMPIFaceFlux(mesh % faces(fID), SM = mesh % SlidingMesh)
+               else
+                  call computeMPIFaceFlux(mesh % faces(fID))
+               end if
             end do
 !$omp end do
-
 
 !$omp single
       if ( mesh % nonconforming ) then
@@ -2021,11 +2025,14 @@ module SpatialDiscretization
 
      end subroutine computeElementInterfaceFlux
 
-      subroutine computeMPIFaceFlux(f)
+      subroutine computeMPIFaceFlux(f, SM)
          use FaceClass
          use RiemannSolvers_NS
+         use SlidingMeshClass
          implicit none
          type(Face)   , intent(inout) :: f
+         type(SlidingMesh), optional, intent(in) :: SM  
+
          integer       :: i, j
          integer       :: thisSide
          real(kind=RP) :: inv_flux(1:NCONS,0:f % Nf(1),0:f % Nf(2))
@@ -2091,12 +2098,20 @@ module SpatialDiscretization
 !              Invscid fluxes
 !              --------------
 !
-               call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
-                                  QRight = f % storage(2) % Q(:,i,j), &
-                                  nHat   = f % geom % normal(:,i,j), &
-                                  t1     = f % geom % t1(:,i,j), &
-                                  t2     = f % geom % t2(:,i,j), &
-                                  flux   = inv_flux(:,i,j) )
+               if ( present(SM) ) then
+                  call ALE_LxF_Flux(QLeft  = f % storage(1) % Q(:,i,j), &
+                                    QRight = f % storage(2) % Q(:,i,j), &
+                                    nHat   = f % geom % normal(:,i,j), &
+                                    vg     = SM % GridVelocityAt(f % geom % x(:,i,j)), &
+                                    flux   = inv_flux(:,i,j) )
+               else
+                  call RiemannSolver(QLeft  = f % storage(1) % Q(:,i,j), &
+                                     QRight = f % storage(2) % Q(:,i,j), &
+                                     nHat   = f % geom % normal(:,i,j), &
+                                     t1     = f % geom % t1(:,i,j), &
+                                     t2     = f % geom % t2(:,i,j), &
+                                     flux   = inv_flux(:,i,j) )
+               end if
 !
 !              Multiply by the Jacobian
 !              ------------------------

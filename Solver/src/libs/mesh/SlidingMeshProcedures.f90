@@ -389,6 +389,17 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
       end if 
 
       if (.not. present(rotateEntireMesh)) then
+
+         if (.not. allocated(mesh % mortar_faces)) then
+            allocate(mesh % mortar_faces(MortarSlotCount(SM)))
+
+            do l = 1, size(mesh % mortar_faces)
+               mesh % mortar_faces(l) % ID          = -1
+               mesh % mortar_faces(l) % elementIDs  = -1
+               mesh % mortar_faces(l) % elementSide = -1
+            end do
+         end if
+
          call ConstructSlidingMortars(mesh, nodes, SM % numSlidingInterfaceElements, SM % mortarNeighborElems, &
                         SM % slidingMortarElems, SM % slidingMortarConnectivity, offsetParams, scaleParams)
       end if
@@ -740,6 +751,7 @@ subroutine CollectLocalRingEntries(mesh, rotorEnt, nRot, statorEnt, nSta)
             e % localEID = eID
             e % Azim_Id  = 0            ! assigned by BuildAzimuthalConnectivity
             e % Ax_Id    = 0            ! assigned by BuildAzimuthalConnectivity
+            e % Nel      = mesh % elements(eID) % Nxyz(axisMap(:, j))
 
             !Orientation tag, see SlidingFaceQuadrants
             do cc = 1, 4
@@ -784,6 +796,12 @@ subroutine CollectLocalRingEntries(mesh, rotorEnt, nRot, statorEnt, nSta)
       SM % numSlidingInterfaceElements = nRot ! local count
       SM % needsLocalSplit = (SM % nLocalSplitFaces > 0)
 
+      if (SM % nLocalSplitFaces > 0 .and. SM % nLocalSplitFaces < nRot) then
+         write(STD_OUT,*) 'sliding: rank', MPI_Process % rank, 'holds', &
+                          SM % nLocalSplitFaces, 'local interface faces out of', nRot, &
+                          ': the partition mixes strategies 1 and 2'
+         error stop
+      end if
    end associate
 
 end subroutine CollectLocalRingEntries
@@ -1916,11 +1934,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
    integer :: NelL(2), NelR(2)
    real(kind=RP) :: jmax
 
-   ! Allocate mortar face container
-   if (.not. allocated(mesh % mortar_faces)) then
-      allocate(mesh % mortar_faces(2*nelm))
-   end if
-
    do i = 1, nelm
 
       ! The master is the same static face for both families
@@ -1941,7 +1954,7 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
 
       do Mortarpos = 0, 1
 
-         mortarIndex = Mortarpos * nelm+i
+         mortarIndex = MortarSlot(mesh % SlidingMesh, Mortarpos, i)
 
          if (Mortarpos == 0) then
             slaveElementID  = slidingMortarConnectivity(i,2)
@@ -1958,15 +1971,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
             slaveQuad = slidingMortarConnectivity(i,14:17)
          else
             slaveQuad = slidingMortarConnectivity(i,10:13)
-         end if
-
-         !crossed azimuthal directions require an axis-swapping rotation
-         if (QuadAzimDir(masterQuad) /= QuadAzimDir(slaveQuad)) then
-            if (all(SlidingPairRotation(masterQuad, slaveQuad) /= [1, 3, 4, 6])) then
-               write(STD_OUT,*) 'sliding: mortar', mortarIndex, ' has crossed azimuthal', &
-                    ' directions but a non axis-swapping rotation.', masterQuad, slaveQuad
-               error stop
-            end if
          end if
 
          call mesh % mortar_faces(mortarIndex) % Construct(ID = mortarIndex, nodeIDs   = mortarFaceNodeIDs, &
@@ -1993,8 +1997,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
 
          mesh % mortar_faces(mortarIndex) % Mortar(2) = slaveFaceID
 
-         mesh % mortar_faces(mortarIndex) % rotation = SlidingPairRotation(masterQuad, slaveQuad)
-
          if (.not. allocated(mesh % faces(slaveFaceID) % Mortar)) then
             allocate(mesh % faces(slaveFaceID) % Mortar(2))
             mesh % faces(slaveFaceID) % Mortar = 0
@@ -2002,12 +2004,9 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
 
          mesh % faces(slaveFaceID) % Mortar(2-Mortarpos) = mortarIndex
 
-         !Master's sign on both sides: the slave is already in the master's
-         !frame (leftIndexes2Right).
-         mesh % mortar_faces(mortarIndex) % offset(1) = QuadAzimSign(masterQuad) * offsetParams(2*Mortarpos+2)
-         mesh % mortar_faces(mortarIndex) % offset(2) = QuadAzimSign(masterQuad) * offsetParams(2*Mortarpos+1)
-         mesh % mortar_faces(mortarIndex) % s(1)      = scaleParams (2*Mortarpos+1)
-         mesh % mortar_faces(mortarIndex) % s(2)      = scaleParams (2*Mortarpos+2)
+         call SetSlidingMortarPlacement(mesh % mortar_faces(mortarIndex), masterQuad, slaveQuad, &
+                    mesh % SlidingMesh % statorRing(mesh % SlidingMesh % myMasterRows(i)) % dir, &
+                    Mortarpos, offsetParams, scaleParams)
 
          mesh % elements(masterElementID) % MortarFaces(masterFaceNumber) = 3
          mesh % elements(slaveElementID)  % MortarFaces(slaveFaceNumber)  = 4
@@ -2032,9 +2031,6 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
    do i = 1, size(mesh % mortar_faces)
       associate(f => mesh % mortar_faces(i))
          if (f % elementIDs(1) <= 0 .or. f % elementIDs(2) <= 0) cycle
-
-         !The master's azimuthal direction serves both sides, see above
-         f % slidingDir = SlidingFaceDir(mesh % SlidingMesh, mesh % faces(f % Mortar(1)) % geom % x)
 
          associate(eL => mesh % elements(f % elementIDs(1)), &
                    eR => mesh % elements(f % elementIDs(2)))
@@ -2068,6 +2064,48 @@ end subroutine ConstructSlidingMortars
 !
 !////////////////////////////////////////////////////////////////////////////////
 !
+! ---------------------------------------------------------------------------
+!  SetSlidingMortarPlacement
+!
+!  Rotation, azimuthal direction, offsets and scales of a sliding mortar, from
+!  the directory alone. Shared by the local and split constructions, so that
+!  both copies of a split mortar get the same operators.
+! ---------------------------------------------------------------------------
+subroutine SetSlidingMortarPlacement(f, masterQuad, slaveQuad, masterDir, Mortarpos, &
+   offsetParams, scaleParams)
+   implicit none
+   type(Face),    intent(inout) :: f
+   integer,       intent(in)    :: masterQuad(4), slaveQuad(4), masterDir, Mortarpos
+   real(kind=RP), intent(in)    :: offsetParams(4), scaleParams(4)
+
+   integer :: sM
+
+   f % rotation = SlidingPairRotation(masterQuad, slaveQuad)
+
+   !  Crossed azimuthal directions require an axis-swapping rotation
+   if (QuadAzimDir(masterQuad) /= QuadAzimDir(slaveQuad)) then
+      if (all(f % rotation /= [1, 3, 4, 6])) then
+         write(STD_OUT,*) 'sliding: mortar', f % ID, ' has crossed azimuthal', &
+         ' directions but a non axis-swapping rotation.', masterQuad, slaveQuad
+         error stop
+      end if
+   end if
+
+   f % slidingDir = masterDir
+
+   !  Master's sign on both sides: the slave is already in the master's frame (leftIndexes2Right).
+   sM = QuadAzimSign(masterQuad)
+
+   f % offset(1) = sM * offsetParams(2*Mortarpos+2)
+   f % offset(2) = sM * offsetParams(2*Mortarpos+1)
+   f % s(1)      = scaleParams(2*Mortarpos+1)
+   f % s(2)      = scaleParams(2*Mortarpos+2)
+
+end subroutine SetSlidingMortarPlacement
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+
 ! ---------------------------------------------------------------------------
 !  SlidingFaceDir
 !
