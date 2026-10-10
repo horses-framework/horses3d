@@ -459,12 +459,12 @@ contains
 !
 !     Construct periodic faces
 !     ---------------------------
-      if (isConformingMesh) CALL ConstructPeriodicFaces( self, periodRelative )
+      CALL ConstructPeriodicFaces( self, periodRelative )
 
 !
 !     Delete periodic- faces
 !     ---------------------------
-      if (isConformingMesh) CALL DeletePeriodicMinusFaces( self )
+      CALL DeletePeriodicMinusFaces( self )
 
 !
 !     Assign faces ID to elements
@@ -998,10 +998,9 @@ subroutine ConstructMeshPartition_FromHDF5File_( self, fileName, nodes, Nx, Ny, 
 !
 !     Construct periodic faces
 !     ---------------------------
-      if (isConformingMesh) then 
          CALL ConstructPeriodicFaces( self, periodRelative )
+         
          CALL DeletePeriodicMinusFaces( self )
-      end if
 
 !
 !     Assign faces ID to elements
