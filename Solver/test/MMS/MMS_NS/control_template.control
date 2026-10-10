@@ -1,0 +1,72 @@
+
+!
+!       **************************************************
+!       MMS Control File — HORSES3D Compressible NS (NS)
+!       Manufactured Solution convergence test
+!       **************************************************
+!
+!-------------------------- Configuration:-
+              Save gradients to solution = .false.
+                              Mesh file name = {MESH_FILE}
+                      Solution file name = {SOLUTION_FILE}
+                                 Restart = .false.
+                       Restart file name = Restart{SOLUTION_FILE}
+!-------------------- Physical parameters:-
+!
+                          Flow equations = "NS"
+                             Mach number = 0.3
+                         Reynolds number = 100000.0
+                               AOA theta = 0.0
+                                 AOA phi = 0.0
+!
+!------------------------- Discretization:-
+! 
+                        Polynomial order = {P}
+                    Discretization nodes = Gauss-Lobatto !Has to match generate_problemfile_NS.py
+                          Riemann solver = Roe
+                  Viscous discretization = BR1
+                       Penalty parameter = 1.0
+!
+!----------------------- Time integration:-
+!
+                        Time integration = Explicit
+  Compute time derivative after timestep = .true.
+                         Simulation type = time-accurate
+                   Convergence tolerance = 1.0d-10
+                           Autosave mode = iteration
+                       Autosave interval = 99999999999
+                                      dt = {DT}
+                    Number of time steps = {N_STEPS}
+                         Output interval = {N_STEPS}
+!
+!-------------------- Boundary conditions:-
+!
+#define boundary bc_xminus
+   type = periodic
+   coupled boundary = bc_xplus
+#end
+
+#define boundary bc_xplus
+   type = periodic
+   coupled boundary = bc_xminus
+#end
+
+#define boundary bc_yminus
+   type = periodic
+   coupled boundary = bc_yplus
+#end
+
+#define boundary bc_yplus
+   type = periodic
+   coupled boundary = bc_yminus
+#end
+
+#define boundary bc_zminus
+   type = periodic
+   coupled boundary = bc_zplus
+#end
+
+#define boundary bc_zplus
+   type = periodic
+   coupled boundary = bc_zminus
+#end
