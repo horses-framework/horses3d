@@ -137,3 +137,13 @@ jobs:
           source /opt/intel/oneapi/setvars.sh || true
           OMP_NUM_THREADS=4 ./horsesConverter
         if: '!cancelled()'
+
+#
+# 4) horses2plt
+# -------------
+      - name: Run horses2plt
+        working-directory: ./Solver/test/AddOns/horses2plt
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./run_test.sh
+        if: '!cancelled()'

@@ -469,7 +469,9 @@
 !      ---------------
 !
       IF ( (self % noOfKnots(1) == 2) .AND. (self % noOfKnots(2) == 2) )     THEN
-         FaceIs4CorneredQuad = .TRUE.
+!        The bilinear shortcut assumes the points are the corners (knots at -1 and 1)
+         FaceIs4CorneredQuad = all(self % uKnots == [-1.0_RP, 1.0_RP]) .AND. &
+                               all(self % vKnots == [-1.0_RP, 1.0_RP])
       ELSE
          FaceIs4CorneredQuad = .FALSE.
       END IF 

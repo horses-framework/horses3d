@@ -87,7 +87,6 @@ module Solution2PltModule
          character(len=1024)             :: title
          integer                         :: no_of_elements, eID
          integer                         :: fid, bID
-         integer                         :: Nmesh(4), Nsol(4)
 !
 !        Read the mesh and solution data
 !        -------------------------------
@@ -108,7 +107,7 @@ module Solution2PltModule
 !
 !           Project mesh and solution
 !           -------------------------
-            call ProjectStorageGaussPoints(e, spA, e % Nmesh, Nsol, mesh % hasGradients, mesh % isStatistics)
+            call ProjectStorageGaussPoints(e, spA, e % Nmesh, e % Nsol, mesh % hasGradients, mesh % isStatistics)
 
             end associate
          end do
