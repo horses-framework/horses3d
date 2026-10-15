@@ -7,6 +7,7 @@ module StatsMeshInterpolation
 
     private 
     public InterpolateStats
+    public readMesh_FromHmeshFile, getNodeType ! Also used by MeshInterpolationTool
 
     type StatsElementStorage_t
         real(rp), allocatable :: Q(:,:,:,:)
@@ -307,6 +308,7 @@ module StatsMeshInterpolation
         ! Read coordinates
         fid = putSolutionFileInReadDataMode(meshName)
         npa = 0
+        Nmax = 0
         do eID = 1, no_of_elements
 
             call getSolutionFileArrayDimensions(fid,arrayDimensions)

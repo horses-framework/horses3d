@@ -38,6 +38,7 @@ OBJS=	\
 	ConverStats \
 	StatsMeshInterpolation \
 	LambVectorMeshInterpolation \
+	MeshInterpolationTool \
 	main \
 
 OBJS_BUILD=$(foreach obj,$(OBJS),./build/$(obj).o)

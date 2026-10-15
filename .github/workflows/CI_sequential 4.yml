@@ -45,6 +45,24 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
+      # Meshes repository and Gmsh (Python API), available to all the tests:
+      #   $HORSES3D_MESHES_DIR : clone of https://github.com/horses-framework/horses3d-meshes
+      #   $GMSH_PYTHON         : Python interpreter with the gmsh module, to run the mesh scripts
+      - name: Checkout horses3d-meshes
+        uses: actions/checkout@v3
+        with:
+          repository: horses-framework/horses3d-meshes
+          path: horses3d-meshes
+
+      - name: Install Gmsh
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libglu1-mesa libgl1 libxcursor1 libxft2 libxinerama1 libfontconfig1
+          python3 -m venv "$RUNNER_TEMP/gmsh-venv"
+          "$RUNNER_TEMP/gmsh-venv/bin/pip" install -q gmsh
+          echo "HORSES3D_MESHES_DIR=$GITHUB_WORKSPACE/horses3d-meshes" >> $GITHUB_ENV
+          echo "GMSH_PYTHON=$RUNNER_TEMP/gmsh-venv/bin/python" >> $GITHUB_ENV
+
       # sudo apt-get install -qq pkg-config libhdf5-serial-dev
 #      - name: Install Linux packages
 #        run: |
@@ -136,4 +154,32 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh || true
           OMP_NUM_THREADS=4 ./horsesConverter
+        if: '!cancelled()'
+
+#
+# 4) Mesh interpolation - horses.tools
+# ------------------------------------
+#    The meshes are generated with the scripts of the horses3d-meshes repository (see the top of the file)
+      - name: Generate MeshInterpolation meshes
+        working-directory: ./Solver/test/AddOns/MeshInterpolation
+        run: |
+          mkdir -p MESH
+          "$GMSH_PYTHON" "$HORSES3D_MESHES_DIR/cartesian-box/generate_cartesian_box_mesh.py" 4 3 2 --xlim 0 1 --ylim 0 2 --zlim 0 3 -o MESH/box_source.msh
+          "$GMSH_PYTHON" "$HORSES3D_MESHES_DIR/cartesian-box/generate_cartesian_box_mesh.py" 3 2 1 --xlim 0 1 --ylim 0 2 --zlim 0 3 -o MESH/box_target.msh
+        if: '!cancelled()'
+
+      - name: Build MeshInterpolation
+        working-directory: ./Solver/test/AddOns/MeshInterpolation/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+        if: '!cancelled()'
+
+      - name: Run MeshInterpolation
+        working-directory: ./Solver/test/AddOns/MeshInterpolation
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./horses3d.ns MeshInterpolation_source.control
+          ./horses.tools MeshInterpolation_tool.control
+          ./horses3d.ns MeshInterpolation_check.control
         if: '!cancelled()'

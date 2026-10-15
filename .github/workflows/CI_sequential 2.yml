@@ -50,6 +50,24 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
 
+      # Meshes repository and Gmsh (Python API), available to all the tests:
+      #   $HORSES3D_MESHES_DIR : clone of https://github.com/horses-framework/horses3d-meshes
+      #   $GMSH_PYTHON         : Python interpreter with the gmsh module, to run the mesh scripts
+      - name: Checkout horses3d-meshes
+        uses: actions/checkout@v3
+        with:
+          repository: horses-framework/horses3d-meshes
+          path: horses3d-meshes
+
+      - name: Install Gmsh
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libglu1-mesa libgl1 libxcursor1 libxft2 libxinerama1 libfontconfig1
+          python3 -m venv "$RUNNER_TEMP/gmsh-venv"
+          "$RUNNER_TEMP/gmsh-venv/bin/pip" install -q gmsh
+          echo "HORSES3D_MESHES_DIR=$GITHUB_WORKSPACE/horses3d-meshes" >> $GITHUB_ENV
+          echo "GMSH_PYTHON=$RUNNER_TEMP/gmsh-venv/bin/python" >> $GITHUB_ENV
+
       # sudo apt-get install -qq pkg-config libhdf5-serial-dev
       - name: Install hdf5 (only gfortran)
         if: (matrix.compiler == 'gfortran')
