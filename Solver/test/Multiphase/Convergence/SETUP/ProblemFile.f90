@@ -518,11 +518,11 @@ end module ProblemFileFunctions
             real(kind=RP),             intent(in) :: elapsedTime
             real(kind=RP),             intent(in) :: CPUTime
             real(kind=RP)  :: x, y, z, c, locErr(5), phi, u, v, w, p, rho, rho0
-            real(kind=RP), parameter  :: saved_errors(5) = [1.6900393871161803E-06_RP, &
-                                          1.9475704000673717E-05_RP, &
+            real(kind=RP), parameter  :: saved_errors(5) = [1.6902480371161803E-06_RP, &
+                                          1.9409444210673717E-05_RP, &
                                           7.4217194511428453E-17_RP, &
-                                          1.9905579979170690E-05_RP, & 
-                                          1.7071338898107393E-04_RP]
+                                          1.9836864099170690E-05_RP, & 
+                                          1.7108477257107393E-04_RP]
             integer        :: i, j,k, eID 
             CHARACTER(LEN=29)                  :: testName           = "Multiphase convergence"
             real(kind=RP)  :: error(5)

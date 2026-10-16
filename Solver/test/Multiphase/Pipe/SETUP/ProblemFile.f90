@@ -559,11 +559,11 @@ end module ProblemFileFunctions
             TYPE(FTAssertionsManager), POINTER :: sharedManager
             LOGICAL                            :: success
             real(kind=RP), parameter :: residuals_saved(5) = [115.279163488786_RP, &
-                                                              221.87180239169732_RP, &
-                                                              148.44094157191935_RP, &
-                                                              855.40356932873965_RP, &
-                                                              72790.732640089103_RP ]
-            real(kind=RP), parameter              :: entropyRate_saved = -49.587092808563099_RP
+                                                              218.587148493799_RP, &
+                                                              147.034918533523_RP, &
+                                                              865.653084759232_RP, &
+                                                              72786.6199585908_RP ]
+            real(kind=RP), parameter              :: entropyRate_saved = -49.577609575581214_RP
             integer :: i
 
             CALL initializeSharedAssertionsManager
