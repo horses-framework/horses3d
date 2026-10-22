@@ -81,6 +81,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install openmpi-bin libopenmpi-dev
 
+      - name: Install gmsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gmsh
+
       # IF COMPILER = IFORT -> INSTALL IFORT #
       # UNCOMMENT TO USE CACHED IFORT 
       #- name: cache-intel-compilers
@@ -1160,6 +1165,25 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh || true
           mpiexec -n 64 ./horses3d.ns Cylinder_pAdaptationRL_GaussLobatto.control
+        if: '!cancelled()'
+
+#
+# 42) Rotary periodic
+# ----------------
+
+      - name: Setup RotaryPeriodic
+        working-directory: ./Solver/test/NavierStokes/RotaryPeriodic
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          (cd MESH && gmsh -3 RotaryPeriodic.geo -o RotaryPeriodic.msh)
+          (cd SETUP && make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES EXTRA_FFLAGS="${{ env.EXTRA_COV }}")
+        if: '!cancelled()'
+
+      - name: Run RotaryPeriodic
+        working-directory: ./Solver/test/NavierStokes/RotaryPeriodic
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 64 ./horses3d.ns RotaryPeriodic.control
         if: '!cancelled()'
 
 ########################################################################

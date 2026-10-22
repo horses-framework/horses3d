@@ -309,6 +309,7 @@ module MeshPartitioning
             allocate(partitions(domain) % mpiface_rotation(nFaces))
             allocate(partitions(domain) % mpiface_elementSide(nFaces))
             allocate(partitions(domain) % mpiface_sharedDomain(nFaces))
+            allocate(partitions(domain) % mpiface_rotaryAngle(nFaces))
             end associate
          end do
 !
@@ -372,6 +373,11 @@ module MeshPartitioning
 !           ---------------------
             partitions(dL) % mpiface_sharedDomain(bfaceID(dL)) = dR
             partitions(dR) % mpiface_sharedDomain(bfaceID(dR)) = dL
+!
+!           Get the rotary angle (0: not rotary periodic)
+!           ---------------------------------------------
+            partitions(dL) % mpiface_rotaryAngle(bfaceID(dL)) = f % rotaryAngle
+            partitions(dR) % mpiface_rotaryAngle(bfaceID(dR)) = f % rotaryAngle
 
             end associate
             end associate

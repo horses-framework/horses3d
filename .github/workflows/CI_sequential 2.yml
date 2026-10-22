@@ -89,6 +89,11 @@ jobs:
           dpkg -L libhdf5-dev 
           echo "HDF5_ROOT="/usr/lib/x86_64-linux-gnu/hdf5/serial/"" >> $GITHUB_ENV  
 
+      - name: Install gmsh
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gmsh  
+
        # IF COMPILER = IFORT -> INSTALL IFORT #
       # UNCOMMENT TO USE CACHED IFORT 
       #- name: cache-intel-compilers
@@ -886,6 +891,25 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh || true
           ./horses3d.ns TaylorGreen.control
+        if: '!cancelled()'
+
+#
+# 40) Rotary periodic
+# ----------------
+
+      - name: Setup RotaryPeriodic
+        working-directory: ./Solver/test/NavierStokes/RotaryPeriodic
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          (cd MESH && gmsh -3 RotaryPeriodic.geo -o RotaryPeriodic.msh)
+          (cd SETUP && make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}")
+        if: '!cancelled()'
+
+      - name: Run RotaryPeriodic
+        working-directory: ./Solver/test/NavierStokes/RotaryPeriodic
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./horses3d.ns RotaryPeriodic.control
         if: '!cancelled()'
 
 #

@@ -188,6 +188,7 @@ module EllipticIP
 
       subroutine IP_ComputeGradient(self, nEqn, nGradEqn, mesh, time, GetGradients, HO_Elements, element_mask, Level)
          use HexMeshClass
+         use RotaryFaceRotations
          use PhysicsStorage
          use Physics
          use MPI_Process_Info
@@ -260,6 +261,14 @@ module EllipticIP
 !$omp end do 
          end if
 !
+!        Rotary periodic faces: rotate the gradients prolonged to side 2 (see RotaryFaceRotations)
+!
+         if (HOElements) then
+            call RotateRotaryFacesGradients(mesh, mesh % HO_Elements)
+         else
+            call RotateRotaryFacesGradients(mesh)
+         end if
+!
 !        **********************************************
 !        Compute interface solution of non-shared faces
 !        **********************************************
@@ -296,6 +305,14 @@ module EllipticIP
 !$omp end do 
          end if
 !
+!        Rotary periodic faces: rotate the gradient flux projected to side 2 back to its frame
+!
+         if (HOElements) then
+            call RotateBackRotaryFacesGradientFlux(mesh, size(mesh % HO_FacesInterior), mesh % HO_FacesInterior)
+         else
+            call RotateBackRotaryFacesGradientFlux(mesh, size(mesh % faces_interior), mesh % faces_interior)
+         end if
+!
 !        **********************
 !        Compute face integrals
 !        **********************
@@ -326,6 +343,7 @@ module EllipticIP
             call mesh % GatherMPIFacesSolution(nEqn)
          end if
 !$omp end single
+         call RotateRotaryMPIFacesSolution(mesh)
 !
 !        *******************************
 !        Compute MPI interface solutions

@@ -13,6 +13,7 @@ module FluidData
 #if defined(CAHNHILLIARD)
    use FluidData_CH
 #endif
+   use RotationData
    implicit none
 
 end module FluidData
