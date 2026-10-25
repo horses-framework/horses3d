@@ -12,6 +12,7 @@ MODULE Read_SpecMesh
       use PhysicsStorage
       use FileReadingUtilities      , only: getFileName
       use Utilities, only: UnusedUnit, toLower
+      use SlidingMeshProcedures
       implicit none
 
       private
@@ -141,7 +142,9 @@ MODULE Read_SpecMesh
 !        ---------------
 !
          allocate( self % elements(numberOfelements) )
+
          allocate( self % nodes(numberOfNodes) )
+
 
          allocate ( self % Nx(numberOfelements) , self % Ny(numberOfelements) , self % Nz(numberOfelements) )
          self % Nx = Nx
@@ -258,9 +261,11 @@ MODULE Read_SpecMesh
 !        ---------------------------
 !
          numberOfFaces        = (6*numberOfElements + numberOfBoundaryFaces)/2
+
          self % numberOfFaces = numberOfFaces
          allocate( self % faces(self % numberOfFaces) )
          CALL ConstructFaces( self, success )
+
 !
 !        -------------------------
 !        Build the different zones
@@ -272,6 +277,8 @@ MODULE Read_SpecMesh
 !        Construct periodic faces
 !        ---------------------------
 !
+
+
          CALL ConstructPeriodicFaces( self, periodRelative )
 !
 !        ---------------------------
@@ -279,6 +286,7 @@ MODULE Read_SpecMesh
 !        ---------------------------
 !
          CALL DeletePeriodicMinusFaces( self )
+
 !
 !        ---------------------------
 !        Assign faces ID to elements
@@ -339,6 +347,8 @@ MODULE Read_SpecMesh
 
          call self % ExportBoundaryMesh (trim(fileName))
 
+         self % numBFacePoints=numBFacePoints 
+
       END SUBROUTINE ConstructMesh_FromSpecMeshFile_
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -375,6 +385,7 @@ MODULE Read_SpecMesh
          CHARACTER(LEN=BC_STRING_LENGTH) :: names(FACES_PER_ELEMENT)
          CHARACTER(LEN=BC_STRING_LENGTH), pointer :: zoneNames(:)
          real(kind=RP)                   :: corners(NDIM,NODES_PER_ELEMENT)
+
          !----------------------------------------------------------------------------------------
 !
 !        ***************
@@ -566,7 +577,7 @@ MODULE Read_SpecMesh
          integer             :: nodes
          CHARACTER(LEN=*)    :: fileName
          integer             :: Nx(:), Ny(:), Nz(:)     !<  Polynomial orders for all the elements
-         integer, intent(in) :: dir2D
+         integer, intent(inout) :: dir2D
          logical             :: periodRelative
          LOGICAL             :: success
 !
@@ -606,6 +617,7 @@ MODULE Read_SpecMesh
          real(kind=RP)  , DIMENSION(3,2,2) :: valuesFlat
          character(len=LINE_LENGTH)        :: partitionName
 
+         
          success               = .TRUE.
 !
 !        -----------------------
@@ -879,6 +891,7 @@ MODULE Read_SpecMesh
          call self % UpdateFacesWithPartition(mpi_partition, &
                                               numberOfAllElements, &
                                               globalToLocalElementID)
+
 !
 !        -------------------------
 !        Build the different zones
@@ -908,6 +921,7 @@ MODULE Read_SpecMesh
 !        Define boundary faces
 !        ---------------------
 !
+
          call self % DefineAsBoundaryFaces()
 !
 !        -----------------------------------
@@ -961,6 +975,7 @@ MODULE Read_SpecMesh
 
          deallocate(globalToLocalNodeID)
          deallocate(globalToLocalElementID)
+
 
       END SUBROUTINE ConstructMeshPartition_FromSpecMeshFile_
 

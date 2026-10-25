@@ -734,12 +734,21 @@ module ShockCapturing
 !     Project to faces
 !     ----------------
       fIDs = e % faceIDs
+      if (.not. mesh%nonconforming) then 
       call e % ProlongAviscFluxToFaces(NCONS, SCflux, mesh % faces(fIDs(1)), &
                                                       mesh % faces(fIDs(2)), &
                                                       mesh % faces(fIDs(3)), &
                                                       mesh % faces(fIDs(4)), &
                                                       mesh % faces(fIDs(5)), &
-                                                      mesh % faces(fIDs(6))  )
+                                                      mesh % faces(fIDs(6)) )
+      else 
+      call e % ProlongAviscFluxToFaces(NCONS, SCflux, mesh % faces(fIDs(1)), &
+                                                      mesh % faces(fIDs(2)), &
+                                                      mesh % faces(fIDs(3)), &
+                                                      mesh % faces(fIDs(4)), &
+                                                      mesh % faces(fIDs(5)), &
+                                                      mesh % faces(fIDs(6)), faces=mesh % faces)
+      end if 
 
    end subroutine NoSVV_viscosity
 !
@@ -948,12 +957,22 @@ module ShockCapturing
 !     Project to faces
 !     ----------------
       fIDs = e % faceIDs
+      if(.not. mesh%nonconforming) then 
       call e % ProlongAviscFluxToFaces(NCONS, SCflux, mesh % faces(fIDs(1)), &
                                                       mesh % faces(fIDs(2)), &
                                                       mesh % faces(fIDs(3)), &
                                                       mesh % faces(fIDs(4)), &
                                                       mesh % faces(fIDs(5)), &
-                                                      mesh % faces(fIDs(6))  )
+                                                      mesh % faces(fIDs(6)))
+      else 
+      call e % ProlongAviscFluxToFaces(NCONS, SCflux, mesh % faces(fIDs(1)), &
+                                                      mesh % faces(fIDs(2)), &
+                                                      mesh % faces(fIDs(3)), &
+                                                      mesh % faces(fIDs(4)), &
+                                                      mesh % faces(fIDs(5)), &
+                                                      mesh % faces(fIDs(6)), faces=mesh % faces  )
+      end if 
+
 
    end subroutine SVV_viscosity
 !

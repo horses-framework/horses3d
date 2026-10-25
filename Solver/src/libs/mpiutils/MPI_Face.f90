@@ -15,6 +15,7 @@ module MPI_Face_Class
 
    type MPI_Face_t
       integer                    :: nDOFs
+      integer                    :: nMDOFs 
       integer                    :: no_of_faces
       integer, allocatable       :: faceIDs(:)
       integer, allocatable       :: elementSide(:)
@@ -23,9 +24,17 @@ module MPI_Face_Class
       integer                    :: gradQrecv_req
       integer                    :: AviscFluxRecv_req
       integer                    :: QBaseRecv_req
+      integer                    :: MortarFluxRecv_req
+      integer                    :: MortarGradFluxRecv_req
+      integer                    :: MortarFluxJacRecv_req  
+      integer                    :: MortarGradJacFluxRecv_req 
       integer                    :: sizeQ
       integer                    :: sizeU_xyz
       integer                    :: sizeAviscFlux
+      integer                    :: sizeMortarFlux 
+      integer                    :: sizeGradMortarFlux 
+      integer                    :: sizeMortarFluxJac
+      integer                    :: sizeGradMortarFluxJac 
       integer      , allocatable :: Nsend(:)          ! Information to send: [fNxi, fNeta, eNxi, eNeta, eNzeta, eGlobID]
       integer      , allocatable :: Nrecv(:)
       real(kind=RP), allocatable :: Qsend(:)
@@ -36,6 +45,14 @@ module MPI_Face_Class
       real(kind=RP), allocatable :: AviscFluxRecv(:)
       real(kind=RP), allocatable :: QbaseSend(:)
       real(kind=RP), allocatable :: QbaseRecv(:)
+      real(kind=RP), allocatable :: Flux_M_Send(:)
+      real(kind=RP), allocatable :: Flux_M_Recv(:)
+      real(kind=RP), allocatable :: GradFlux_M_Recv(:)
+      real(kind=RP), allocatable :: GradFlux_M_Send(:)
+      real(kind=RP), allocatable :: FluxJac_M_Send(:) 
+      real(kind=RP), allocatable :: FluxJac_M_Recv(:) 
+      real(kind=RP), allocatable :: GradFluxJac_M_Recv(:) 
+      real(kind=RP), allocatable :: GradFluxJac_M_Send(:) 
       contains
          procedure   :: Construct        => MPI_Face_Construct
          procedure   :: Destruct         => MPI_Face_Destruct
@@ -54,6 +71,18 @@ module MPI_Face_Class
          procedure   :: SendQbase        => MPI_Face_SendQbase
          procedure   :: RecvQbase        => MPI_Face_RecvQbase
          procedure   :: WaitForSolutionB => MPI_Face_WaitForSolutionB
+         procedure   :: WaitForMortarFlux=> MPI_Face_WaitForMortarFlux 
+         procedure   :: WaitForMortarGradFlux=> MPI_Face_WaitForMortarGradFlux 
+         procedure   :: SendMortarFlux       => MPI_Face_SendMortarFlux
+         procedure   :: RecvMortarFlux       => MPI_Face_RecvMortarFlux
+         procedure   :: SendMortarGradFlux   => MPI_Face_SendGradMortarFlux
+         procedure   :: RecvMortarGradFlux   => MPI_Face_RecvGradMortarFlux
+         procedure   :: WaitForMortarFluxJac => MPI_Face_WaitForMortarFluxJac 
+         procedure   :: WaitForMortarGradFluxJac=> MPI_Face_WaitForMortarGradFluxJac  
+         procedure   :: SendMortarFluxJac       => MPI_Face_SendMortarFluxJac 
+         procedure   :: RecvMortarFluxJac       => MPI_Face_RecvMortarFluxJac 
+         procedure   :: SendMortarGradFluxJac   => MPI_Face_SendGradMortarFluxJac 
+         procedure   :: RecvMortarGradFluxJac   => MPI_Face_RecvGradMortarFluxJac 
    end type MPI_Face_t
 
    type MPI_FacesSet_t
@@ -96,7 +125,7 @@ module MPI_Face_Class
 
       end subroutine ConstructMPIFaces
 
-      subroutine ConstructMPIFacesStorage(facesSet, NCONS, NGRAD, NDOFS, NCONSB_in)
+      subroutine ConstructMPIFacesStorage(facesSet, NCONS, NGRAD, NDOFS, NMDOFS, NCONSB_in)
 !
 !        ***************************************************
 !           Allocates buffers to send and receive.
@@ -108,6 +137,7 @@ module MPI_Face_Class
          type(MPI_FacesSet_t)    :: facesSet
          integer, intent(in)     :: NCONS, NGRAD
          integer, intent(in)     :: NDOFS(MPI_Process % nProcs)
+         integer, intent(in), optional     :: NMDOFS(MPI_Process % nProcs)
          integer, intent(in), optional     :: NCONSB_in
 !
 !        ---------------
@@ -126,6 +156,14 @@ module MPI_Face_Class
             facesSet % faces(domain) % nDOFs         = NDOFS(domain)
             facesSet % faces(domain) % sizeQ         = NCONS * NDOFS(domain)
             facesSet % faces(domain) % sizeU_xyz     = NDIM * NGRAD * NDOFS(domain)
+
+            if (present(NMDOFS)) then 
+               facesSet % faces(domain) % nMDOFs = NMDOFS(domain)
+               facesSet % faces(domain) % sizeMortarFlux = NCONS * NMDOFS(domain)
+               facesSet % faces(domain) % sizeGradMortarFlux = NDIM * NGRAD * NMDOFS(domain)
+               facesSet % faces(domain) % sizeMortarFluxJac = NCONS * NCONS * NMDOFS(domain)
+               facesSet % faces(domain) % sizeGradMortarFluxJac = NDIM * NGRAD * NGRAD * NMDOFS(domain)
+            end if 
             facesSet % faces(domain) % sizeAviscFlux = NCONS * NDOFS(domain)
 
             if ( NDOFS(domain) .gt. 0 ) then
@@ -138,6 +176,18 @@ module MPI_Face_Class
                safedeallocate(facesSet % faces(domain) % AviscFluxRecv)
                safedeallocate(facesSet % faces(domain) % QBaseSend)
                safedeallocate(facesSet % faces(domain) % QBaseRecv)
+               if (present(NMDOFS)) then 
+                  safedeallocate(facesSet % faces(domain) % Flux_M_Recv)
+                  safedeallocate(facesSet % faces(domain) % Flux_M_Send)
+                  safedeallocate(facesSet % faces(domain) % GradFlux_M_Recv)
+                  safedeallocate(facesSet % faces(domain) % GradFlux_M_Send)
+#if defined(NAVIERSTOKES) 
+                  safedeallocate(facesSet % faces(domain) % FluxJac_M_Recv)
+                  safedeallocate(facesSet % faces(domain) % FluxJac_M_Send)
+                  safedeallocate(facesSet % faces(domain) % GradFluxJac_M_Recv)
+                  safedeallocate(facesSet % faces(domain) % GradFluxJac_M_Send)
+#endif 
+               end if 
 
                allocate( facesSet % faces(domain) % Qsend(NCONS * NDOFS(domain)) )
                allocate( facesSet % faces(domain) % U_xyzsend(NDIM * NGRAD * NDOFS(domain)) )
@@ -147,6 +197,18 @@ module MPI_Face_Class
                allocate( facesSet % faces(domain) % AviscFluxRecv(NCONS * NDOFS(domain)) )
                allocate( facesSet % faces(domain) % QBaseSend(NCONSB * NDOFS(domain)) )
                allocate( facesSet % faces(domain) % QBaseRecv(NCONSB * NDOFS(domain)) )
+               if (present(NMDOFS)) then 
+                  allocate(facesSet % faces(domain) % Flux_M_Recv(NCONS * NMDOFS(domain)))
+                  allocate(facesSet % faces(domain) % Flux_M_Send(NCONS * NMDOFS(domain)))
+                  allocate(facesSet % faces(domain) % GradFlux_M_Recv(NDIM * NGRAD * NMDOFS(domain)))
+                  allocate(facesSet % faces(domain) % GradFlux_M_Send(NDIM * NGRAD * NMDOFS(domain)))
+#if defined(NAVIERSTOKES) 
+                  allocate(facesSet % faces(domain) % FluxJac_M_Recv(NCONS * NCONS * NMDOFS(domain)))
+                  allocate(facesSet % faces(domain) % FluxJac_M_Send(NCONS * NCONS * NMDOFS(domain)))
+                  allocate(facesSet % faces(domain) % GradFluxJac_M_Recv(NDIM * NGRAD * NGRAD * NMDOFS(domain)))
+                  allocate(facesSet % faces(domain) % GradFluxJac_M_Send(NDIM * NGRAD * NGRAD * NMDOFS(domain)))
+#endif
+               end if 
             end if
          end do
       end subroutine ConstructMPIFacesStorage
@@ -491,6 +553,246 @@ module MPI_Face_Class
 
       end subroutine MPI_Face_WaitForSolutionB
 !
+      !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+      subroutine MPI_Face_WaitForMortarFlux(self)
+         implicit none
+         class(MPI_Face_t)    :: self
+#ifdef _HAS_MPI_
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+         integer              :: ierr
+         integer              :: status(MPI_STATUS_SIZE)
+
+!
+!        -----------------------------------
+!        Wait until the solution is received
+!        -----------------------------------
+!
+         call mpi_wait(self % MortarFluxRecv_req, status, ierr)
+#endif
+
+      end subroutine MPI_Face_WaitForMortarFlux
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+      subroutine MPI_Face_WaitForMortarGradFlux(self)
+         implicit none
+         class(MPI_Face_t)    :: self
+#ifdef _HAS_MPI_
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+         integer              :: ierr
+         integer              :: status(MPI_STATUS_SIZE)
+
+!
+!        -----------------------------------
+!        Wait until the solution is received
+!        -----------------------------------
+!
+         call mpi_wait(self % MortarGradFluxRecv_req, status, ierr)
+#endif
+
+      end subroutine MPI_Face_WaitForMortarGradFlux
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+      subroutine MPI_Face_SendMortarFlux(self, domain, nEqn, req)
+         implicit none
+         class(MPI_Face_t)      :: self
+         integer, intent(in)    :: domain
+         integer,    intent(in) :: nEqn
+         integer, intent(out)   :: req
+         integer  :: ierr
+#ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
+         if ( self % no_of_faces .gt. 0 ) then
+            call mpi_isend(self % Flux_M_Send, nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
+                           DEFAULT_TAG, MPI_COMM_WORLD, req, ierr)
+         end if
+#endif
+      end subroutine MPI_Face_SendMortarFlux
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+      subroutine MPI_Face_RecvMortarFlux(self, domain, nEqn, req)
+         implicit none
+         class(MPI_Face_t)      :: self
+         integer, intent(in)    :: domain
+         integer,    intent(in) :: nEqn
+         integer, intent(out)   :: req
+         integer  :: ierr
+#ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
+         if ( self % no_of_faces .gt. 0 ) then
+            call mpi_irecv(self % Flux_M_Recv, nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
+                           MPI_ANY_TAG, MPI_COMM_WORLD, req, ierr)
+         end if
+#endif
+      end subroutine MPI_Face_RecvMortarFlux
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+      subroutine MPI_Face_SendGradMortarFlux(self, domain, nEqn, req)
+         implicit none
+         class(MPI_Face_t)      :: self
+         integer, intent(in)    :: domain
+         integer,    intent(in) :: nEqn
+         integer, intent(out)   :: req
+         integer  :: ierr
+#ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
+         if ( self % no_of_faces .gt. 0 ) then
+            call mpi_isend(self % GradFlux_M_Send, NDIM * nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
+                           DEFAULT_TAG, MPI_COMM_WORLD, req, ierr)
+         end if
+#endif
+      end subroutine MPI_Face_SendGradMortarFlux
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+      subroutine MPI_Face_RecvGradMortarFlux(self, domain, nEqn, req)
+         implicit none
+         class(MPI_Face_t)      :: self
+         integer, intent(in)    :: domain
+         integer,    intent(in) :: nEqn
+         integer, intent(out)   :: req
+         integer  :: ierr
+#ifdef _HAS_MPI_
+         req = MPI_REQUEST_NULL
+         if ( self % no_of_faces .gt. 0 ) then
+            call mpi_irecv(self % GradFlux_M_Recv, NDIM * nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
+                           MPI_ANY_TAG, MPI_COMM_WORLD, req, ierr)
+         end if
+#endif
+      end subroutine MPI_Face_RecvGradMortarFlux
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+subroutine MPI_Face_WaitForMortarFluxJac(self)
+      implicit none
+      class(MPI_Face_t)    :: self
+#ifdef _HAS_MPI_
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+      integer              :: ierr
+      integer              :: status(MPI_STATUS_SIZE)
+
+!
+!        -----------------------------------
+!        Wait until the flux is received
+!        -----------------------------------
+!
+      call mpi_wait(self % MortarFluxJacRecv_req, status, ierr)
+#endif
+
+   end subroutine MPI_Face_WaitForMortarFluxJac
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+   subroutine MPI_Face_WaitForMortarGradFluxJac(self)
+      implicit none
+      class(MPI_Face_t)    :: self
+#ifdef _HAS_MPI_
+!
+!        ---------------
+!        Local variables
+!        ---------------
+!
+      integer              :: ierr
+      integer              :: status(MPI_STATUS_SIZE)
+
+!
+!        -----------------------------------
+!        Wait until the flux is received
+!        -----------------------------------
+!
+      call mpi_wait(self % MortarGradJacFluxRecv_req, status, ierr)
+#endif
+
+   end subroutine MPI_Face_WaitForMortarGradFluxJac
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+   subroutine MPI_Face_SendMortarFluxJac(self, domain, nEqn, req)
+      implicit none
+      class(MPI_Face_t)      :: self
+      integer, intent(in)    :: domain
+      integer,    intent(in) :: nEqn
+      integer, intent(out)   :: req
+      integer  :: ierr
+#ifdef _HAS_MPI_
+      req = MPI_REQUEST_NULL
+      if ( self % no_of_faces .gt. 0 ) then
+         call mpi_isend(self % FluxJac_M_Send, nEqn * nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
+                        DEFAULT_TAG, MPI_COMM_WORLD, req, ierr)
+      end if
+#endif
+   end subroutine MPI_Face_SendMortarFluxJac
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+   subroutine MPI_Face_RecvMortarFluxJac(self, domain, nEqn, req)
+      implicit none
+      class(MPI_Face_t)      :: self
+      integer, intent(in)    :: domain
+      integer,    intent(in) :: nEqn
+      integer, intent(out)   :: req
+      integer  :: ierr
+#ifdef _HAS_MPI_
+      req = MPI_REQUEST_NULL
+      if ( self % no_of_faces .gt. 0 ) then
+         call mpi_irecv(self % FluxJac_M_Recv, nEqn * nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
+                        MPI_ANY_TAG, MPI_COMM_WORLD, req, ierr)
+      end if
+#endif
+   end subroutine MPI_Face_RecvMortarFluxJac
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+   subroutine MPI_Face_SendGradMortarFluxJac(self, domain, nEqn, req)
+      implicit none
+      class(MPI_Face_t)      :: self
+      integer, intent(in)    :: domain
+      integer,    intent(in) :: nEqn
+      integer, intent(out)   :: req
+      integer  :: ierr
+#ifdef _HAS_MPI_
+      req = MPI_REQUEST_NULL
+      if ( self % no_of_faces .gt. 0 ) then
+         call mpi_isend(self % GradFluxJac_M_Send, NDIM * nEqn * nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
+                        DEFAULT_TAG, MPI_COMM_WORLD, req, ierr)
+      end if
+#endif
+   end subroutine MPI_Face_SendGradMortarFluxJac
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+   subroutine MPI_Face_RecvGradMortarFluxJac(self, domain, nEqn, req)
+      implicit none
+      class(MPI_Face_t)      :: self
+      integer, intent(in)    :: domain
+      integer,    intent(in) :: nEqn
+      integer, intent(out)   :: req
+      integer  :: ierr
+#ifdef _HAS_MPI_
+      req = MPI_REQUEST_NULL
+      if ( self % no_of_faces .gt. 0 ) then
+         call mpi_irecv(self % GradFluxJac_M_Recv, NDIM * nEqn * nEqn * self % nMDOFs, MPI_DOUBLE, domain-1, &
+                        MPI_ANY_TAG, MPI_COMM_WORLD, req, ierr)
+      end if
+#endif
+   end subroutine MPI_Face_RecvGradMortarFluxJac
+!
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
       subroutine DestructMPIFaces(facesSet)
@@ -541,6 +843,10 @@ module MPI_Face_Class
          self % gradQrecv_req     = MPI_REQUEST_NULL
          self % AviscFluxRecv_req = MPI_REQUEST_NULL
          self % QBaseRecv_req     = MPI_REQUEST_NULL
+         self % MortarFluxRecv_req= MPI_REQUEST_NULL
+         self % MortarGradFluxRecv_req = MPI_REQUEST_NULL
+         self % MortarFluxJacRecv_req = MPI_REQUEST_NULL
+         self % MortarGradJacFluxRecv_req = MPI_REQUEST_NULL
 #endif
 
       end subroutine MPI_Face_Construct
@@ -562,12 +868,26 @@ module MPI_Face_Class
          safedeallocate(self % AviscFluxRecv)
          safedeallocate(self % QBaseSend)
          safedeallocate(self % QBaseRecv)
+         safedeallocate(self % Flux_M_Send)
+         safedeallocate(self % Flux_M_Recv)
+         safedeallocate(self % GradFlux_M_Send)
+         safedeallocate(self % GradFlux_M_Recv)
+#if defined(NAVIERSTOKES) 
+         safedeallocate(self % FluxJac_M_Send)
+         safedeallocate(self % FluxJac_M_Recv)
+         safedeallocate(self % GradFluxJac_M_Send)
+         safedeallocate(self % GradFluxJac_M_Recv)
+#endif
 #ifdef _HAS_MPI_
          self % Nrecv_req         = MPI_REQUEST_NULL
          self % Qrecv_req         = MPI_REQUEST_NULL
          self % gradQrecv_req     = MPI_REQUEST_NULL
          self % AviscFluxRecv_req = MPI_REQUEST_NULL
          self % QBaseRecv_req     = MPI_REQUEST_NULL
+         self % MortarFluxRecv_req= MPI_REQUEST_NULL
+         self % MortarGradFluxRecv_req= MPI_REQUEST_NULL
+         self % MortarFluxJacRecv_req = MPI_REQUEST_NULL
+         self % MortarGradJacFluxRecv_req = MPI_REQUEST_NULL
 #endif
 
       end subroutine MPI_Face_Destruct

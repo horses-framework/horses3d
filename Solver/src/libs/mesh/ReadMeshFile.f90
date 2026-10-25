@@ -5,7 +5,7 @@ module ReadMeshFile
    use Read_SpecMesh
    use Read_GMSH
    use HexMeshClass
-   use MeshTypes           , only: SPECMESH, HOPRMESH, GMSHMESH, HMESH_INTERIOR, HMESH_BOUNDARY, HMESH_MPI
+   use MeshTypes           , only: SPECMESH, HOPRMESH, GMSHMESH, HMESH_INTERIOR, HMESH_BOUNDARY, HMESH_MPI, MORTAR_BIG
    use FileReadingUtilities, only: getFileExtension
    implicit none
 
@@ -32,6 +32,8 @@ contains
       integer                    :: no_sequential_elems, no_mpi_elems
       integer                    :: aux_array(1:3)
       integer                    :: gmsh_version
+      integer                    :: m_loc, eID_small
+
       !---------------------------------------------------------------
       
       ext = getFileExtension(trim(filename))
@@ -100,6 +102,21 @@ contains
             self % faces_boundary(no_boundary_faces) = fID
 
          end select
+      end do
+
+!     A local small face can belong to an HMESH_MPI big face. Although its
+!     element has no MPI face of its own, it still depends on an MPI mortar
+!     flux. Treat it as shared so the flux is available before integration.
+      do fID = 1, self % no_of_faces
+         if ( self % faces(fID) % MortarType == MORTAR_BIG .and. &
+              self % faces(fID) % faceType == HMESH_MPI ) then
+            do m_loc = 1, 4
+               if ( self % faces(fID) % Mortar(m_loc) /= 0 ) then
+                  eID_small = self % faces( self % faces(fID) % Mortar(m_loc) ) % elementIDs(2)
+                  if ( eID_small > 0 ) self % elements(eID_small) % hasSharedFaces = .true.
+               end if
+            end do
+         end if
       end do
 
       no_sequential_elems = 0

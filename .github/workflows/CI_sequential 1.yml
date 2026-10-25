@@ -37,11 +37,16 @@ jobs:
         comm: ['SEQUENTIAL']
         enable_threads: ['YES']
         mkl: ['YES','NO']
+        hdf5: ['YES','NO']
         exclude:
         - compiler: gfortran
-          mkl: 'YES'          
+          mkl: 'YES'
+        - compiler: gfortran
+          hdf5: 'NO'
         - compiler: ifort
-          mkl: 'NO'          
+          mkl: 'NO'
+        - compiler: ifort
+          hdf5: 'YES'
     env:
       INTEL_COMPILER_DIR : /opt/intel/oneapi/compiler/2023.2.0
 
@@ -50,6 +55,26 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
+
+      # Meshes repository, available to all the tests:
+      #   $HORSES3D_MESHES_DIR : clone of https://github.com/horses-framework/horses3d-meshes
+      - name: Checkout horses3d-meshes
+        uses: actions/checkout@v3
+        with:
+          repository: horses-framework/horses3d-meshes
+          path: horses3d-meshes
+          lfs: true
+
+      - name: Set horses3d-meshes path
+        run: echo "HORSES3D_MESHES_DIR=$GITHUB_WORKSPACE/horses3d-meshes" >> $GITHUB_ENV
+
+      - name: Install hdf5 (only gfortran)
+        if: (matrix.compiler == 'gfortran')
+        run: |
+          sudo apt-get update
+          sudo apt install libhdf5-dev
+          dpkg -L libhdf5-dev
+          echo "HDF5_ROOT="/usr/lib/x86_64-linux-gnu/hdf5/serial/"" >> $GITHUB_ENV
 
       - name: Set Coverage Flags
         run: |
@@ -386,6 +411,28 @@ jobs:
           ./horses3d.ns Cylinder_ErrorEstimation_pAdaptationRL.control
         if: '!cancelled()'
 
+#
+# 10) Density pulse with h-mortars (hanging nodes)
+# ------------------------------------------------
+# This test case only runs with gfortran as we do not support hdf5 with ifort in the github actions
+# The mesh is taken from the horses3d-meshes repository (see the top of the file)
+#
+#      - name: Build DensityPulse_hMortars
+#        working-directory: ./Solver/test/Euler/DensityPulse_hMortars/SETUP
+#        run: |
+#          source /opt/intel/oneapi/setvars.sh || true
+#          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+#        if: ('!cancelled()' && matrix.compiler == 'gfortran')
+#
+#      - name: Run DensityPulse_hMortars
+#        working-directory: ./Solver/test/Euler/DensityPulse_hMortars
+#        run: |
+#          source /opt/intel/oneapi/setvars.sh || true
+#          mkdir -p MESH
+#          cp "$HORSES3D_MESHES_DIR/cartesian-band-hanging-nodes/BAND_mesh.h5" MESH/
+#          ./horses3d.ns DensityPulse_hMortars.control
+#        if: ('!cancelled()' && matrix.compiler == 'gfortran')
+#
 
 #
 # CHECK CODE COVERAGE

@@ -40,6 +40,7 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./Euler/JFNK \
             ./Euler/TaylorGreenKEPEC \
             ./Euler/Cylinder_ErrorEstimation_pAdaptationRL \
+            ./Euler/DensityPulse_hMortars \
             ./NavierStokes/Convergence \
             ./NavierStokes/Convergence_energy \
             ./NavierStokes/Convergence_entropy \
@@ -85,6 +86,7 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./NavierStokes/ABLBoundaryMapping \
             ./NavierStokes/ActuatorLineController \
             ./NavierStokes/LambVector \
+            ./NavierStokes/IBM-MORTARS \
             ./IncompressibleNS/Convergence \
             ./IncompressibleNS/Kovasznay \
             ./IncompressibleNS/TaylorGreen \

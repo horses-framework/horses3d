@@ -280,7 +280,7 @@ contains
 
 !     Set variables from controlVariables
 !     --------------------------------------------------------------------
-      if (.not. present(controlVariables)) error stop 'Fatal error: MultigridSolver needs controlVariables.'
+      if (.not. present(controlVariables)) stop 'Fatal error: MultigridSolver needs controlVariables.'
       if (present(controlVariables)) then 
 
         ! Read # of multigrid coarse grids
@@ -317,7 +317,7 @@ contains
               read(pc(i:i),'(i1)') MG_levels_z(i)
             end do
         else
-            error stop ':: FIXME: Default multigrid levels NOT defined.' ! TODO
+            ERROR stop ':: FIXME: Default multigrid levels NOT defined.' ! TODO
         end if
 !       ------------------------------------------------------------------
 
@@ -347,7 +347,7 @@ contains
              S_SOLVER = SOLVER_PMG_NONE
              !S_PRECONDITIONER = KSP_PRECONDITIONER_NONE
            case default
-             error stop "LinearMultigridSolver :: Wrong solver "
+             ERROR Stop "LinearMultigridSolver :: Wrong solver "
         end select
         end if
 !       ------------------------------------------------------------------
@@ -361,7 +361,7 @@ contains
            case ('matrix-based')
              S_MATCOMP = JACOBIANCOMP_MB
            case default
-             error stop "MultigridSolver :: Wrong jacobian assemble key"
+             ERROR Stop "MultigridSolver :: Wrong jacobian assemble key"
         end select
         end if
 !       ------------------------------------------------------------------
@@ -378,7 +378,7 @@ contains
            case ('ilu')
              S_SMOOTHER = S_ILU
            case default
-             error stop "MultigridSolver :: Wrong smoother "
+             ERROR Stop "MultigridSolver :: Wrong smoother "
         end select
         end if
 !       ------------------------------------------------------------------
@@ -448,7 +448,7 @@ contains
             call Me % Jacobian % Configure (Me % p_sem % mesh, nEqn, Me % A)
          case (JACOBIANCOMP_MF)
          case default
-           error stop "MultigridSolver :: Select MATCOMOP."
+           ERROR Stop "MultigridSolver :: Select MATCOMOP."
       end select
 
       ! Construct smoother
@@ -462,7 +462,7 @@ contains
          allocate ( Me % ILUsmoother )
          call Me % ILUSmoother % Construct (Me % A) 
       case default
-         error stop "Error! No smoother set."
+         ERROR Stop "Error! No smoother set."
       end select 
 
       ALLOCATE ( Me % LocalStorage(nelem))
@@ -492,7 +492,7 @@ contains
         allocate (Child_p % p_sem)
         call Child_p % p_sem % construct (  controlVariables  = controlVariables, &
         polynomialOrder = (/ Child_p%Nx, Child_p%Ny, Child_p%Nz /), success           = success)
-        if (.not. success) error stop "LinearMultigrid: Problem creating coarse solver."
+        if (.not. success) ERROR STOP "LinearMultigrid: Problem creating coarse solver."
 
         Child_p % DimPrb = Child_p % p_sem % mesh % NDOF * nEqn 
 
@@ -529,7 +529,7 @@ contains
            case (ANALYTICAL_JACOBIAN) ; allocate(AnJacobian_t  :: Child_p % Jacobian)
            case (NUMERICAL_JACOBIAN ) ; allocate(NumJacobian_t :: Child_p % Jacobian)
            case default
-              error stop 'Invalid jacobian type. FIXME: '
+              ERROR stop 'Invalid jacobian type. FIXME: '
          end select
          call Child_p % Jacobian % construct(Child_p % p_sem % mesh, nEqn, controlVariables)
 
@@ -849,7 +849,7 @@ contains
                         Z(i,j) = 2._RP/3._RP * V(i,j) / this % A % Values(this % A % Diag(i))
                      end do
                   case (JACOBIANCOMP_MF)
-                     error stop "Matrix-free not implemented for Point-Jacobi prec."
+                     ERROR STOP "Matrix-free not implemented for Point-Jacobi prec."
                   case default  
                end select
                call this % MG_JacVec(W,Z(:,j),ComputeTimeDerivative,S_MATCOMP)
@@ -882,7 +882,7 @@ contains
          tmp1 = SQRT(H(j,j)*H(j,j) + H(j+1,j)*H(j+1,j) )
          
          if (ABS(tmp1) .LT. 1e-15_RP) then
-            error stop "GMRES Loop has ~0 vec"
+            ERROR stop "GMRES Loop has ~0 vec"
             RETURN
          end if
 
@@ -1051,7 +1051,7 @@ contains
 !-----Local-Variables-----------------------------------------------------
       integer             :: i,j
       character(len=1024) :: filename
-      real(kind=RP)       :: shift
+      REAL(KIND=RP) :: A
 !  -----------------------------------------------------------------------
 
 
@@ -1062,8 +1062,8 @@ contains
       case (JACOBIANCOMP_MF)
          call Me % Jacobian % Compute (Me % p_sem, nEqn, time, Me % BJSmoother % A_p, ComputeTimeDerivative, BlockDiagonalized=.TRUE.)
          call Me % SetOperatorDt(dt)
-         shift = MatrixShift(dt)
-         call Me % BJSmoother % A_p % shift( shift )
+         A = matrixshift(dt)
+         call Me % BJSmoother % A_p % shift( A )
       end select 
 
 
@@ -1164,7 +1164,7 @@ contains
 
       select case (S_SMOOTHER)
          case (S_NOTDEF)
-            error stop 'GenericSmoother :: Wrong smoother type'
+            ERROR stop 'GenericSmoother :: Wrong smoother type'
          case (S_POINTJAC)
             call MG_PJsmooth(this,x,b,n, SmoothIters, ComputeTimeDerivative)
          case (S_BLOCKJAC)
@@ -2299,7 +2299,7 @@ contains
          case ('l2')
             xnorm = NORM2(this % x)
          case default
-            error stop 'LinearMultigridSolverClass ERROR: Norm not implemented yet'
+            stop 'LinearMultigridSolverClass ERROR: Norm not implemented yet'
       end select
 
    end function MG_Getxnorm
@@ -2406,7 +2406,7 @@ contains
       
       if (this % num_of_Rows /= Acsr % num_of_Rows) then
          print*, 'getCSRfromDBD :: ERROR: Matrix dimensions mismatch:', this % num_of_Rows, Acsr % num_of_Rows
-         error stop
+         stop
       end if
       
       call Acsr % PreAllocate()
@@ -2453,13 +2453,13 @@ contains
 !     ---------------
       if (this % num_of_Rows /= Adbd % num_of_Rows) then
          print *, 'getDBDfromCSR :: ERROR: Matrix dimensions mismatch:', this % num_of_Rows, Adbd % num_of_Rows
-         error stop
+         stop
       end if
 
 !     Fill the DBD Matrix
 !     ---------------
       if (size(Adbd%BlockSizes,1) .lt. 1) then
-         error stop "BDB Matrix not allocated correctly."
+         ERROR Stop "BDB Matrix not allocated correctly."
       end if 
       allocate( Mat(Adbd%BlockSizes(1),Adbd%BlockSizes(1))) ! allocate local matrix, this one if for const. pol. order for all elements
       do i = 1, Adbd % num_of_blocks

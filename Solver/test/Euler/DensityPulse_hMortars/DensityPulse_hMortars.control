@@ -1,0 +1,61 @@
+!
+! Density pulse advected through a non-conforming mesh with hanging nodes (2:1 h-mortars).
+! The mesh is taken from the horses3d-meshes repository:
+!     horses3d-meshes/cartesian-band-hanging-nodes/BAND_mesh.h5  ->  MESH/BAND_mesh.h5
+!
+Flow equations        = "Euler"
+mesh file name        = "MESH/BAND_mesh.h5"
+periodic relative tolerance = .true.
+
+Polynomial order      = 2
+Discretization nodes  = "Gauss-Lobatto"
+
+solution file name    = "RESULTS/DensityPulse_hMortars.hsol"
+restart               = .false.
+
+simulation type       = time-accurate
+final time            = 6.0
+Number of time steps  = 100
+Output Interval       = 100
+
+Number of plot points = 5
+Convergence tolerance = 1.d-10
+
+cfl                   = 0.3
+dcfl                  = 0.3
+mach number           = 0.5
+Reynolds number       = 0.0
+AOA theta             = 0.0
+AOA phi               = 0.0
+
+riemann solver        = roe
+
+#define boundary front
+  type = periodic
+  coupled boundary = back
+#end
+
+#define boundary back
+  type = periodic
+  coupled boundary = front
+#end
+
+#define boundary left
+  type = periodic
+  coupled boundary = right
+#end
+
+#define boundary right
+  type = periodic
+  coupled boundary = left
+#end
+
+#define boundary top
+  type = periodic
+  coupled boundary = bottom
+#end
+
+#define boundary bottom
+  type = periodic
+  coupled boundary = top
+#end
