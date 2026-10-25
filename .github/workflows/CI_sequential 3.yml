@@ -23,6 +23,11 @@ jobs:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
+    # Permissions for codecov
+    permissions:
+      id-token: write
+      contents: read
+
     # Define strategy matrix
     strategy:
       fail-fast: false
@@ -44,6 +49,14 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v3
+
+      - name: Set Coverage Flags
+        run: |
+          if [ "${{ matrix.compiler }}" = "gfortran" ] && [ "${{ matrix.mode }}" = "DEBUG" ]; then
+            echo "EXTRA_COV=-fprofile-arcs -ftest-coverage" >> $GITHUB_ENV
+          else
+            echo "EXTRA_COV=" >> $GITHUB_ENV
+          fi
 
       # sudo apt-get install -qq pkg-config libhdf5-serial-dev
 #      - name: Install Linux packages
@@ -103,8 +116,8 @@ jobs:
         working-directory: ./Solver
         run: |
          source /opt/intel/oneapi/setvars.sh || true
-         make allclean MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
-         make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+         make allclean MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+         make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
 
 
 
@@ -119,7 +132,7 @@ jobs:
         working-directory: ./Solver/test/Particles/FreeFall/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run ParticlesFreeFall
@@ -136,7 +149,7 @@ jobs:
         working-directory: ./Solver/test/Particles/RadiationHeat/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run RadiationHeat
@@ -153,7 +166,7 @@ jobs:
       # it only works in Alderaan
       # - name: Build ParticleBoundaryCond
       #   working-directory: ./Solver/test/Particles/ParticleBoundaryCond/SETUP
-      #   run: make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+      #   run: make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
 
       # - name: Run ParticleBoundaryCond
       #   working-directory: ./Solver/test/Particles/ParticleBoundaryCond
@@ -165,7 +178,7 @@ jobs:
       # it only works in Alderaan
       # - name: Build Pouransari
       #   working-directory: ./Solver/test/Particles/Pouransari/SETUP
-      #   run: make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+      #   run: make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
 
       # - name: Run Pouransari
       #   working-directory: ./Solver/test/Particles/Pouransari
@@ -183,7 +196,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/Convergence/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: ('!cancelled()' && matrix.compiler == 'ifort')
 
       - name: Run MultiphaseConvergence
@@ -201,7 +214,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/Convergence_cs/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: ('!cancelled()' && matrix.compiler == 'ifort')
 
       - name: Run MultiphaseConvergence_cs
@@ -219,7 +232,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/RisingBubble/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: ('!cancelled()' && matrix.compiler == 'ifort')
 
       - name: Run MultiphaseRisingBubble
@@ -237,7 +250,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/Pipe/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run MultiphasePipe
@@ -255,7 +268,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/EntropyConservingTest/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run MultiphaseEntropyConservingTest
@@ -274,7 +287,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/RisingBubbleVreman/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: ('!cancelled()' && matrix.compiler == 'ifort')
 
       - name: Run MultiphaseRisingBubbleVreman
@@ -292,7 +305,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/ActuatorLineInterpolation/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run Mu-AL
@@ -309,7 +322,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/Monopole_pAdaptationRL/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run Multiphase_Monopole_pAdaptationRL
@@ -326,7 +339,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/Snell/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: ('!cancelled()')
 
       - name: Run MultiphaseSnell
@@ -343,7 +356,7 @@ jobs:
         working-directory: ./Solver/test/Multiphase/MixedRK/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: ('!cancelled()')
 
       - name: Run MultiphaseMixedRK
@@ -364,7 +377,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/Convergence/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-Convergence
@@ -382,7 +395,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/Kovasznay/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-Kovasznay
@@ -400,7 +413,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/LidDrivenCavity/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-LidDrivenCavity
@@ -418,7 +431,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/TaylorGreen/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-TaylorGreenVortex
@@ -436,7 +449,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/RayleighTaylor/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-RayleighTaylor
@@ -454,7 +467,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/Cylinder/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-Cylinder
@@ -472,7 +485,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/CylinderVreman/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-Cylinder-Vreman
@@ -489,7 +502,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/ActuatorLineInterpolation/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-AL
@@ -506,7 +519,7 @@ jobs:
         working-directory: ./Solver/test/IncompressibleNS/NACA0012/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run iNS-NACA0012
@@ -527,7 +540,7 @@ jobs:
 #         working-directory: ./Solver/test/Acoustic/ManufacturedSolution/SETUP
 #         run: |
 #           source /opt/intel/oneapi/setvars.sh || true
-#           make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+#           make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
 #         if: '!cancelled()'
 
 #       - name: Run caa-ManufacturedSolution
@@ -544,7 +557,7 @@ jobs:
 #         working-directory: ./Solver/test/Acoustic/LambVectorTimeInterpolation/SETUP
 #         run: |
 #           source /opt/intel/oneapi/setvars.sh || true
-#           make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+#           make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
 #         if: '!cancelled()'
 
 #       - name: Run caa-LambVectorTimeInterpolation
@@ -561,7 +574,7 @@ jobs:
 #         working-directory: ./Solver/test/Acoustic/LambVectorCube/SETUP
 #         run: |
 #           source /opt/intel/oneapi/setvars.sh || true
-#           make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+#           make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
 #         if: '!cancelled()'
 
 #       - name: Run caa-LambVectorCube
@@ -570,3 +583,26 @@ jobs:
 #           source /opt/intel/oneapi/setvars.sh || true
 #           ./horses3d.caa LambTimeInterp.control
 #         if: '!cancelled()'
+
+#
+# CHECK CODE COVERAGE
+# -------------------------
+
+      - name: Install gcovr
+        if: matrix.compiler == 'gfortran' && matrix.mode == 'DEBUG' && !cancelled()
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcovr
+
+      - name: Generate Coverage Report
+        if: matrix.compiler == 'gfortran' && matrix.mode == 'DEBUG' && !cancelled()
+        run: |
+          # gcovr scans recursively from the root to find all generated .gcda and .gcno files
+          gcovr --root . --gcov-ignore-parse-errors --print-summary --xml coverage.xml
+
+      - name: Upload Coverage to Codecov
+        if: matrix.compiler == 'gfortran' && matrix.mode == 'DEBUG' && !cancelled()
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.xml
+          use_oidc: true

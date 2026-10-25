@@ -83,7 +83,10 @@
       multiphase_ % tCH_wDim   = controlVariables % DoublePrecisionValueForKey(TCH_KEY)
       multiphase_ % sigma_wDim = controlVariables % DoublePrecisionValueForKey(INTERFACE_TENSION_KEY)
 
-      if ( .not. almostEqual(multiphase_ % tCH_wDim, 0.0_RP) ) then
+
+      if ( almostEqual(multiphase_ % sigma_wDim, 0.0_RP) ) then
+         multiphase_ % M0_wDim = 0.0_RP
+      else if ( .not. almostEqual(multiphase_ % tCH_wDim, 0.0_RP) ) then
          multiphase_ % M0_wDim = POW2(Lref)*(multiphase_ % eps_wDim**2) / (multiphase_ % tCH_wDim * multiphase_ % sigma_wDim)
       else
          multiphase_ % M0_wDim = 0.0_RP
@@ -94,16 +97,12 @@
       multiphase_ % tCH   = multiphase_ % tCH_wDim / timeRef
       multiphase_ % sigma = multiphase_ % sigma_wDim / pRef
 
-      if ( .not. almostEqual(multiphase_ % tCH, 0.0_RP) ) then
+      if ( almostEqual(multiphase_ % sigma_wDim, 0.0_RP) ) then
+         multiphase_ % M0 = 0.0_RP
+      else if ( .not. almostEqual(multiphase_ % tCH, 0.0_RP) ) then
          multiphase_ % M0 = (multiphase_ % eps**2) / (multiphase_ % tCH * multiphase_ % sigma)
       else
          multiphase_ % M0 = 0.0_RP
-      end if
-
-
-      if ( almostEqual(multiphase_ % sigma_wDim, 0.0_RP) ) then
-         multiphase_ % M0_wDim = 0.0_RP
-         multiphase_ % M0      = 0.0_RP
       end if
 
 !

@@ -553,11 +553,11 @@ end module ProblemFileFunctions
             real(kind=RP),             intent(in) :: elapsedTime
             real(kind=RP),             intent(in) :: CPUTime
             real(kind=RP)  :: x, y, z, c, locErr(5), phi, u, v, w, p, rho, rho0
-            real(kind=RP), parameter  :: saved_errors(5) = [4.877120855395489E-6_RP, &
-                                          6.8958937066338505E-05_RP, &
-                                          6.8958937066344671E-05_RP, &
+            real(kind=RP), parameter  :: saved_errors(5) = [4.8755376700349018E-06_RP, &
+                                          6.8771002939893577E-05_RP, &
+                                          6.8771002939893577E-05_RP, &
                                           7.4217194511428453E-17_RP, & 
-                                          6.1637135702849238E-04_RP]
+                                          6.1903872140001148E-04_RP]
             integer        :: i, j,k, eID 
             CHARACTER(LEN=49)                  :: testName           = "Multiphase convergence non constant sound speed"
             real(kind=RP)  :: error(5)

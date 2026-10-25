@@ -1827,16 +1827,15 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
             end if
          end if
 
-         ! Pressure now (Jensen's inequality is NOT conservative for the pressure)
+         ! Pressure now. Reference is p(Qavg), not the mean nodal pressure: p is concave in Q,
+         ! so this theta keeps every node >= m = min(LIMITER_MIN, p(Qavg)) (Zhang & Shu, 2010)
+         pavg = gm1 * (Qavg(5) - 0.5_RP * (Qavg(2)**2 + Qavg(3)**2 + Qavg(4)**2) / Qavg(1))
          minp = huge(1.0_RP)
-         pavg = 0.0_RP
          do k = 0, e % Nxyz(3); do j = 0, e % Nxyz(2); do i = 0, e % Nxyz(1)
             Q = e % storage % Q(:,i,j,k)
             p = gm1 * (Q(5) - 0.5_RP * (Q(2)**2 + Q(3)**2 + Q(4)**2) / Q(1))
-            pavg = pavg + p * wx(i) * wy(j) * wz(k) * e % geom % jacobian(i,j,k)
             if (p < minp) minp = p
          end do               ; end do               ; end do
-         pavg = pavg / e % geom % volume
 
          if (pavg /= minp) then
             m = min(LIMITER_MIN, pavg)

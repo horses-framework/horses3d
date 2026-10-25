@@ -543,7 +543,7 @@ END DO
             TYPE(FTAssertionsManager), POINTER :: sharedManager
             LOGICAL                            :: success
             real(kind=RP), parameter           :: residuals_saved(5) = [2.8665833841448300E-06_RP, &
-                                                                        1.9361250102237703E-03_RP, &
+                                                                        1.9361250102435498E-03_RP, &
                                                                         5.9347820202367154E-11_RP, &
                                                                         2.3047237097072765E-17_RP, &
                                                                         7.1908221803287242E-01_RP]

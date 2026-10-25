@@ -98,6 +98,7 @@ Real-time keywords may not work in parallel MPI computations. It depends on how 
    variable          = SomeVariable
    reference surface = 1.d0
    direction         = [1.d0, 0.d0, 0.d0]
+   gauge pressure    = .false.
 #end
 ```
 | Keyword           | Description                                                                                      | Default value       |
@@ -107,6 +108,7 @@ Real-time keywords may not work in parallel MPI computations. It depends on how 
 | variable          | *CHARACTER*: Variable to be monitored. Implemented options are: mass-flow, flow, pressure-force, viscous-force, force, lift, drag, pressure-average. | **Mandatory Keyword** |
 | reference surface | *REAL*: Reference surface [area] for the monitor. Needed for "lift" and "drag" computations.    | --                  |
 | direction         | *REAL(3)*: Direction in which the force is going to be measured. Needed for "pressure-force", "viscous-force" and "force". Can be specified for "lift" (default [0.d0,1.d0,0.d0]) and "drag" (default [1.d0,0.d0,0.d0]). | --                  |
+| gauge pressure    | *LOGICAL*: If .true., the monitor integrates the gauge pressure p - p_inf instead of the absolute pressure p, with p_inf = 1/(gamma M^2) the freestream pressure of the nondimensionalization. Applies to "pressure-force", "force", "lift", "drag" and "pressure-average". | .false.             |
 
 ## Volume monitors
 

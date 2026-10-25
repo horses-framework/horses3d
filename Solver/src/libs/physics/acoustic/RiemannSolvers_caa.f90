@@ -9,14 +9,15 @@ module RiemannSolvers_CAAKeywordsModule
 !    Riemann solver definitions
 !    --------------------------
      character(len=KEYWORD_LENGTH), parameter :: RIEMANN_CENTRAL_NAME    = "central"
-     character(len=KEYWORD_LENGTH), parameter :: RIEMANN_ROE_NAME        = "roe"
-     ! character(len=KEYWORD_LENGTH), parameter :: RIEMANN_RUSANOV_NAME    = "rusanov"
+     character(len=KEYWORD_LENGTH), parameter :: RIEMANN_VS_NAME         = "vector-split"
+     character(len=KEYWORD_LENGTH), parameter :: RIEMANN_EXACT_AVG_NAME  = "exact-average"
      character(len=KEYWORD_LENGTH), parameter :: RIEMANN_LXF_NAME        = "lax-friedrichs"
+     character(len=KEYWORD_LENGTH), parameter :: RIEMANN_EXACT_JUMP_NAME   = "exact-jump"
 
      enum, bind(C)
         ! enumerator :: RIEMANN_ROE = 1, RIEMANN_LXF, RIEMANN_RUSANOV
-        enumerator :: RIEMANN_ROE = 1, RIEMANN_LXF
-        enumerator :: RIEMANN_CENTRAL 
+        enumerator :: RIEMANN_CENTRAL= 1, RIEMANN_LXF
+        enumerator :: RIEMANN_VS, RIEMANN_EXACT_AVG, RIEMANN_EXACT_JUMP
      end enum
 
 end module RiemannSolvers_CAAKeywordsModule
@@ -83,7 +84,7 @@ module RiemannSolvers_CAA
 
 !
 !        ---------------------------------------------
-!        Choose the Riemann solver (by default is LF)
+!        Choose the Riemann solver (by default is VS)
 !        ---------------------------------------------
          if (controlVariables % containsKey(RIEMANN_SOLVER_NAME_KEY)) then
 
@@ -91,17 +92,21 @@ module RiemannSolvers_CAA
             call toLower(keyword)
 
             select case (keyword)
-            case (RIEMANN_ROE_NAME)
-               RiemannSolver => RoeRiemannSolver
-               whichRiemannSolver = RIEMANN_ROE
+            case (RIEMANN_VS_NAME)
+               RiemannSolver => VSRiemannSolver
+               whichRiemannSolver = RIEMANN_VS
 
             case (RIEMANN_LXF_NAME)
                RiemannSolver => LxFRiemannSolver
                whichRiemannSolver = RIEMANN_LXF
 
-            ! case (RIEMANN_RUSANOV_NAME)
-            !   RiemannSolver => RusanovRiemannSolver
-            !    whichRiemannSolver = RIEMANN_RUSANOV
+            case (RIEMANN_EXACT_AVG_NAME)
+              RiemannSolver => ExactAverageRiemannSolver
+               whichRiemannSolver = RIEMANN_EXACT_AVG
+
+            case (RIEMANN_EXACT_JUMP_NAME)
+              RiemannSolver => ExactJumpRiemannSolver
+               whichRiemannSolver = RIEMANN_EXACT_JUMP
 
             case (RIEMANN_CENTRAL_NAME)
                RiemannSolver => CentralRiemannSolver
@@ -116,10 +121,10 @@ module RiemannSolvers_CAA
 
          else
 !
-!           Select LF by default
+!           Select VS by default
 !           ---------------------
-            RiemannSolver => LxFRiemannSolver
-            whichRiemannSolver = RIEMANN_LXF
+            RiemannSolver => VSRiemannSolver
+            whichRiemannSolver = RIEMANN_VS
 
          end if
 !
@@ -151,27 +156,32 @@ module RiemannSolvers_CAA
          use RiemannSolvers_CAAKeywordsModule
 
          select case (whichRiemannSolver)
-         case (RIEMANN_ROE)
-            write(STD_OUT,'(30X,A,A30,A)') "->","Riemann solver: ","Roe"
+         case (RIEMANN_VS)
+            write(STD_OUT,'(30X,A,A30,A)') "->","Riemann solver: ","Vector Splitting"
 
          case (RIEMANN_LXF)
             write(STD_OUT,'(30X,A,A30,A)') "->","Riemann solver: ","Lax-Friedrichs"
+            write(STD_OUT,'(30X,A,A30,F10.3)') "->","Lambda stabilization: ", lambdaStab
 
-         ! case (RIEMANN_RUSANOV)
-            ! write(STD_OUT,'(30X,A,A30,A)') "->","Riemann solver: ","Rusanov"
+         case (RIEMANN_EXACT_AVG)
+            write(STD_OUT,'(30X,A,A30,A)') "->","Riemann solver: ","Exact Average"
+
+         case (RIEMANN_EXACT_JUMP)
+            write(STD_OUT,'(30X,A,A30,A)') "->","Riemann solver: ","Exact Jump"
 
          case (RIEMANN_CENTRAL)
             write(STD_OUT,'(30X,A,A30,A)') "->","Riemann solver: ","Central"
+            write(STD_OUT,'(30X,A,A30,F10.3)') "->","Lambda stabilization: ", lambdaStab
 
          end select
-
-         write(STD_OUT,'(30X,A,A30,F10.3)') "->","Lambda stabilization: ", lambdaStab
 
       end subroutine DescribeRiemannSolver
 !
 !///////////////////////////////////////////////////////////////////////////////////////////
 !
 !        Riemann solvers
+!        ---------------
+!        APE 1/4 are not Rotational Invariant. Current LxF or central should not be used for these equations.
 !        ---------------
 !
 !///////////////////////////////////////////////////////////////////////////////////////////
@@ -234,13 +244,13 @@ module RiemannSolvers_CAA
          QbaseRRot = (/ rhoR, uR, vR, wR, pR, a2R /)
 !        Perform the average using the averaging function
 !        ------------------------------------------------
-         call StandardAverage(QLRot, QRRot, QBaseLRot, QbaseRRot, flux)
+         call StandardAverage(QLRot, QRRot, QBaseLRot, QbaseRRot, nHat, flux)
 !
 !        ************************************************
-!        Return momentum equations to the cartesian frame
+!        Momentum equations are already in cartesian frame
 !        ************************************************
 !
-         flux(2:4) = nHat*flux(2) + t1*flux(3) + t2*flux(4)
+         ! flux(2:4) = nHat*flux(2) + t1*flux(3) + t2*flux(4)
 
       end subroutine CentralRiemannSolver
 !
@@ -295,10 +305,10 @@ module RiemannSolvers_CAA
          aL = sqrt(QbaseL(6))
          aR = sqrt(QbaseR(6))
 !
-!        Eigenvalues: lambda = max(|u_baseL|,|u_baseR|) + max(aL,aR)
+!        Eigenvalues: lambdas = u_base /cdot n +- c
 !        -----------
-         ! lambda = max(abs(rhouL*invRhoL) + aL,abs(rhouR*invRhoR) + aR) ! this was the NS version
-         lambda = max(abs(uL), abs(uR)) + max(aL,aR)
+         ! lambda = max(abs(uL), abs(uR)) + max(aL,aR)
+         lambda = max(max(abs(uL-aL), abs(uL+aL)), max(abs(uR-aR), abs(uR+aR)))
 !
          rhoL = QLeft(1)
          rhoR = QRight(1)
@@ -323,32 +333,35 @@ module RiemannSolvers_CAA
 !
 !        Perform the average using the averaging function
 !        ------------------------------------------------
-         call StandardAverage(QLRot, QRRot, QBaseLRot, QbaseRRot, flux)
+         call StandardAverage(QLRot, QRRot, QBaseLRot, QbaseRRot, nHat, flux)
 !
 !        Compute the Lax-Friedrichs stabilization
 !        ----------------------------------------
-         stab = 0.5_RP * lambda * (QRRot - QLRot)
+         stab = 0.5_RP * lambda * (QRight - QLeft)
 !
 !        Compute the flux: apply the lambda stabilization here.
 !        ----------------
          flux = flux - lambdaStab * stab
 !
 !        ************************************************
-!        Return momentum equations to the cartesian frame
+!        Momentum equations are already in cartesian frame
 !        ************************************************
 !
-         flux(2:4) = nHat*flux(2) + t1*flux(3) + t2*flux(4)
+         ! flux(2:4) = nHat*flux(2) + t1*flux(3) + t2*flux(4)
 
       END SUBROUTINE LxFRiemannSolver
 !
 !     ////////////////////////////////////////////////////////////////////////////////////////
 !
-      SUBROUTINE RoeRiemannSolver( QLeft, QRight, QbaseL, QbaseR, nHat, t1, t2, flux )
+      SUBROUTINE VSRiemannSolver( QLeft, QRight, QbaseL, QbaseR, nHat, t1, t2, flux )
 !
-!        **************************************************************
-!           This Roe Riemann solver implementation does not uses the
+!        **********************************************************************************************
+!           This Vector Splitting Riemann solver implementation does not uses the
 !           averaging function, nor the lambda stabilization
-!        **************************************************************
+!           F* /cdot n = A^+_L*QL_L + A^-_R*Q_R
+!           Based on the A matrix decomposition on positives and negative eigenvalues
+!           Is an upwind Gudunov. If base flow is equal at the two states is an exact RiemannSolver
+!        **********************************************************************************************
 !
          IMPLICIT NONE
 !
@@ -370,206 +383,183 @@ module RiemannSolvers_CAA
 !        ---------------
 !
 !
-         ! REAL(KIND=RP) :: rho , rhou , rhov , rhow  , rhoe
-         ! REAL(KIND=RP) :: rhon, rhoun, rhovn, rhown , rhoen
-         ! REAL(KIND=RP) :: ul  , vl   , wl   , pleft , ql  , hl  , betal
-         ! REAL(KIND=RP) :: ur  , vr   , wr   , pright, qr  , hr  , betar
-         ! REAL(KIND=RP) :: rtd , utd  , vtd  , wtd   , htd , atd2, atd, qtd
-         ! REAL(KIND=RP) :: dw1 , sp1  , sp1m , hd1m  , eta1, udw1, rql
-         ! REAL(KIND=RP) :: dw4 , sp4  , sp4p , hd4   , eta4, udw4, rqr
-         ! REAL(KIND=RP)                   :: ds = 1.0_RP
+         real(kind=RP) :: rhoL, uL, pL, aL
+         real(kind=RP) :: rhoR, uR, pR, aR
+         real(kind=RP) :: omega_plus, omega_minus
+         real(kind=RP) :: velocity_term
 
-         !associate ( gamma => thermodynamics % gamma )
+         rhoL = QbaseL(1)
+         rhoR = QbaseR(1)
 
-         !rho  = QLeft(1)
-         !rhou = QLeft(2)
-         !rhov = QLeft(3)
-         !rhow = QLeft(4)
-         !rhoe = QLeft(5)
+         ! speed of sound of base flow
+         aL = sqrt(QbaseL(6))
+         aR = sqrt(QbaseR(6))
 
-         !rhon  = QRight(1)
-         !rhoun = QRight(2)
-         !rhovn = QRight(3)
-         !rhown = QRight(4)
-         !rhoen = QRight(5)
+         uL = QLeft(2) * nHat(1) + QLeft(3) * nHat(2) + QLeft(4) * nHat(3)
+         uR = QRight(2) * nHat(1) + QRight(3) * nHat(2) + QRight(4) * nHat(3)
+         pL = QLeft(5)
+         pR = QRight(5)
+         
+!        Eigenvalues: lambdas = u_base /cdot n +-c, 0,0
+!        Riemann Invariants in lambdas not 0
+         omega_plus = pL + rhoL*aL*uL
+         omega_minus = pR - rhoR*aR*uR
 
-         !ul = rhou/rho
-         !vl = rhov/rho
-         !wl = rhow/rho
-         !pleft = (gamma-1._RP)*(rhoe - 0.5_RP/rho*                        &
-        !&                           (rhou**2 + rhov**2 + rhow**2 ))
-!!
-         !ur = rhoun/rhon
-         !vr = rhovn/rhon
-         !wr = rhown/rhon
-         !pright = (gamma-1._RP)*(rhoen - 0.5_RP/rhon*                    &
-        !&                           (rhoun**2 + rhovn**2+ rhown**2))
-!!
-         !ql = nHat(1)*ul + nHat(2)*vl + nHat(3)*wl
-         !qr = nHat(1)*ur + nHat(2)*vr + nHat(3)*wr
-         !hl = 0.5_RP*(ul*ul + vl*vl + wl*wl) +                               &
-        !&                 gamma/(gamma-1._RP)*pleft/rho
-         !hr = 0.5_RP*(ur*ur + vr*vr + wr*wr) +                               &
-        !&                  gamma/(gamma-1._RP)*pright/rhon
-!!
-!!        ---------------------
-!!        Square root averaging
-!!        ---------------------
-!!
-         !rtd = sqrt(rho*rhon)
-         !betal = rho/(rho + rtd)
-         !betar = 1._RP - betal
-         !utd = betal*ul + betar*ur
-         !vtd = betal*vl + betar*vr
-         !wtd = betal*wl + betar*wr
-         !htd = betal*hl + betar*hr
-         !atd2 = (gamma-1._RP)*(htd - 0.5_RP*(utd*utd + vtd*vtd + wtd*wtd))
-         !atd = sqrt(atd2)
-         !qtd = utd*nHat(1) + vtd*nHat(2)  + wtd*nHat(3)
-!!
-         !IF(qtd >= 0.0_RP)     THEN
+         velocity_term = 0.5_RP * ( omega_plus/rhoL + omega_minus/rhoR )
 
-         !   dw1 = 0.5_RP*((pright - pleft)/atd2 - (qr - ql)*rtd/atd)
-         !   sp1 = qtd - atd
-         !   sp1m = min(sp1,0.0_RP)
-         !   hd1m = ((gamma+1._RP)/4._RP*atd/rtd)*dw1
-         !   eta1 = max(-abs(sp1) - hd1m,0.0_RP)
-         !   udw1 = dw1*(sp1m - 0.5_RP*eta1)
-         !   rql = rho*ql
-         !   flux(1) = ds*(rql + udw1)
-         !   flux(2) = ds*(rql*ul + pleft*nHat(1) + udw1*(utd - atd*nHat(1)))
-         !   flux(3) = ds*(rql*vl + pleft*nHat(2) + udw1*(vtd - atd*nHat(2)))
-         !   flux(4) = ds*(rql*wl + pleft*nHat(3) + udw1*(wtd - atd*nHat(3)))
-         !   flux(5) = ds*(rql*hl + udw1*(htd - qtd*atd))
+         flux(1) = 0.0_RP
+         flux(2) = nHat(1)*velocity_term
+         flux(3) = nHat(2)*velocity_term
+         flux(4) = nHat(3)*velocity_term
+         flux(5) = 0.5_RP * ( aL*omega_plus - aR*omega_minus)
 
-         !ELSE
-
-         !   dw4 = 0.5_RP*((pright - pleft)/atd2 + (qr - ql)*rtd/atd)
-         !   sp4 = qtd + atd
-         !   sp4p = max(sp4,0.0_RP)
-         !   hd4 = ((gamma+1._RP)/4._RP*atd/rtd)*dw4
-         !   eta4 = max(-abs(sp4) + hd4,0.0_RP)
-         !   udw4 = dw4*(sp4p + 0.5_RP*eta4)
-         !   rqr = rhon*qr
-         !   flux(1) = ds*(rqr - udw4)
-         !   flux(2) = ds*(rqr*ur + pright*nHat(1) - udw4*(utd + atd*nHat(1)))
-         !   flux(3) = ds*(rqr*vr + pright*nHat(2) - udw4*(vtd + atd*nHat(2)))
-         !   flux(4) = ds*(rqr*wr + pright*nHat(3) - udw4*(wtd + atd*nHat(3)))
-         !   flux(5) = ds*(rqr*hr - udw4*(htd + qtd*atd))
-         !ENDIF
-
-         !end associate
-print*, "Roe Riemann solver not implemented"
-error stop
-
-      END SUBROUTINE RoeRiemannSolver
+      END SUBROUTINE VSRiemannSolver
 
 !
 !     ////////////////////////////////////////////////////////////////////////////////////////
 !
-      !SUBROUTINE RusanovRiemannSolver( QLeft, QRight, nHat, t1, t2, flux )
+      SUBROUTINE ExactAverageRiemannSolver( QLeft, QRight, QbaseL, QbaseR, nHat, t1, t2, flux )
+!
+!        **********************************************************************************************
+!           This exact Riemann solver implementation does not uses the
+!           flux averaging function, nor the lambda stabilization
+!           F* /cdot n = A_avg * Q*
+!           Uses a linealization of A, result of the eigenvector expansion of delta F at each discontinuity
+!           Is an upwind Gudunov, . If base flow is equal at the two states is an exact RiemannSolver
+!        **********************************************************************************************
+!
+         IMPLICIT NONE
+!
+!        ---------
+!        Arguments
+!        ---------
+!
+         real(kind=RP), intent(in)       :: QLeft(1:NCONS)
+         real(kind=RP), intent(in)       :: QRight(1:NCONS)
+         real(kind=RP), intent(in)       :: QbaseL(1:NCONSB)
+         real(kind=RP), intent(in)       :: QbaseR(1:NCONSB)
+         real(kind=RP), intent(in)       :: nHat(1:NDIM)
+         real(kind=RP), intent(in)       :: t1(1:NDIM)
+         real(kind=RP), intent(in)       :: t2(1:NDIM)
+         real(kind=RP), intent(out)      :: flux(1:NCONS)
+!
+!        ---------------
+!        Local Variables
+!        ---------------
+!
+!
+         real(kind=RP) :: rhoL, uL, pL, aL, zL
+         real(kind=RP) :: rhoR, uR, pR, aR, zR
+         real(kind=RP) :: omega_plus, omega_minus
+         real(kind=RP) :: u_star, p_star
+         real(kind=RP) :: rhoa_mean, rho_inv_mean
+         real(kind=RP) :: velocity_term
 
-      !   IMPLICIT NONE
-!!
-!!        ---------
-!!        Arguments
-!!        ---------
-!!
-      !   real(kind=RP), intent(in)       :: QLeft(1:NCONS)
-      !   real(kind=RP), intent(in)       :: QRight(1:NCONS)
-      !   real(kind=RP), intent(in)       :: nHat(1:NDIM)
-      !   real(kind=RP), intent(in)       :: t1(1:NDIM)
-      !   real(kind=RP), intent(in)       :: t2(1:NDIM)
-      !   real(kind=RP), intent(out)      :: flux(1:NCONS)
-!!
-!!        ---------------
-!!        Local Variables
-!!        ---------------
-!!
-!!
-      !   REAL(KIND=RP) :: rho , rhou , rhov , rhow  , rhoe
-      !   REAL(KIND=RP) :: rhon, rhoun, rhovn, rhown , rhoen
-      !   REAL(KIND=RP) :: ul  , vl   , wl   , pleft , ql  , hl  , betal, al, al2
-      !   REAL(KIND=RP) :: ur  , vr   , wr   , pright, qr  , hr  , betar, ar, ar2
-      !   REAL(KIND=RP) :: rtd , utd  , vtd  , wtd   , htd , atd2, atd, qtd
-      !   REAL(KIND=RP) :: dw1 , sp1  , sp1m , hd1m  , eta1, udw1, rql
-      !   REAL(KIND=RP) :: dw4 , sp4  , sp4p , hd4   , eta4, udw4, rqr
-      !   REAL(KIND=RP)                   :: ds = 1.0_RP
+         rhoL = QbaseL(1)
+         rhoR = QbaseR(1)
 
-      !   REAL(KIND=RP) :: smax, smaxL, smaxR
-      !   REAL(KIND=RP) :: Leigen(2), Reigen(2)
+         ! speed of sound of base flow
+         aL = sqrt(QbaseL(6))
+         aR = sqrt(QbaseR(6))
 
-      !   associate ( gamma => thermodynamics % gamma )
+         uL = QLeft(2) * nHat(1) + QLeft(3) * nHat(2) + QLeft(4) * nHat(3)
+         uR = QRight(2) * nHat(1) + QRight(3) * nHat(2) + QRight(4) * nHat(3)
+         pL = QLeft(5)
+         pR = QRight(5)
+         
+!        Eigenvalues: lambdas = u_base /cdot n +-c, 0,0
+!        Riemann Invariants in lambdas not 0
+         omega_plus = pL + rhoL*aL*uL
+         omega_minus = pR - rhoR*aR*uR
+         zL = rhoL*aL
+         zR = rhoR*aR
 
-      !   rho  = QLeft(1)
-      !   rhou = QLeft(2)
-      !   rhov = QLeft(3)
-      !   rhow = QLeft(4)
-      !   rhoe = QLeft(5)
+         u_star = ( omega_plus - omega_minus) / (zL+zR)
+         p_star = ( zR*omega_plus + zL*omega_minus) / (zL+zR)
 
-      !   rhon  = QRight(1)
-      !   rhoun = QRight(2)
-      !   rhovn = QRight(3)
-      !   rhown = QRight(4)
-      !   rhoen = QRight(5)
+         ! mean of rho * a
+         rhoa_mean = 0.5_RP * (aL*zL+aR*zR)
+         ! mean of 1/rho
+         rho_inv_mean = 0.5_RP * (1.0_RP/rhoL + 1.0_RP/rhoR)
 
-      !   ul = rhou/rho
-      !   vl = rhov/rho
-      !   wl = rhow/rho
-      !   pleft = (gamma-1._RP)*(rhoe - 0.5_RP/rho*                        &
-      !  &                           (rhou**2 + rhov**2 + rhow**2 ))
-!!
-      !   ur = rhoun/rhon
-      !   vr = rhovn/rhon
-      !   wr = rhown/rhon
-      !   pright = (gamma-1._RP)*(rhoen - 0.5_RP/rhon*                    &
-      !  &                           (rhoun**2 + rhovn**2+ rhown**2))
-!!
-      !   ql = nHat(1)*ul + nHat(2)*vl + nHat(3)*wl
-      !   qr = nHat(1)*ur + nHat(2)*vr + nHat(3)*wr
-      !   hl = 0.5_RP*(ul*ul + vl*vl + wl*wl) +                               &
-      !  &                 gamma/(gamma-1._RP)*pleft/rho
-      !   hr = 0.5_RP*(ur*ur + vr*vr + wr*wr) +                               &
-      !  &                  gamma/(gamma-1._RP)*pright/rhon
-!!
-!!        ---------------------
-!!        Square root averaging
-!!        ---------------------
-!!
-      !   rtd = sqrt(rho*rhon)
-      !   betal = rho/(rho + rtd)
-      !   betar = 1._RP - betal
-      !   utd = betal*ul + betar*ur
-      !   vtd = betal*vl + betar*vr
-      !   wtd = betal*wl + betar*wr
-      !   htd = betal*hl + betar*hr
-      !   atd2 = (gamma-1._RP)*(htd - 0.5_RP*(utd*utd + vtd*vtd + wtd*wtd))
-      !   atd = sqrt(atd2)
-      !   qtd = utd*nHat(1) + vtd*nHat(2)  + wtd*nHat(3)
-      !   !Rusanov
-      !   ar2 = (gamma-1.d0)*(hr - 0.5d0*(ur*ur + vr*vr + wr*wr))
-      !   al2 = (gamma-1.d0)*(hl - 0.5d0*(ul*ul + vl*vl + wl*wl))
-      !   ar = sqrt(ar2)
-      !   al = sqrt(al2)
-!!
-      !   rql = rho*ql
-      !   rqr = rhon*qr
-      !   flux(1) = ds*(rql + rqr)
-      !   flux(2) = ds*(rql*ul + pleft*nHat(1) + rqr*ur + pright*nHat(1))
-      !   flux(3) = ds*(rql*vl + pleft*nHat(2) + rqr*vr + pright*nHat(2))
-      !   flux(4) = ds*(rql*wl + pleft*nHat(3) + rqr*wr + pright*nHat(3))
-      !   flux(5) = ds*(rql*hl + rqr*hr)
+         velocity_term = rho_inv_mean * p_star
 
-      !   smax = MAX(ar+ABS(qr),al+ABS(ql))
+         flux(1) = 0.0_RP
+         flux(2) = nHat(1)*velocity_term
+         flux(3) = nHat(2)*velocity_term
+         flux(4) = nHat(3)*velocity_term
+         flux(5) = rhoa_mean * u_star
 
-      !   flux = (flux - ds*smax*(QRight-QLeft))/2.d0
+      END SUBROUTINE ExactAverageRiemannSolver
+!
+!
+!     ////////////////////////////////////////////////////////////////////////////////////////
+!
+      SUBROUTINE ExactJumpRiemannSolver( QLeft, QRight, QbaseL, QbaseR, nHat, t1, t2, flux )
+!
+!        **********************************************************************************************
+!           This exact Riemann solver implementation does not uses the
+!           averaging function, nor the lambda stabilization
+!           F* /cdot n is solved as a system of equations of the Rankine-Huginiot jump condition at each
+!           eigenvalue discontinuity.
+!           Is an upwind Gudunov, . If base flow is equal at the two states is an exact RiemannSolver
+!        **********************************************************************************************
+!
+         IMPLICIT NONE
+!
+!        ---------
+!        Arguments
+!        ---------
+!
+         real(kind=RP), intent(in)       :: QLeft(1:NCONS)
+         real(kind=RP), intent(in)       :: QRight(1:NCONS)
+         real(kind=RP), intent(in)       :: QbaseL(1:NCONSB)
+         real(kind=RP), intent(in)       :: QbaseR(1:NCONSB)
+         real(kind=RP), intent(in)       :: nHat(1:NDIM)
+         real(kind=RP), intent(in)       :: t1(1:NDIM)
+         real(kind=RP), intent(in)       :: t2(1:NDIM)
+         real(kind=RP), intent(out)      :: flux(1:NCONS)
+!
+!        ---------------
+!        Local Variables
+!        ---------------
+!
+!
+         real(kind=RP) :: rhoL, uL, pL, aL, zL
+         real(kind=RP) :: rhoR, uR, pR, aR, zR
+         real(kind=RP) :: omega_plus, omega_minus
+         real(kind=RP) :: velocity_term
 
-      !   RETURN
+         rhoL = QbaseL(1)
+         rhoR = QbaseR(1)
 
-      !   end associate
+         ! speed of sound of base flow
+         aL = sqrt(QbaseL(6))
+         aR = sqrt(QbaseR(6))
 
-      !END SUBROUTINE RusanovRiemannSolver
+         uL = QLeft(2) * nHat(1) + QLeft(3) * nHat(2) + QLeft(4) * nHat(3)
+         uR = QRight(2) * nHat(1) + QRight(3) * nHat(2) + QRight(4) * nHat(3)
+         pL = QLeft(5)
+         pR = QRight(5)
+         
+!        Eigenvalues: lambdas = u_base /cdot n +-c, 0,0
+!        Riemann Invariants in lambdas not 0
+         omega_plus = pL + rhoL*aL*uL
+         omega_minus = pR - rhoR*aR*uR
+         zL = rhoL*aL
+         zR = rhoR*aR
 
+         velocity_term = ( aL*omega_plus + aR*omega_minus) / (zL+zR)
+
+         flux(1) = 0.0_RP
+         flux(2) = nHat(1)*velocity_term
+         flux(3) = nHat(2)*velocity_term
+         flux(4) = nHat(3)*velocity_term
+         flux(5) = ( zR*aL*omega_plus - zL*aR*omega_minus) / (zL+zR)
+
+      END SUBROUTINE ExactJumpRiemannSolver
+!
+!
 
 !////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -584,20 +574,22 @@ error stop
 !     -> Standard: Central fluxes
 !
 !////////////////////////////////////////////////////////////////////////////////////////////
-      subroutine StandardAverage(QLeft, QRight, QbaseL, QbaseR, flux)
+      subroutine StandardAverage(QLeft, QRight, QbaseL, QbaseR, nHat, flux)
 !
 !        *********************************************************************
 !           Computes the standard average of the two states:
-!              F* = {{F}} = 0.5 * (FL + FR)
+!              F*_n = {{F_n}} = 0.5 * (FL_n + FR_n)
 !
 !           State vectors are rotated.
 !        *********************************************************************
 !
+         use Physics_CAA, only: APEFluxNormal
          implicit none
          real(kind=RP), intent(in)       :: QLeft(1:NCONS)
          real(kind=RP), intent(in)       :: QRight(1:NCONS)
          real(kind=RP), intent(in)       :: QbaseL(1:NCONSB)
          real(kind=RP), intent(in)       :: QbaseR(1:NCONSB)
+         real(kind=RP), intent(in)       :: nHat(1:NDIM)
          real(kind=RP), intent(out)      :: flux(1:NCONS)
 !
 !        ---------------
@@ -609,8 +601,8 @@ error stop
 !
 !        Compute the flux
 !        ----------------
-         call APEFlux1D(QRight, fR, Qbase=QbaseR)
-         call APEFlux1D(QLeft,  fL, Qbase=QbaseL)
+         call APEFluxNormal(QRight, fR, QbaseR, nHat)
+         call APEFluxNormal(QLeft,  fL, QbaseL, nHat)
 
          flux = 0.5_RP*(fR+fL)
 
