@@ -5,6 +5,7 @@ module SpatialDiscretization
       use EllipticDiscretizations
       use DGIntegrals
       use MeshTypes
+      use LESModels
       use HexMeshClass
       use ElementClass
       use PhysicsStorage
@@ -154,6 +155,10 @@ module SpatialDiscretization
 !        Compute wall distances
 !        ----------------------
          call mesh % ComputeWallDistances
+!
+!        Initialize models
+!        -----------------
+         call InitializeLESModel(LESModel, controlVariables)
          
          end if
 
@@ -164,6 +169,7 @@ module SpatialDiscretization
       subroutine Finalize_SpaceAndTimeMethods
          implicit none
          IF ( ALLOCATED(HyperbolicDiscretization) ) DEALLOCATE( HyperbolicDiscretization )
+         IF ( ALLOCATED(LESModel) )                 DEALLOCATE( LESModel )
       end subroutine Finalize_SpaceAndTimeMethods
 !
 !////////////////////////////////////////////////////////////////////////
@@ -431,6 +437,10 @@ module SpatialDiscretization
 !$omp single
             call mesh % GatherMPIFacesGradients(NCONS)
 !$omp end single
+!
+!           Compute viscosity at MPI faces
+!           ------------------------------
+            call compute_viscosity_at_faces(size(mesh % faces_mpi), 2, mesh % faces_mpi, mesh)
 !
 !           **************************************
 !           Compute Riemann solver of shared faces
