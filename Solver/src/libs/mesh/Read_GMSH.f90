@@ -256,6 +256,7 @@ MODULE Read_GMSH
       real(kind=RP)                   :: x(NDIM)
       CHARACTER(LEN=BC_STRING_LENGTH), pointer :: zoneNames(:)
       real(kind=RP)                   :: corners(NDIM,NODES_PER_ELEMENT)
+      integer, allocatable            :: tags(:)
 !-----Curved-patches------------------------------------------------------
       real(kind=RP)  , DIMENSION(:)    , ALLOCATABLE :: uNodes, vNodes
       real(kind=RP)  , DIMENSION(:,:,:), ALLOCATABLE :: values
@@ -661,6 +662,7 @@ MODULE Read_GMSH
 
 !----Set-elements-----------------------------------------------------------
       j = 0
+      call extract_bc_tags(msh_bcs, tags)
       do msh_elblock=1, msh_no_elblocks
          if (msh_element_blocks(msh_elblock) % el_type .eq. org_element_type) then
             do msh_el = 1, msh_element_blocks(msh_elblock) % no_els
@@ -702,7 +704,7 @@ MODULE Read_GMSH
 
                ! set element boundaries
                do k = 1, 6
-                  tmpi1 = my_findloc( msh_bcs % tag,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
+                  tmpi1 = my_findloc( tags,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
                   if (tmpi1 .gt. 0) then
                      self % elements(l) % boundaryName(k) = trim(msh_bcs(tmpi1) % name)
                   else
@@ -911,6 +913,7 @@ MODULE Read_GMSH
       CHARACTER(LEN=BC_STRING_LENGTH) :: names(FACES_PER_ELEMENT)
       CHARACTER(LEN=BC_STRING_LENGTH), pointer :: zoneNames(:)
       real(kind=RP)                   :: corners(NDIM,NODES_PER_ELEMENT)
+      integer, allocatable            :: tags(:)
 !-----Curved-patches------------------------------------------------------
       real(kind=RP)  , DIMENSION(:)    , ALLOCATABLE :: uNodes, vNodes
       real(kind=RP)  , DIMENSION(:,:,:), ALLOCATABLE :: values
@@ -1328,6 +1331,7 @@ MODULE Read_GMSH
 !----Set-elements-----------------------------------------------------------
       j = 0
       pElement = 1
+      call extract_bc_tags(msh_bcs, tags)
       do msh_elblock=1, msh_no_elblocks
          if (msh_element_blocks(msh_elblock) % el_type .eq. org_element_type) then
             do msh_el = 1, msh_element_blocks(msh_elblock) % no_els
@@ -1341,7 +1345,7 @@ MODULE Read_GMSH
 
                   ! set element boundaries
                   do k = 1, 6
-                     tmpi1 = my_findloc( msh_bcs % tag,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
+                     tmpi1 = my_findloc(tags ,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
                      if (tmpi1 .gt. 0) then
                         names(k) = trim(msh_bcs(tmpi1) % name)
                      else
@@ -1366,7 +1370,7 @@ MODULE Read_GMSH
 
                   ! set element boundaries
                   do k = 1, 6
-                     tmpi1 = my_findloc( msh_bcs % tag,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
+                     tmpi1 = my_findloc( tags,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
                      if (tmpi1 .gt. 0) then
                         names(k) = trim(msh_bcs(tmpi1) % name)
                      else
@@ -1424,7 +1428,7 @@ MODULE Read_GMSH
 
                ! set element boundaries
                do k = 1, 6
-                  tmpi1 = my_findloc( msh_bcs % tag,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
+                  tmpi1 = my_findloc( tags,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
                   if (tmpi1 .gt. 0) then
                      self % elements(pElement) % boundaryName(k) = trim(msh_bcs(tmpi1) % name)
                   else
@@ -1643,6 +1647,7 @@ MODULE Read_GMSH
       real(kind=RP)                   :: x(NDIM)
       CHARACTER(LEN=BC_STRING_LENGTH), pointer :: zoneNames(:)
       real(kind=RP)                   :: corners(NDIM,NODES_PER_ELEMENT)
+      integer, allocatable            :: tags(:)
 !-----Curved-patches------------------------------------------------------
       real(kind=RP)  , DIMENSION(:)    , ALLOCATABLE :: uNodes, vNodes
       real(kind=RP)  , DIMENSION(:,:,:), ALLOCATABLE :: values
@@ -2037,6 +2042,7 @@ MODULE Read_GMSH
 
 !----Set-elements-----------------------------------------------------------
       j = 0
+      call extract_bc_tags(msh_bcs, tags)
       do msh_elblock=1, msh_no_elblocks
          if (msh_element_blocks(msh_elblock) % el_type .eq. org_element_type) then
             do msh_el = 1, msh_element_blocks(msh_elblock) % no_els
@@ -2076,7 +2082,7 @@ MODULE Read_GMSH
 
                ! set element boundaries
                do k = 1, 6
-                  tmpi1 = my_findloc( msh_bcs % tag,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
+                  tmpi1 = my_findloc( tags,msh_element_blocks(msh_elblock) % BCs(msh_el,k),1)
                   if (tmpi1 .gt. 0) then
                      self % elements(l) % boundaryName(k) = trim(msh_bcs(tmpi1) % name)
                   else
@@ -2227,6 +2233,7 @@ MODULE Read_GMSH
             real(kind=RP)                   :: x(NDIM)
             CHARACTER(LEN=BC_STRING_LENGTH), pointer :: zoneNames(:)
             real(kind=RP)                   :: corners(NDIM,NODES_PER_ELEMENT)
+            integer, allocatable            :: tags(:)
       !-----Curved-patches------------------------------------------------------
             real(kind=RP)  , DIMENSION(:)    , ALLOCATABLE :: uNodes, vNodes
             real(kind=RP)  , DIMENSION(:,:,:), ALLOCATABLE :: values
@@ -2542,6 +2549,7 @@ MODULE Read_GMSH
 
       !----Set-elements-----------------------------------------------------------
             j = 0
+            call extract_bc_tags(msh_bcs, tags)
             do msh_el = 1, msh_elements_3D % no_els
                j = j + 1
                ! setting l'th element
@@ -2581,7 +2589,7 @@ MODULE Read_GMSH
 
                ! set element boundaries
                do k = 1, 6
-                  tmpi1 = my_findloc( msh_bcs % tag,msh_elements_3D % BCs(msh_el,k),1)
+                  tmpi1 = my_findloc( tags,msh_elements_3D % BCs(msh_el,k),1)
                   if (tmpi1 .gt. 0) then
                      self % elements(l) % boundaryName(k) = trim(msh_bcs(tmpi1) % name)
                   else
@@ -2768,6 +2776,7 @@ MODULE Read_GMSH
             CHARACTER(LEN=BC_STRING_LENGTH) :: names(FACES_PER_ELEMENT)
             CHARACTER(LEN=BC_STRING_LENGTH), pointer :: zoneNames(:)
             real(kind=RP)                   :: corners(NDIM,NODES_PER_ELEMENT)
+            integer, allocatable            :: tags(:)
       !-----Curved-patches------------------------------------------------------
             real(kind=RP)  , DIMENSION(:)    , ALLOCATABLE :: uNodes, vNodes
             real(kind=RP)  , DIMENSION(:,:,:), ALLOCATABLE :: values
@@ -3093,6 +3102,7 @@ MODULE Read_GMSH
       !----Set-elements-----------------------------------------------------------
             j = 0
             pElement = 1
+            call extract_bc_tags(msh_bcs, tags)
             do msh_el = 1, msh_elements_3D % no_els
                j = j + 1
                ! setting l'th element
@@ -3104,7 +3114,7 @@ MODULE Read_GMSH
 
                   ! set element boundaries
                   do k = 1, 6
-                     tmpi1 = my_findloc( msh_bcs % tag,msh_elements_3D % BCs(msh_el,k),1)
+                     tmpi1 = my_findloc( tags,msh_elements_3D % BCs(msh_el,k),1)
                      if (tmpi1 .gt. 0) then
                         names(k) = trim(msh_bcs(tmpi1) % name)
                      else
@@ -3129,7 +3139,7 @@ MODULE Read_GMSH
 
                   ! set element boundaries
                   do k = 1, 6
-                     tmpi1 = my_findloc( msh_bcs % tag,msh_elements_3D % BCs(msh_el,k),1)
+                     tmpi1 = my_findloc( tags,msh_elements_3D % BCs(msh_el,k),1)
                      if (tmpi1 .gt. 0) then
                         names(k) = trim(msh_bcs(tmpi1) % name)
                      else
@@ -3187,7 +3197,7 @@ MODULE Read_GMSH
 
                ! set element boundaries
                do k = 1, 6
-                  tmpi1 = my_findloc( msh_bcs % tag,msh_elements_3D % BCs(msh_el,k),1)
+                  tmpi1 = my_findloc( tags,msh_elements_3D % BCs(msh_el,k),1)
                   if (tmpi1 .gt. 0) then
                      self % elements(pElement) % boundaryName(k) = trim(msh_bcs(tmpi1) % name)
                   else
@@ -3383,6 +3393,7 @@ MODULE Read_GMSH
             real(kind=RP)                   :: x(NDIM)
             CHARACTER(LEN=BC_STRING_LENGTH), pointer :: zoneNames(:)
             real(kind=RP)                   :: corners(NDIM,NODES_PER_ELEMENT)
+            integer, allocatable            :: tags(:)
       !-----Curved-patches------------------------------------------------------
             real(kind=RP)  , DIMENSION(:)    , ALLOCATABLE :: uNodes, vNodes
             real(kind=RP)  , DIMENSION(:,:,:), ALLOCATABLE :: values
@@ -3686,6 +3697,7 @@ MODULE Read_GMSH
       !------------------------------------------------------------------------
 
       !----Set-elements-----------------------------------------------------------
+            call extract_bc_tags(msh_bcs, tags)
             j = 0
             do msh_el = 1, msh_elements_3D % no_els
                j = j + 1
@@ -3726,7 +3738,7 @@ MODULE Read_GMSH
 
                ! set element boundaries
                do k = 1, 6
-                  tmpi1 = my_findloc( msh_bcs % tag,msh_elements_3D % BCs(msh_el,k),1)
+                  tmpi1 = my_findloc(tags, msh_elements_3D % BCs(msh_el,k),1)
                   if (tmpi1 .gt. 0) then
                      self % elements(l) % boundaryName(k) = trim(msh_bcs(tmpi1) % name)
                   else
@@ -4617,4 +4629,26 @@ MODULE Read_GMSH
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
+   subroutine extract_bc_tags(msh_bcs, tags)
+      implicit none
+!-----Arguments---------------------------------------------------
+      type(MSH_BCinfo_t), intent(in)    :: msh_bcs(:)
+      integer, allocatable, intent(out) :: tags(:)
+!-----Local-Variables---------------------------------------------
+      integer :: i, n
+!  -----------------------------------------------------------------------
+      
+      ! 1. Get the size of the input array
+      n = size(msh_bcs)
+      
+      ! 2. Explicitly allocate the output array
+      safedeallocate(tags)
+      allocate(tags(n))
+      
+      ! 3. Manually loop to copy the data directly (No temporaries created!)
+      do i = 1, n
+         tags(i) = msh_bcs(i) % tag
+      end do
+
+   end subroutine extract_bc_tags
 end module Read_GMSH

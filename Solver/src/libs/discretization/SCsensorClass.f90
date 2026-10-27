@@ -936,6 +936,7 @@ module SCsensorClass
          if (allocated(F)) then
             if (all(ubound(F) == [NCONS, e % Nxyz(1), e % Nxyz(2), e % Nxyz(3), NDIM])) then
                need_alloc = .false.
+               need_dealloc = .false.
             end if
          else
             need_dealloc = .false.
