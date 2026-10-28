@@ -1826,18 +1826,19 @@ subroutine pAdaptation_pAdaptER_SelectElemPolorders(this,e,NNew)
      type(Element), intent(in) :: e 
      integer, intent(out) :: NNew(3)
 
-     if ( e % storage % sensor .gt. ERLimitMax) then
-
+     if ( e % storage % sensor .lt. ERLimitMin) then
+! Flow well resolved: reduce dissipation → increase polynomial order
            NNew = e%Nxyz+1
           if (NNew(1) .ge. this%NxyzMax(1)) then
                NNew = this%NxyzMax
            end if 
 
-     else if ( e % storage % sensor .lt. ERLimitMin .and. e%Nxyz(1) .gt. ER_PLim) then
-
+     else if ( e % storage % sensor .gt. ERLimitMax .and. e%Nxyz(1) .gt. ER_PLim) then
+      ! Flow poorly resolved: reduce accumulation of energy → lower polynomial order
            NNew = e%Nxyz-1
 
      else
+           ! No change
            NNew = e%Nxyz
      end if  
 
