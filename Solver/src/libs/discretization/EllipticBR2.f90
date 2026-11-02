@@ -630,6 +630,7 @@ module EllipticBR2
             call GetViscosity(e % storage % Q(INSRHO,i,j,k), mu(i,j,k))      
          end do                ; end do                ; end do
 
+         mu = mu + e % storage % mu_NS(1,:,:,:) ! Add Subgrid Viscosity
          kappa = 0.0_RP
          beta  = 0.0_RP
 #endif
@@ -649,6 +650,7 @@ module EllipticBR2
             call GetViscosity(e % storage % c(1,i,j,k), mu(i,j,k))      
          end do                ; end do                ; end do
 
+         mu = mu + e % storage % mu_NS(1,:,:,:) ! Add Subgrid Viscosity
          kappa = 0.0_RP
          beta  = 0.0_RP
 #endif

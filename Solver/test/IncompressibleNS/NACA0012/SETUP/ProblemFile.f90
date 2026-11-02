@@ -533,11 +533,11 @@ end module ProblemFileFunctions
 #if defined(INCNS)
             INTEGER                            :: iterations(3:7) = [100, 0, 0, 0, 0]
   
-            real(kind=RP), parameter :: residuals(5) = [ 5.5248695555734109E+01_RP, &
-                                                         4.7076986243096044E+03_RP, &
-                                                         2.8697954715784713E+03_RP, &
-                                                         2.4410624255E-06_RP, &
-                                                         5.5858280100370481E+04_RP]
+            real(kind=RP), parameter :: residuals(5) = [ 5.5053515053307912E+01_RP, &
+                                                         4.4541033758583480E+03_RP, &
+                                                         2.7993436924609800E+03_RP, &
+                                                         2.3516749512E-06_RP, &
+                                                         5.5663282421503682E+04_RP]
 
             N = mesh % elements(1) % Nxyz(1) ! This works here because all the elements have the same order in all directions
 

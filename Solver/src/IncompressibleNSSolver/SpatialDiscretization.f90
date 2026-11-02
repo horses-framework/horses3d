@@ -340,6 +340,34 @@ module SpatialDiscretization
          real(kind=RP)  :: mu_smag, delta
          real(kind=RP), dimension(NCONS)  :: Source
 !
+!        **********************************************
+!        Compute subgrid (LES) viscosity in elements
+!        **********************************************
+!
+!
+         if ( LESModel % active) then
+!$omp do schedule(runtime) private(i,j,k,delta)
+            do eID = 1, size(mesh % elements)
+               associate(e => mesh % elements(eID))
+               delta = (e % geom % Volume / product(e % Nxyz + 1)) ** (1.0_RP / 3.0_RP)
+               do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
+                  call LESModel % ComputeViscosity(delta, e % geom % dWall(i,j,k), e % storage % Q(:,i,j,k),   &
+                                                                                  e % storage % U_x(:,i,j,k), &
+                                                                                  e % storage % U_y(:,i,j,k), &
+                                                                                  e % storage % U_z(:,i,j,k), &
+                                                                                  e % storage % mu_turb_NS(i,j,k) )
+                  e % storage % mu_NS(1,i,j,k) = e % storage % mu_turb_NS(i,j,k)
+               end do                ; end do                ; end do
+               end associate
+            end do
+!$omp end do
+         end if
+!
+!        Compute viscosity at interior and boundary faces
+!        ------------------------------------------------
+         call compute_viscosity_at_faces(size(mesh % faces_interior), 2, mesh % faces_interior, mesh)
+         call compute_viscosity_at_faces(size(mesh % faces_boundary), 1, mesh % faces_boundary, mesh)
+!
 !        ****************
 !        Volume integrals
 !        ****************
@@ -349,34 +377,6 @@ module SpatialDiscretization
             call TimeDerivative_VolumetricContribution( mesh % elements(eID) , t)
          end do
 !$omp end do nowait
-
-         if ( LESModel % active) then
-            !$omp do schedule(runtime) private(i,j,k,delta,mu_smag)
-                        do eID = 1, size(mesh % elements)
-                            associate(e => mesh % elements(eID))
-                            delta = (e % geom % Volume / product(e % Nxyz + 1)) ** (1.0_RP / 3.0_RP)
-                            do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-                               call LESModel % ComputeViscosity(delta, e % geom % dWall(i,j,k), e % storage % Q(:,i,j,k),   &
-                                                                                               e % storage % U_x(:,i,j,k), &
-                                                                                               e % storage % U_y(:,i,j,k), &
-                                                                                               e % storage % U_z(:,i,j,k), &
-                                                                                               e % storage % mu_turb_NS(i,j,k) )
-                                                                                               ! mu_smag)
-                           !    ! e % storage % mu_NS(1,i,j,k) = e % storage % mu_NS(1,i,j,k) + mu_smag
-                           !    ! e % storage % mu_NS(2,i,j,k) = e % storage % mu_NS(2,i,j,k) + mu_smag * dimensionless % mu_to_kappa
-                               e % storage % mu_NS(1,i,j,k) = e % storage % mu_NS(1,i,j,k) + e % storage % mu_turb_NS(i,j,k)
-                           !    e % storage % mu_NS(2,i,j,k) = e % storage % mu_NS(2,i,j,k) + e % storage % mu_turb_NS(i,j,k) * dimensionless % mu_to_kappa
-                            end do                ; end do                ; end do
-                            end associate
-                        end do
-            !$omp end do
-                  end if
-
-!
-!        Compute viscosity at interior and boundary faces
-!        ------------------------------------------------
-         call compute_viscosity_at_faces(size(mesh % faces_interior), 2, mesh % faces_interior, mesh)
-         call compute_viscosity_at_faces(size(mesh % faces_boundary), 1, mesh % faces_boundary, mesh)
 !
 !        ******************************************
 !        Compute Riemann solver of non-shared faces
@@ -757,7 +757,7 @@ module SpatialDiscretization
                                                                                     f % storage(side) % U_y(:,i,j), &
                                                                                     f % storage(side) % U_z(:,i,j), &
                                                                                     mu_smag)
-                     f % storage(side) % mu_NS(1,i,j) = f % storage(side) % mu_NS(1,i,j) + mu_smag
+                     f % storage(side) % mu_NS(1,i,j) = mu_smag
                      !f % storage(side) % mu_NS(2,i,j) = f % storage(side) % mu_NS(2,i,j) + mu_smag * dimensionless % mu_to_kappa
                   end do
                end do              ; end do
@@ -814,6 +814,8 @@ module SpatialDiscretization
 
                call GetViscosity(f % storage(1) % Q(INSRHO,i,j), muL)
                call GetViscosity(f % storage(2) % Q(INSRHO,i,j), muR)
+               muL = muL + f % storage(1) % mu_NS(1,i,j)   ! Add subgrid viscosity
+               muR = muR + f % storage(2) % mu_NS(1,i,j)   ! Add subgrid viscosity
                mu = 0.5_RP * (muL + muR)
 !      
 !              --------------
@@ -895,6 +897,7 @@ module SpatialDiscretization
 !              --------------
 !      
                call GetViscosity(f % storage(1) % Q(INSRHO,i,j), mu)
+               mu = mu + 0.5_RP * (f % storage(1) % mu_NS(1,i,j) + f % storage(2) % mu_NS(1,i,j))   ! Add subgrid viscosity
 
                CALL ViscousDiscretization % RiemannSolver(nEqn = NCONS, nGradEqn = NCONS, &
                                                   EllipticFlux = iViscousFlux, &
@@ -977,6 +980,7 @@ module SpatialDiscretization
 
       do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
          call GetViscosity(f % storage(1) % Q(INSRHO,i,j), mu)
+         mu = mu + f % storage(1) % mu_NS(1,i,j)   ! Add subgrid viscosity
 
          call iViscousFlux(NCONS,NGRAD,f % storage(1) % Q(:,i,j), &
                                        f % storage(1) % U_x(:,i,j), &

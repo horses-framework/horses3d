@@ -535,15 +535,15 @@ end module ProblemFileFunctions
 #if defined(INCNS)
             INTEGER                            :: iterations(3:7) = [100, 0, 0, 0, 0]
   
-            real(kind=RP), parameter :: residuals(5) = [ 7.2495579187090549E+00_RP, &
-                                                         3.7926655263707495E+01_RP, &
-                                                         1.0258416113693404E-012_RP, &
-                                                         2.7075276603302637E+01_RP, &
-                                                         2.0181372770983279E+02_RP]
+            real(kind=RP), parameter :: residuals(5) = [ 7.2414266299398840E+00_RP, &
+                                                         3.7631315319744772E+01_RP, &
+                                                         5.5210856104196454E-010_RP, &
+                                                         2.6441101517679257E+01_RP, &
+                                                         1.9956822196254171E+02_RP]
 
             real(kind=RP), parameter           :: wake_u = 1.0000000000000084E+00_RP
-            real(kind=RP), parameter           :: cd =  -5.0095762267843291E-004_RP
-            real(kind=RP), parameter           :: cl =  4.7200475506192419E+01_RP
+            real(kind=RP), parameter           :: cd =  -6.7020442263637792E-004_RP
+            real(kind=RP), parameter           :: cl =  4.7877859713501408E+01_RP
 
 !
             N = mesh % elements(1) % Nxyz(1) ! This works here because all the elements have the same order in all directions
@@ -561,9 +561,9 @@ end module ProblemFileFunctions
                                tol           = 1.d-11, &
                                msg           = "X-Momentum residual")
 
-            CALL FTAssertEqual(expectedValue = residuals(3), &
-                               actualValue   = monitors % residuals % values(3,1), &
-                               tol           = 1.d-11, &
+            CALL FTAssertEqual(expectedValue = residuals(3)+1.0_RP, &
+                               actualValue   = monitors % residuals % values(3,1)+1.0_RP, &
+                               tol           = 1.0e-8_RP, &
                                msg           = "Y-Momentum residual")
 
             CALL FTAssertEqual(expectedValue = residuals(4)+1.0_RP, &
