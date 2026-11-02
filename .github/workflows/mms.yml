@@ -1,0 +1,80 @@
+name: MMS convergence
+
+# Manufactured-solution convergence study, run by hand from the Actions tab.
+# See Solver/test/MMS/README.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: Equation set
+        type: choice
+        options: [all, NS, Euler, NSSA, iNS, MU, CAA]
+        default: all
+      P:
+        description: Polynomial orders
+        default: "2 3"
+      meshes:
+        description: Elements per side of the cube meshes
+        default: "4 8"
+      set:
+        description: Control file changes, e.g. "Reynolds number = 100; Riemann solver = Roe"
+        default: ""
+      check:
+        description: Compare the errors with reference.csv (committed control files only)
+        type: boolean
+        default: true
+
+jobs:
+  mms:
+    name: MMS ${{ matrix.case }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(inputs.case == 'all' && '["NS", "Euler", "NSSA", "iNS", "MU", "CAA"]' || format('["{0}"]', inputs.case)) }}
+    env:
+      CASE: ${{ matrix.case }}
+      P: ${{ inputs.P }}
+      MESHES: ${{ inputs.meshes }}
+      SET: ${{ inputs.set }}
+      CHECK: ${{ inputs.check }}
+      OMP_NUM_THREADS: 4
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python packages
+        run: |
+          sudo apt-get update && sudo apt-get install -y libglu1-mesa
+          pip install sympy matplotlib gmsh
+
+      - name: Build HORSES3D
+        working-directory: Solver
+        run: |
+          solver=$(python3 -c "import sys; sys.path.insert(0, 'test/MMS'); from generate import CASES; print(CASES['$CASE'][1])")
+          ./configure
+          make $solver COMPILER=gfortran MODE=RELEASE COMM=SEQUENTIAL ENABLE_THREADS=YES WITH_MKL=NO
+
+      - name: Run
+        run: |
+          args=(--P $P --meshes $MESHES)
+          if [ -n "$SET" ]; then args+=(--set "$SET"); fi
+          if [ "$CHECK" = "true" ]; then args+=(--check); fi
+          python3 Solver/test/MMS/run.py "$CASE" "${args[@]}"
+
+      - name: Plot
+        if: always()
+        run: python3 Solver/test/MMS/plot.py "$CASE"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mms-${{ matrix.case }}
+          path: |
+            Solver/test/MMS/${{ matrix.case }}/errors.csv
+            Solver/test/MMS/${{ matrix.case }}/convergence.png
+            Solver/test/MMS/${{ matrix.case }}/CONTROL/
