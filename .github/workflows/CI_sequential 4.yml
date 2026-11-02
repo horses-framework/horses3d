@@ -74,6 +74,12 @@ jobs:
           else
             echo "EXTRA_COV=" >> $GITHUB_ENV
           fi
+      
+      - name: Install gcovr
+        if: matrix.compiler == 'gfortran' && matrix.mode == 'DEBUG' && !cancelled()
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcovr
 
       # sudo apt-get install -qq pkg-config libhdf5-serial-dev
 #      - name: Install Linux packages
@@ -195,15 +201,9 @@ jobs:
           ./horses.tools MeshInterpolation_tool.control
           ./horses3d.ns MeshInterpolation_check.control
         if: '!cancelled()'
-        
+
 # CHECK CODE COVERAGE
 # -------------------------
-
-      - name: Install gcovr
-        if: matrix.compiler == 'gfortran' && matrix.mode == 'DEBUG' && !cancelled()
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcovr
 
       - name: Generate Coverage Report
         if: matrix.compiler == 'gfortran' && matrix.mode == 'DEBUG' && !cancelled()
