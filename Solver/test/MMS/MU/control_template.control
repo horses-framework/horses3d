@@ -1,0 +1,67 @@
+!  MMS, multiphase. run.py fills the mesh, the solution file and the order.
+!-------------------------- Configuration:-
+                          Mesh file name = {MESH_FILE}
+                      Solution file name = {SOLUTION_FILE}
+                                 Restart = .false.
+                       Restart file name = {SOLUTION_FILE}
+!-------------------- Physical parameters:-
+                reference velocity (m/s) = 1.0
+                      velocity direction = [1.0, 0.0, 0.0]
+                  Number of fluids (1/2) = 2
+                fluid 1 density (kg/m^3) = 1.0
+                fluid 2 density (kg/m^3) = 2.0
+                fluid 1 viscosity (Pa.s) = 0.1
+                fluid 2 viscosity (Pa.s) = 0.1
+            chem characteristic time (s) = 100.0
+                     interface width (m) = 0.5
+                 Interface tension (N/m) = 0.01
+        fluid 1 sound speed square (m/s) = 1000.0
+        fluid 2 sound speed square (m/s) = 1000.0
+!------------------------- Discretization:-
+                        Polynomial order = {P}
+                    Discretization nodes = Gauss-Lobatto
+                          Riemann solver = Exact
+                  Viscous discretization = BR1
+            Cahn-Hilliard discretization = BR1
+                       Penalty parameter = 1.0
+!----------------------- Time integration:-
+                        Time integration = Explicit
+                         Explicit method = RK3
+  Compute time derivative after timestep = .true.
+                         Simulation type = time-accurate
+                   Convergence tolerance = 1.0d-10
+                           Autosave mode = iteration
+                       Autosave interval = 999999999
+                                      dt = 1.0e-7
+                    Number of time steps = 1000
+                         Output interval = 1000
+!-------------------- Boundary conditions:-
+#define boundary Left
+   type = periodic
+   coupled boundary = Right
+#end
+
+#define boundary Right
+   type = periodic
+   coupled boundary = Left
+#end
+
+#define boundary Bottom
+   type = periodic
+   coupled boundary = Top
+#end
+
+#define boundary Top
+   type = periodic
+   coupled boundary = Bottom
+#end
+
+#define boundary Back
+   type = periodic
+   coupled boundary = Front
+#end
+
+#define boundary Front
+   type = periodic
+   coupled boundary = Back
+#end

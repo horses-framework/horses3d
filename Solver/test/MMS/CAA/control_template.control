@@ -1,0 +1,59 @@
+!  MMS, acoustics (APE-4 on a uniform base flow). run.py fills the mesh, the solution file and the order.
+!-------------------------- Configuration:-
+                          Mesh file name = {MESH_FILE}
+                      Solution file name = {SOLUTION_FILE}
+                                 Restart = .false.
+                       Restart file name = {SOLUTION_FILE}
+!-------------------- Physical parameters:-
+                          Flow equations = "NS"
+                             Mach number = 0.4
+                             Base solver = ns
+                                   qBase = uniform
+                            qBase vector = [1.0, 0.3, 0.2, -0.1, 0.7142857142857143, 1.0]
+                       Lamb vector stats = uniform
+                      Lamb vector vector = [0.0, 0.0, 0.0]
+!------------------------- Discretization:-
+                        Polynomial order = {P}
+                    Discretization nodes = Gauss-Lobatto
+                          Riemann solver = lax-friedrichs
+!----------------------- Time integration:-
+                        Time integration = Explicit
+                         Explicit method = RK3
+  Compute time derivative after timestep = .true.
+                         Simulation type = time-accurate
+                   Convergence tolerance = 1.0d-10
+                           Autosave mode = iteration
+                       Autosave interval = 999999999
+                                      dt = 1.0e-4
+                    Number of time steps = 1000
+                         Output interval = 1000
+!-------------------- Boundary conditions:-
+#define boundary Left
+   type = periodic
+   coupled boundary = Right
+#end
+
+#define boundary Right
+   type = periodic
+   coupled boundary = Left
+#end
+
+#define boundary Bottom
+   type = periodic
+   coupled boundary = Top
+#end
+
+#define boundary Top
+   type = periodic
+   coupled boundary = Bottom
+#end
+
+#define boundary Back
+   type = periodic
+   coupled boundary = Front
+#end
+
+#define boundary Front
+   type = periodic
+   coupled boundary = Back
+#end
