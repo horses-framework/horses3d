@@ -174,7 +174,7 @@ def check(case_dir, rows, failed, overridden):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("case", choices=generate.CASES)
+    ap.add_argument("case", choices=[c for c in generate.CASES if (HERE / c).is_dir()])   # cases of this repository
     ap.add_argument("--P", type=int, nargs="+", default=[2, 3], help="polynomial orders (default 2 3)")
     ap.add_argument("--meshes", type=int, nargs="+", default=[4, 8], help="elements per side (default 4 8)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
