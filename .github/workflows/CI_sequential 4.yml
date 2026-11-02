@@ -190,7 +190,7 @@ jobs:
         working-directory: ./Solver/test/AddOns/MeshInterpolation/SETUP
         run: |
           source /opt/intel/oneapi/setvars.sh || true
-          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}}
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
         if: '!cancelled()'
 
       - name: Run MeshInterpolation
