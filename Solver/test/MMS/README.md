@@ -24,8 +24,9 @@ orders, the meshes and, optionally, changes to the control file such as
 table of errors and orders to the job summary, and uploads `errors.csv`,
 `convergence.png` and the control files and logs of the runs.
 
-GitHub shows the Run workflow button only for workflows on the default branch. On
-another branch, once the workflow has run in the repository, use the GitHub CLI:
+The workflow also runs, with the default inputs, on pushes that change the tests.
+GitHub shows the Run workflow button only for workflows on the default branch; on
+another branch, use the GitHub CLI:
 
 ```
 gh workflow run mms.yml --ref <branch> -f case=NS -f P="2 3 4" -f meshes="4 8 16" -f set="Reynolds number = 100"

@@ -1,9 +1,11 @@
 name: MMS convergence
 
-# Manufactured-solution convergence study, run by hand from the Actions tab.
-# See Solver/test/MMS/README.md.
+# Manufactured-solution convergence study, run by hand from the Actions tab, and with
+# the default inputs on pushes that change the tests. See Solver/test/MMS/README.md.
 
 on:
+  push:
+    paths: [Solver/test/MMS/**, .github/workflows/mms.yml]
   workflow_dispatch:
     inputs:
       case:
@@ -32,13 +34,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ fromJSON(inputs.case == 'all' && '["NS", "Euler", "NSSA", "iNS", "MU", "CAA"]' || format('["{0}"]', inputs.case)) }}
+        case: ${{ fromJSON((inputs.case || 'all') == 'all' && '["NS", "Euler", "NSSA", "iNS", "MU", "CAA"]' || format('["{0}"]', inputs.case)) }}
     env:
       CASE: ${{ matrix.case }}
-      P: ${{ inputs.P }}
-      MESHES: ${{ inputs.meshes }}
+      P: ${{ inputs.P || '2 3' }}
+      MESHES: ${{ inputs.meshes || '4 8' }}
       SET: ${{ inputs.set }}
-      CHECK: ${{ inputs.check }}
+      CHECK: ${{ github.event_name != 'workflow_dispatch' || inputs.check }}
       OMP_NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v4
