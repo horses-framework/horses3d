@@ -280,7 +280,7 @@ contains
 
 !     Set variables from controlVariables
 !     --------------------------------------------------------------------
-      if (.not. present(controlVariables)) stop 'Fatal error: MultigridSolver needs controlVariables.'
+      if (.not. present(controlVariables)) error stop 'Fatal error: MultigridSolver needs controlVariables.'
       if (present(controlVariables)) then 
 
         ! Read # of multigrid coarse grids
@@ -2299,7 +2299,7 @@ contains
          case ('l2')
             xnorm = NORM2(this % x)
          case default
-            stop 'LinearMultigridSolverClass ERROR: Norm not implemented yet'
+            error stop 'LinearMultigridSolverClass ERROR: Norm not implemented yet'
       end select
 
    end function MG_Getxnorm
@@ -2406,7 +2406,7 @@ contains
       
       if (this % num_of_Rows /= Acsr % num_of_Rows) then
          print*, 'getCSRfromDBD :: ERROR: Matrix dimensions mismatch:', this % num_of_Rows, Acsr % num_of_Rows
-         stop
+         error stop
       end if
       
       call Acsr % PreAllocate()
@@ -2453,7 +2453,7 @@ contains
 !     ---------------
       if (this % num_of_Rows /= Adbd % num_of_Rows) then
          print *, 'getDBDfromCSR :: ERROR: Matrix dimensions mismatch:', this % num_of_Rows, Adbd % num_of_Rows
-         stop
+         error stop
       end if
 
 !     Fill the DBD Matrix

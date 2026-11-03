@@ -70,7 +70,7 @@ module SpatialDiscretization
          if ( .not. controlVariables % ContainsKey(CHDiscretizationKey) ) then
             print*, "Input file is missing entry for keyword: Cahn-Hilliard discretization"
             errorMessage(STD_OUT)
-            stop
+            error stop
          end if
 
          CHDiscretizationName = controlVariables % stringValueForKey(CHDiscretizationKey, requestedLength = LINE_LENGTH)
@@ -93,7 +93,7 @@ module SpatialDiscretization
             write(STD_OUT,'(A)') "  * BR2"
             write(STD_OUT,'(A)') "  * IP"
             errorMessage(STD_OUT)
-            stop 
+            error stop 
 
          end select
 
@@ -152,7 +152,7 @@ module SpatialDiscretization
          case default
             print*, "Unrecognized mode"
             errorMessage(STD_OUT)
-            stop
+            error stop
          end select
 !
 !        **************************************
@@ -195,7 +195,7 @@ module SpatialDiscretization
 #ifdef _HAS_MPI_
 !$omp single
 errorMessage(STD_OUT)
-stop
+error stop
 !         call mesh % UpdateMPIFacesSolution
 !$omp end single
 #endif
@@ -209,7 +209,7 @@ stop
 #ifdef _HAS_MPI_
 !$omp single
 errorMessage(STD_OUT)
-stop
+error stop
 !         call mesh % UpdateMPIFacesGradients
 !$omp end single
 #endif
@@ -287,7 +287,7 @@ stop
 #ifdef _HAS_MPI_
 !$omp single
 errorMessage(STD_OUT)
-stop
+error stop
 !         call mesh % UpdateMPIFacesSolution
 !$omp end single
 #endif
@@ -301,7 +301,7 @@ stop
 #ifdef _HAS_MPI_
 !$omp single
 errorMessage(STD_OUT)
-stop
+error stop
 !         call mesh % UpdateMPIFacesGradients
 !$omp end single
 #endif
@@ -460,7 +460,7 @@ stop
             case default
                print*, "Unrecognized face type"
                errorMessage(STD_OUT)
-               stop
+               error stop
                 
             end select 
             end associate 
@@ -492,7 +492,7 @@ stop
          if ( MPI_Process % doMPIAction ) then
 !$omp single
 errorMessage(STD_OUT)
-stop
+error stop
 !            call mesh % GatherMPIFacesGradients
 !$omp end single
 !
@@ -628,7 +628,7 @@ stop
          if ( MPI_Process % doMPIAction ) then
 !$omp single
 errorMessage(STD_OUT)
-stop
+error stop
 !            call mesh % GatherMPIFacesGradients
 !$omp end single
 !
