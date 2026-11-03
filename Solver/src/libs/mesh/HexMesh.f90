@@ -4640,6 +4640,13 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
          refs(V_REF)     = refValues      % V
          refs(T_REF)     = 0.0_RP
          refs(MACH_REF)  = 0.0_RP
+#elif defined(ACOUSTIC)
+         refs(GAMMA_REF) = thermodynamics % gamma
+         refs(RGAS_REF) = thermodynamics % R
+         refs(RHO_REF) = refValues % rho
+         refs(V_REF) = refValues % V
+         refs(T_REF) = refValues % T
+         refs(MACH_REF) = dimensionless % Mach
 #else
          refs = 0.0_RP
 #endif
@@ -6198,7 +6205,7 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
     Subroutine HexMesh_SetUniformBaseFlow(self,Q_in)
         Implicit None
          CLASS(HexMesh)                  :: self
-         real(kind=RP), dimension(1:NCONS), intent(in)  :: Q_in
+         real(kind=RP), dimension(1:NCONSB), intent(in) :: Q_in
 !
 !        ---------------
 !        Local variables
@@ -6206,7 +6213,7 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
          INTEGER                        :: eID, eq
 
          do eID = 1, size(self % elements)
-            do eq = 1,NCONS
+            do eq = 1,NCONSB
                 self % elements(eID) % storage % Qbase(eq,:,:,:) = Q_in(eq)
             end do
          end do
