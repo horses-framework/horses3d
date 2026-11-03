@@ -1681,7 +1681,7 @@
          end do ; end do ; end do
 
          associate(Mflux => self % storage(1) % MortarFlux)
-            Mflux=fStarAux
+            Mflux(1:nEqn,:,:) = fStarAux
          end associate 
 
       else 
@@ -1748,7 +1748,7 @@
          end do ; end do ; end do
 
          associate(MunStar => self % storage(1) %GradMortarFlux)
-            MunStar=hStarAux
+            MunStar(1:nEqn,:,:,:) = hStarAux
          end associate 
 
       else

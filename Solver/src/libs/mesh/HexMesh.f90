@@ -2123,7 +2123,7 @@ subroutine HexMesh_UpdateMPIFacesMortarFlux(self, nEqn)
                if (f % MortarType == MORTAR_SMALL4) then
                   do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                      MPIfaces % faces(domain) % Flux_M_Send(counter:counter+nEqn-1) = &
-                        f % storage(1) % MortarFlux(:,i,j)
+                        f % storage(1) % MortarFlux(1:nEqn,i,j)
                      counter = counter + nEqn
                   end do               ; end do
                end if
@@ -2191,17 +2191,17 @@ subroutine HexMesh_UpdateMPIFacesGradMortarFlux(self, nEqn)
          if (f % MortarType == MORTAR_SMALL4) then
             do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                  f % storage(1) % GradMortarFlux(:,1,i,j)
+                  f % storage(1) % GradMortarFlux(1:nEqn,1,i,j)
                counter = counter + nEqn
             end do               ; end do
             do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                  f % storage(1) % GradMortarFlux(:,2,i,j)
+                  f % storage(1) % GradMortarFlux(1:nEqn,2,i,j)
                counter = counter + nEqn
             end do               ; end do
             do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                  f % storage(1) % GradMortarFlux(:,3,i,j)
+                  f % storage(1) % GradMortarFlux(1:nEqn,3,i,j)
                counter = counter + nEqn
             end do               ; end do
          end if

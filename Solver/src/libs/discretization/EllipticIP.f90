@@ -471,14 +471,14 @@ module EllipticIP
 
 !$omp single
          if ( mesh % nonconforming ) then
-            call mesh % UpdateMPIFacesGradMortarflux(NCONS)
+            call mesh % UpdateMPIFacesGradMortarflux(nGradEqn)
          end if
 !$omp end single
    
    
 !$omp single
          if ( mesh % nonconforming ) then
-            call mesh % GatherMPIFacesGradMortarFlux(NCONS)
+            call mesh % GatherMPIFacesGradMortarFlux(nGradEqn)
          end if
 !$omp end single
 !
@@ -668,7 +668,7 @@ module EllipticIP
          call f % ProjectGradientFluxToElements(nGradEqn, HFlux,(/thisSide, HMESH_NONE/),1)
          if (f % MortarType == MORTAR_SMALL4) then 
          
-            call f% Interpolatesmall2biggrad(NCONS, HFlux)
+            call f% Interpolatesmall2biggrad(nGradEqn, HFlux)
             
          end if 
       end subroutine IP_GradientInterfaceSolutionMPI   
