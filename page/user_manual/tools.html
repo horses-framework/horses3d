@@ -145,6 +145,15 @@
 <li><a href="#execution_1">Execution</a></li>
 </ul>
 </li>
+<li><a href="#mesh-interpolation">Mesh interpolation</a><ul>
+<li><a href="#keywords_2">Keywords</a></li>
+<li><a href="#output-files">Output files</a></li>
+<li><a href="#example">Example</a></li>
+<li><a href="#large-meshes-generate-the-output-hmesh-with-the-solver">Large meshes: generate the output hmesh with the solver</a></li>
+<li><a href="#execution_2">Execution</a></li>
+<li><a href="#test">Test</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -321,6 +330,250 @@
 <p>To execute the <code>stats mesh interpolation</code> tool, it is required to set the <code>tool type = "stats mesh interpolation"</code> in the control file, and then</p>
 <div class="codehilite"><pre><span></span><code><span class="o">./</span><span class="n">horses</span><span class="o">.</span><span class="n">tools</span><span class="w"> </span><span class="n">controlFile</span><span class="o">.</span><span class="n">control</span>
 </code></pre></div>
+
+<h2 id="mesh-interpolation">Mesh interpolation</h2>
+<p>Interpolate the data of <code>.hsol</code> files from one mesh (input mesh) onto another mesh (output mesh). The two meshes can be completely different: other elements, other polynomial orders (also different in each element and direction) and other discretization nodes (Gauss / Gauss-Lobatto). The interpolation is high order: each node of the output mesh is located in an element of the input mesh and the data is evaluated with the Lagrange polynomials of that element.</p>
+<p>This tool gathers and generalizes the capabilities of the <code>stats mesh interpolation</code> and <code>Lamb vector mesh interpolation</code> tools, and of the <code>meshInterpolation</code> task of <code>horsesConverter</code>:</p>
+<ul>
+<li><strong>Any kind of file.</strong> The layout of each file is detected from the file itself, so the same tool interpolates:<ul>
+<li>Solution files, with or without gradients, sensor, LES viscosities or source terms.</li>
+<li>Statistics files of the NS, iNS and MU solvers, with or without gradients.</li>
+<li>Sound velocity squared, gradient of the sound velocity squared and Lamb vector statistics files.</li>
+<li>Lamb vector files.</li>
+<li><code>.hmesh</code> files: interpolating the node coordinates of the input mesh gives the <code>.hmesh</code> of the output mesh.</li>
+</ul>
+</li>
+<li><strong>Several files in one run.</strong> The position of the output nodes inside the input mesh is computed once and reused for all the files that share the same input mesh.</li>
+<li><strong>Time-dependent input meshes.</strong> Optionally, each file can use its own input mesh (e.g. after p-adaptation).</li>
+<li><strong>Robust point search.</strong> The search starts at the last element found and uses a background grid of bins. Nodes slightly outside an input element are accepted within a tolerance. Nodes outside the input mesh are projected onto the closest point of the closest input element and a warning is printed.</li>
+<li>The iteration, time and reference values of each input file are kept in the interpolated file.</li>
+</ul>
+<p><strong>This tool should be run in sequential mode or in parallel with OpenMP (<code>OMP_NUM_THREADS</code>). It does not work with MPI.</strong></p>
+<h3 id="keywords_2">Keywords</h3>
+<p>The keywords located in the control file regarding the <strong>input</strong> mesh (the mesh where the fields are defined) are:</p>
+<table class="table table-striped">
+<thead>
+<tr>
+<th>Keyword</th>
+<th>Description</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tool type</code></td>
+<td>Required to run this tool</td>
+<td><code>"mesh interpolation"</code></td>
+</tr>
+<tr>
+<td><code>input hmesh file name</code></td>
+<td>Input mesh in <code>hmesh</code> format</td>
+<td><code>"path/to/mesh.hmesh"</code></td>
+</tr>
+<tr>
+<td><code>input hmesh per file</code></td>
+<td><em>(Optional)</em> If <code>.true.</code>, each file <code>name_ITER.hsol</code> (or <code>name_ITER.*.hsol</code>) uses the input mesh <code>path/to/mesh_ITER.hmesh</code>, where <code>path/to/mesh.hmesh</code> is the value of <code>input hmesh file name</code>. Default: <code>.false.</code></td>
+<td><code>.true.</code>/<code>.false.</code></td>
+</tr>
+</tbody>
+</table>
+<p>The <strong>output</strong> mesh (the mesh where the fields should be interpolated into) can be given in two ways:</p>
+<p><strong>Option 1: <code>hmesh</code> file (recommended, see <a href="#large-meshes-generate-the-output-hmesh-with-the-solver">Large meshes</a>).</strong> The polynomial orders and the discretization nodes are those of the <code>hmesh</code> file.</p>
+<table class="table table-striped">
+<thead>
+<tr>
+<th>Keyword</th>
+<th>Description</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>output hmesh file name</code></td>
+<td>Output mesh in <code>hmesh</code> format</td>
+<td><code>"path/to/mesh.hmesh"</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>Option 2: mesh file</strong>, with the same keywords used by the solver. The mesh is constructed with the mesh readers of the solver, so curved meshes are supported in all the formats. In this case the control file must also contain the <code>#define boundary</code> blocks of all the boundaries of the mesh, e.g. copied from the control file of the simulation.</p>
+<table class="table table-striped">
+<thead>
+<tr>
+<th>Keyword</th>
+<th>Description</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mesh file name</code></td>
+<td>Output mesh geometry</td>
+<td><code>"path/to/mesh.msh"</code></td>
+</tr>
+<tr>
+<td><code>Polynomial order</code></td>
+<td>Polynomial order of the output mesh. <code>polynomial order i/j/k</code> and <code>polynomial order file</code> can also be used, as in the solver</td>
+<td>4</td>
+</tr>
+<tr>
+<td><code>discretization nodes</code></td>
+<td>Type of nodes of the output mesh</td>
+<td>Gauss/Gauss-Lobatto</td>
+</tr>
+<tr>
+<td><code>reference length (m)</code></td>
+<td><em>(Optional)</em> Reference length used to make the mesh dimensionless. It must be the same as in the simulation. Default: 1</td>
+<td>1.0</td>
+</tr>
+</tbody>
+</table>
+<p>The keywords regarding the <strong>files</strong> to interpolate are (they can be combined, and at least one file must be given):</p>
+<table class="table table-striped">
+<thead>
+<tr>
+<th>Keyword</th>
+<th>Description</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>input file name</code></td>
+<td>File to interpolate</td>
+<td><code>"path/to/file.hsol"</code></td>
+</tr>
+<tr>
+<td><code>input file name 2</code>, <code>input file name 3</code>, ...</td>
+<td><em>(Optional)</em> More files to interpolate (numbered consecutively)</td>
+<td><code>"path/to/file.stats.hsol"</code></td>
+</tr>
+<tr>
+<td><code>input file pattern</code></td>
+<td><em>(Optional)</em> Shell pattern of files to interpolate</td>
+<td><code>"path/to/case_*.Lamb.hsol"</code></td>
+</tr>
+</tbody>
+</table>
+<p>Other <strong>optional</strong> keywords are:</p>
+<table class="table table-striped">
+<thead>
+<tr>
+<th>Keyword</th>
+<th>Description</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>interpolation field</code></td>
+<td>Kind of files expected. The run stops if a file is of another kind. Default: <code>auto</code> (any file)</td>
+<td>auto/solution/stats/lamb vector</td>
+</tr>
+<tr>
+<td><code>output directory</code></td>
+<td>Directory of the interpolated files (created if it does not exist). Default: <code>RESULTS</code></td>
+<td><code>"path/to/dir"</code></td>
+</tr>
+<tr>
+<td><code>output file suffix</code></td>
+<td>Text added to the name of the interpolated files. Default: <code>.Interpolated</code></td>
+<td><code>".Interpolated"</code></td>
+</tr>
+<tr>
+<td><code>outside point tolerance</code></td>
+<td>Tolerance, in reference coordinates, to accept nodes slightly outside an input element. Default: 0.1</td>
+<td>0.1</td>
+</tr>
+<tr>
+<td><code>stats solver</code></td>
+<td>Solver that wrote the statistics files. Only needed when the layout of a statistics file is ambiguous (MU statistics without gradients); the tool asks for it in that case</td>
+<td>ns/ins/mu</td>
+</tr>
+<tr>
+<td><code>interpolation variable blocks</code></td>
+<td><em>(Advanced)</em> Number of variables of each array stored per element, when the layout of a file cannot be detected automatically</td>
+<td><code>[9,5,1]</code></td>
+</tr>
+</tbody>
+</table>
+<p>For compatibility, if the keywords above are not given, the keywords of the <code>stats mesh interpolation</code> and <code>Lamb vector mesh interpolation</code> tools are also accepted: <code>stats mesh file name</code> (input <code>hmesh</code>), <code>stats qbase file name</code>, <code>stats sound velocity squared file name</code>, <code>stats gradient sound velocity squared file name</code>, <code>stats lamb vector file name</code>, <code>lamb vector dir</code> and <code>lamb vector file name</code>.</p>
+<h3 id="output-files">Output files</h3>
+<p>Each file is written to <code>output directory</code> with the suffix added before the extension:</p>
+<table class="table table-striped">
+<thead>
+<tr>
+<th>Input file</th>
+<th>Interpolated file</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>case_0000000100.hsol</code></td>
+<td><code>case_0000000100.Interpolated.hsol</code></td>
+</tr>
+<tr>
+<td><code>case.stats.hsol</code></td>
+<td><code>case.Interpolated.stats.hsol</code></td>
+</tr>
+<tr>
+<td><code>case_0000000100.Lamb.hsol</code></td>
+<td><code>case_0000000100.Lamb.Interpolated.hsol</code></td>
+</tr>
+<tr>
+<td><code>case_0000000000.hmesh</code></td>
+<td><code>case_0000000000.Interpolated.hmesh</code></td>
+</tr>
+</tbody>
+</table>
+<p>The interpolated files have the same type and layout as the input files, so they can be used directly, e.g. to restart a simulation on the new mesh (<code>restart file name</code>) or with <code>horses2plt</code>.</p>
+<p>For each input mesh, the tool reports how many output nodes were found inside the input mesh, how many were accepted within the tolerance and how many were projected onto the closest element. Projected nodes usually mean that the two meshes do not represent the same geometry in that region (e.g. a curved wall represented with straight-sided elements in one of the meshes).</p>
+<h3 id="example">Example</h3>
+<p>Interpolate a solution, the statistics and a series of Lamb vector files onto a new mesh given as an <code>hmesh</code> file:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">tool</span><span class="w"> </span><span class="n">type</span><span class="w">               </span><span class="o">=</span><span class="w"> </span><span class="n">mesh</span><span class="w"> </span><span class="n">interpolation</span>
+
+<span class="n">input</span><span class="w"> </span><span class="n">hmesh</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="n">name</span><span class="w">   </span><span class="o">=</span><span class="w"> </span><span class="n">MESH</span><span class="o">/</span><span class="n">old_0000000000</span><span class="o">.</span><span class="n">hmesh</span>
+<span class="n">output</span><span class="w"> </span><span class="n">hmesh</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="n">name</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">MESH</span><span class="o">/</span><span class="n">new_0000000000</span><span class="o">.</span><span class="n">hmesh</span>
+
+<span class="n">input</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="n">name</span><span class="w">         </span><span class="o">=</span><span class="w"> </span><span class="n">RESULTS</span><span class="o">/</span><span class="n">case_0000010000</span><span class="o">.</span><span class="n">hsol</span>
+<span class="n">input</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="mi">2</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="n">RESULTS</span><span class="o">/</span><span class="n">case</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">hsol</span>
+<span class="n">input</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="n">name</span><span class="w"> </span><span class="mi">3</span><span class="w">       </span><span class="o">=</span><span class="w"> </span><span class="n">RESULTS</span><span class="o">/</span><span class="n">case</span><span class="o">.</span><span class="n">SoundVelocitySquared</span><span class="o">.</span><span class="n">stats</span><span class="o">.</span><span class="n">hsol</span>
+<span class="n">input</span><span class="w"> </span><span class="n">file</span><span class="w"> </span><span class="n">pattern</span><span class="w">      </span><span class="o">=</span><span class="w"> </span><span class="n">RESULTS</span><span class="o">/</span><span class="n">case_</span><span class="o">*.</span><span class="n">Lamb</span><span class="o">.</span><span class="n">hsol</span>
+
+<span class="n">output</span><span class="w"> </span><span class="n">directory</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="n">RESULTS_NEW</span>
+</code></pre></div>
+
+<h3 id="large-meshes-generate-the-output-hmesh-with-the-solver">Large meshes: generate the output hmesh with the solver</h3>
+<p>When the output mesh is given as a mesh file (<code>mesh file name</code>), the tool builds it with the full mesh readers of the solver. This step is sequential and, for large meshes, it takes most of the execution time. As a reference, for a mesh of 2184 curved elements with polynomial order 4, building the output mesh from the <code>.msh</code> file took about 8 to 9 s, whereas reading the same number of elements from an <code>hmesh</code> file took about 0.05 s.</p>
+<p>For large meshes it is therefore a good option to generate first the <code>hmesh</code> of the output mesh and then give it to the tool with <code>output hmesh file name</code>. The simplest way is to run the solver on the new mesh with <strong>zero time steps</strong>: it reads the mesh (also in parallel with MPI), writes the <code>hmesh</code> and stops. Use a copy of the control file of the simulation with the output mesh, polynomial order and discretization nodes that you want, and:</p>
+<div class="codehilite"><pre><span></span><code>mesh file name        = "MESH/new.msh"
+Polynomial order      = 4
+discretization nodes  = Gauss-Lobatto
+solution file name    = "RESULTS/new.hsol"
+restart               = .false.
+restart file name     = "RESULTS/new.hsol"
+Number of time steps  = 0
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>mpiexec -n 64 ./horses3d.ns new_mesh.control
+</code></pre></div>
+
+<p>The solver writes the file <code>MESH/new_0000000000.hmesh</code> (the name of the solution file followed by the iteration). Then, in the control file of the tool:</p>
+<div class="codehilite"><pre><span></span><code>output hmesh file name  = MESH/new_0000000000.hmesh
+</code></pre></div>
+
+<p>Besides being much faster, this has two more advantages:</p>
+<ul>
+<li>The <code>#define boundary</code> blocks and the physical parameters are not needed in the control file of the tool.</li>
+<li>The elements of the interpolated files are numbered exactly as the solver numbers them, so the files can be used to restart the simulation on the new mesh without any further check.</li>
+</ul>
+<p>Alternatively, the <code>hmesh</code> of the output mesh can also be obtained with this tool itself: run it once with the mesh file option and add the input <code>hmesh</code> file to the list of files to interpolate. The interpolated coordinates (<code>*.Interpolated.hmesh</code>) are the <code>hmesh</code> of the output mesh and can be used in the following runs.</p>
+<h3 id="execution_2">Execution</h3>
+<p>To execute the <code>mesh interpolation</code> tool, it is required to set the <code>tool type = "mesh interpolation"</code> in the control file, and then</p>
+<div class="codehilite"><pre><span></span><code><span class="n">OMP_NUM_THREADS</span><span class="o">=</span><span class="mi">8</span><span class="w"> </span><span class="o">./</span><span class="n">horses</span><span class="o">.</span><span class="n">tools</span><span class="w"> </span><span class="n">controlFile</span><span class="o">.</span><span class="n">control</span>
+</code></pre></div>
+
+<h3 id="test">Test</h3>
+<p>The test case <code>Solver/test/AddOns/MeshInterpolation</code> checks the tool: a polynomial solution (with gradients) and a polynomial Lamb vector field are written by the solver on a Cartesian box with Gauss nodes and polynomial order 3, interpolated with this tool onto a different box with Gauss-Lobatto nodes and polynomial order 4, and recovered exactly after a restart of the solver on the new mesh.</p>
     </div>
   </div>
       <hr>
@@ -338,7 +591,7 @@
             <p class="text-end">
               Documentation generated by
               <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
- on 2026-10-20 14:20 +0000             </p>
+ on 2026-11-03 10:41 +0000             </p>
           </div>
         </div>
         <br>
