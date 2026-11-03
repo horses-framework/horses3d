@@ -1,0 +1,62 @@
+!
+! Test of the "mesh interpolation" tool of horses.tools (3 steps):
+!    1) ./horses3d.ns MeshInterpolation_source.control : writes a polynomial field (with gradients)
+!                                                       and a polynomial Lamb vector file
+!                                                       on box_source with Gauss nodes and N = 3
+!    2) ./horses.tools MeshInterpolation_tool.control  : interpolates both onto box_target with
+!                                                       Gauss-Lobatto nodes and N = 4
+!    3) ./horses3d.ns MeshInterpolation_check.control  : restarts from the interpolated files and
+!                                                       checks that both fields are recovered exactly
+!
+! The meshes are not stored in this repository. They are generated with the script
+! cartesian-box/generate_cartesian_box_mesh.py of https://github.com/horses-framework/horses3d-meshes
+! (requires the Gmsh Python API, "pip install gmsh"). From this folder:
+!    python3 <horses3d-meshes>/cartesian-box/generate_cartesian_box_mesh.py 4 3 2 --xlim 0 1 --ylim 0 2 --zlim 0 3 -o MESH/box_source.msh
+!    python3 <horses3d-meshes>/cartesian-box/generate_cartesian_box_mesh.py 3 2 1 --xlim 0 1 --ylim 0 2 --zlim 0 3 -o MESH/box_target.msh
+! The element faces of both boxes do not match, so the output elements span several input elements.
+!
+Flow equations        = "NS"
+mesh file name        = "MESH/box_source.msh"
+Polynomial order      = 3
+discretization nodes  = Gauss
+Number of time steps  = 0
+Output Interval       = 1
+Convergence tolerance = 1.d-10
+cfl                   = 0.4
+dcfl                  = 0.4
+mach number           = 0.4
+Reynolds number       = 1600.0
+AOA theta             = 0.0
+AOA phi               = 0.0
+solution file name    = "RESULTS/Source.hsol"
+save gradients with solution = .true.
+restart               = .false.
+restart file name     = "RESULTS/Source.hsol"
+riemann solver        = roe
+simulation type       = time-accurate
+time integration      = explicit
+explicit method       = RK3
+
+#define boundary bottom
+   type = FreeSlipWall
+#end
+
+#define boundary top
+   type = FreeSlipWall
+#end
+
+#define boundary left
+   type = FreeSlipWall
+#end
+
+#define boundary right
+   type = FreeSlipWall
+#end
+
+#define boundary front
+   type = FreeSlipWall
+#end
+
+#define boundary back
+   type = FreeSlipWall
+#end
