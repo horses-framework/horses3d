@@ -147,8 +147,8 @@ jobs:
         working-directory: ./Solver
         run: |
          source /opt/intel/oneapi/setvars.sh || true
-         make allclean MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
-         make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+         make allclean MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+         make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
 
 ########################################################################
 #######                         COMPONENTS                      ########
@@ -420,7 +420,7 @@ jobs:
 #
 # 10) Density pulse with h-mortars (hanging nodes)
 # ------------------------------------------------
-# This test case only runs with gfortran as we do not support hdf5 with ifort in the github actions
+# This test case needs hdf5, which is only available with gfortran in the github actions
 # The mesh is taken from the horses3d-meshes repository (see the top of the file)
 #
       - name: Build DensityPulse_hMortars
@@ -428,7 +428,7 @@ jobs:
         run: |
           source /opt/intel/oneapi/setvars.sh || true
           make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
-        if: ('!cancelled()' && matrix.compiler == 'gfortran')
+        if: ('!cancelled()' && matrix.hdf5 == 'YES')
 
       - name: Run DensityPulse_hMortars p=1
         working-directory: ./Solver/test/Euler/DensityPulse_hMortars
@@ -437,7 +437,7 @@ jobs:
           mkdir -p MESH
           ln -sf "$HORSES3D_MESHES_DIR/cartesian-band-hanging-nodes/BAND_mesh.h5" MESH/
           ./horses3d.ns DensityPulse_hMortars_p1.control
-        if: ('!cancelled()' && matrix.compiler == 'gfortran')
+        if: ('!cancelled()' && matrix.hdf5 == 'YES')
 
 #
 # CHECK CODE COVERAGE
