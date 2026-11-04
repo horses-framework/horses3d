@@ -4,6 +4,8 @@ module AnalyticalSolution
    implicit none
    
    real(kind=rp), parameter :: inner_radius = 0.8_rp
+   ! Narrow enough that the pulse is below machine precision at the periodic boundaries (x,y = +-3)
+   real(kind=rp), parameter :: sigma = 0.5_rp
 
    logical :: useGaussLobatto = .true.
    !
@@ -238,7 +240,7 @@ module AnalyticalSolution
       real(kind=rp), intent(in) :: x, y, t
       real(kind=rp) :: res
 
-      res = exp(-1.0_rp * (POW2(x-t) + POW2(y))) + 1.0_rp
+      res = exp(-1.0_rp * (POW2(x-t) + POW2(y)) / POW2(sigma)) + 1.0_rp
 
    end function evalSolution
 
@@ -374,7 +376,7 @@ end module AnalyticalSolution
                   w  = 0.0_rp
       
                   ! q(1) = exp(-1.0_rp * (POW2(mesh % elements(eID) % geom % x(1,i,j,k)) + POW2(mesh % elements(eID) % geom % x(2,i,j,k)))) + 1.0_rp
-                  q(1) = evalSolution(mesh % elements(eID) % geom % x(1,i,j,k), mesh % elements(eID) % geom % x(2,i,j,k), -0.5_rp)
+                  q(1) = evalSolution(mesh % elements(eID) % geom % x(1,i,j,k), mesh % elements(eID) % geom % x(2,i,j,k), 0.0_rp)
                   p    = 1.0_RP
                   q(2) = q(1)*u
                   q(3) = q(1)*v
@@ -557,7 +559,7 @@ end module AnalyticalSolution
             TYPE(FTAssertionsManager), POINTER :: sharedManager
             LOGICAL                            :: success
             REAL(KIND=RP) :: sol, solh, x(NDIM), wi, wj, wk
-            REAL(KIND=RP) :: error_mesh, error_elem
+            REAL(KIND=RP) :: error_mesh, error_elem, expectedError
 #ifdef _HAS_MPI_
             REAL(KIND=RP) :: localErrorMesh
             integer :: ierr
@@ -586,7 +588,7 @@ end module AnalyticalSolution
                   DO j = 0, Ny
                      DO i = 0, Nx
                         x = mesh % elements(eID) % geom % x(:,i,j,k)
-                        sol = evalSolution(x(1), x(2), -0.5_rp + time)
+                        sol = evalSolution(x(1), x(2), time)
                         solh = mesh % elements(eID) % storage % Q(1,i,j,k)
 
                         call chooseIntegrationWeights(Nx, Ny, Nz, i, j, k, wi, wj, wk)
@@ -610,14 +612,17 @@ end module AnalyticalSolution
             error_mesh = sqrt(error_mesh)
             print *, "Error in L2 norm: ", error_mesh
 
-            ! p=2 --> 2.7153096812333025E-005
-            ! p=3 --> 3.8495148016535691E-007
-            ! p=4 --> 2.7707680226187883E-009
+            ! The reference depends on the control file, identified by the polynomial order
+            if ( all(mesh % elements(1) % Nxyz == [1,1,1]) ) then      ! DensityPulse_hMortars_p1.control
+               expectedError = 7.9339003107782363E-007_rp
+            else if ( all(mesh % elements(1) % Nxyz == [3,3,3]) ) then ! DensityPulse_hMortars_p3.control
+               expectedError = 2.4172461988495797E-010_rp
+            else if ( all(mesh % elements(1) % Nxyz == [3,3,1]) ) then ! DensityPulse_hMortars_p331.control
+               expectedError = 2.4172462338050867E-010_rp
+            end if
 
-            CALL FTAssertEqual(expectedValue = 2.7153096812333025E-005_rp, &
-                               actualValue   = error_mesh, &
-                               tol           = 1.0e-7_RP, &
-                               msg           = "L2 norm")
+            CALL FTAssert(test = abs(error_mesh - expectedError) <= 1.0e-8_RP*abs(expectedError), &
+                          msg  = "L2 norm (relative error)")
 
 
             CALL sharedManager % summarizeAssertions(title = testName,iUnit = 6)

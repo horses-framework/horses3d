@@ -1,5 +1,6 @@
 !
 ! Density pulse advected through a non-conforming mesh with hanging nodes (2:1 h-mortars).
+! CI case: parallel, polynomial order 3.
 ! The mesh is taken from the horses3d-meshes repository:
 !     horses3d-meshes/cartesian-band-hanging-nodes/BAND_mesh.h5  ->  MESH/BAND_mesh.h5
 !
@@ -7,22 +8,24 @@ Flow equations        = "Euler"
 mesh file name        = "MESH/BAND_mesh.h5"
 periodic relative tolerance = .true.
 
-Polynomial order      = 2
+Polynomial order      = 3
 Discretization nodes  = "Gauss-Lobatto"
 
-solution file name    = "RESULTS/DensityPulse_hMortars.hsol"
+solution file name    = "RESULTS/DensityPulse_hMortars_p3.hsol"
+restart file name     = "RESULTS/DensityPulse_hMortars_p3.hsol"
 restart               = .false.
 
 simulation type       = time-accurate
 final time            = 6.0
-Number of time steps  = 100
-Output Interval       = 100
+dt = 1e-6
+Number of time steps  = 10
+Output Interval       = 10
 
 Number of plot points = 5
 Convergence tolerance = 1.d-10
 
-cfl                   = 0.3
-dcfl                  = 0.3
+#cfl                   = 0.3
+#dcfl                  = 0.3
 mach number           = 0.5
 Reynolds number       = 0.0
 AOA theta             = 0.0
