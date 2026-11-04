@@ -168,6 +168,7 @@ module EllipticBR1
       subroutine BR1_LiftGradients(self, nEqn, nGradEqn, mesh, time, GetGradients, element_mask, Level)
 !
          use HexMeshClass
+         use RotaryFaceRotations
          use PhysicsStorage
          use Physics
          implicit none
@@ -233,6 +234,8 @@ module EllipticBR1
 				endif
 			 end do
 !$omp end do 
+
+         call RotateBackRotaryFacesGradientFlux(mesh, mesh % MLRK % MLIter(locLevelm1,3), mesh % MLRK % MLIter_fID_Interior(1:mesh % MLRK % MLIter(locLevelm1,3)))
 !
 !$omp do schedule(runtime) private(eID)
 			 do iEl = 1, mesh % MLRK % MLIter(locLevel,9) 
@@ -261,6 +264,7 @@ module EllipticBR1
 				endif
 			 end do
 !$omp end do
+         call RotateRotaryFacesGradients(mesh, mesh % MLRK % MLIter_eIDN_Seq(1:mesh % MLRK % MLIter(locLevel,9)))
 
 #ifdef _HAS_MPI_
 !$omp single
@@ -268,6 +272,7 @@ module EllipticBR1
 				call mesh % GatherMPIFacesSolution(nEqn)
 			 end if
 !$omp end single
+         call RotateRotaryMPIFacesSolution(mesh)
 
 !$omp do schedule(runtime) private(fID)
 			 do iFace = 1, mesh % MLRK % MLIter(locLevelm1,7)
@@ -297,6 +302,7 @@ module EllipticBR1
 				end associate
 			 end do
 !$omp end do
+         call RotateRotaryFacesGradients(mesh, mesh % MLRK % MLIter_eIDN_MPI(1:mesh % MLRK % MLIter(locLevel,10)))
 #endif
          else
 !
@@ -327,6 +333,8 @@ module EllipticBR1
 				endif
 			 end do
 !$omp end do 
+
+         call RotateBackRotaryFacesGradientFlux(mesh, size(mesh % faces_interior), mesh % faces_interior)
 !
 !$omp do schedule(runtime) private(eID)
 			 do iEl = 1, size(mesh % elements_sequential)
@@ -355,6 +363,7 @@ module EllipticBR1
 				endif
 			 end do
 !$omp end do
+         call RotateRotaryFacesGradients(mesh, mesh % elements_sequential)
 
 #ifdef _HAS_MPI_
 !$omp single
@@ -362,6 +371,7 @@ module EllipticBR1
 				call mesh % GatherMPIFacesSolution(nEqn)
 			 end if
 !$omp end single
+         call RotateRotaryMPIFacesSolution(mesh)
 
 !$omp do schedule(runtime) private(fID)
 			 do iFace = 1, size(mesh % faces_mpi)
@@ -391,6 +401,7 @@ module EllipticBR1
 				end associate
 			 end do
 !$omp end do
+         call RotateRotaryFacesGradients(mesh, mesh % elements_mpi)
 #endif
          end if
 
@@ -398,6 +409,7 @@ module EllipticBR1
 
       subroutine BR1_LiftGradientsHO(self, nEqn, nGradEqn, mesh, time, GetGradients, element_mask, Level)
          use HexMeshClass
+         use RotaryFaceRotations
          use PhysicsStorage
          use Physics
          implicit none
@@ -458,6 +470,8 @@ module EllipticBR1
             endif
          end do
 !$omp end do 
+
+         call RotateBackRotaryFacesGradientFlux(mesh, size(mesh % HO_FacesInterior), mesh % HO_FacesInterior)
 !
 !$omp do schedule(runtime) private(eID)
          do iEl = 1, size(mesh % HO_ElementsSequential)
@@ -486,6 +500,7 @@ module EllipticBR1
             endif
          end do
 !$omp end do
+         call RotateRotaryFacesGradients(mesh, mesh % HO_ElementsSequential)
 
 #ifdef _HAS_MPI_
 !$omp single
@@ -493,6 +508,7 @@ module EllipticBR1
             call mesh % GatherMPIFacesSolution(nEqn)
          end if
 !$omp end single
+         call RotateRotaryMPIFacesSolution(mesh)
 
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_mpi)
@@ -522,6 +538,7 @@ module EllipticBR1
             end associate
          end do
 !$omp end do
+         call RotateRotaryFacesGradients(mesh, mesh % HO_ElementsMPI)
 #endif
 
       end subroutine BR1_LiftGradientsHO

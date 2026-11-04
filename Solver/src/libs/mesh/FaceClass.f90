@@ -76,6 +76,7 @@
          integer                         :: elementSide(2)
          integer                         :: projectionType(2)
          CHARACTER(LEN=BC_STRING_LENGTH) :: boundaryName
+         logical                         :: isRotaryPeriodic = .false.  ! True for faces matched via periodic revolution
          type(MappedGeometryFace)        :: geom
          type(FaceStorage_t)             :: storage(2)
          contains
@@ -1225,6 +1226,7 @@
          to % elementSide = from % elementSide
          to % projectionType = from % projectionType
          to % boundaryName = from % boundaryName
+         to % isRotaryPeriodic = from % isRotaryPeriodic
          to % geom = from % geom
          to % storage = from % storage
       end subroutine Face_Assign

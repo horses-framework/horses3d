@@ -309,6 +309,7 @@ module MeshPartitioning
             allocate(partitions(domain) % mpiface_rotation(nFaces))
             allocate(partitions(domain) % mpiface_elementSide(nFaces))
             allocate(partitions(domain) % mpiface_sharedDomain(nFaces))
+            allocate(partitions(domain) % mpiface_isRotaryPeriodic(nFaces))
             end associate
          end do
 !
@@ -372,6 +373,16 @@ module MeshPartitioning
 !           ---------------------
             partitions(dL) % mpiface_sharedDomain(bfaceID(dL)) = dR
             partitions(dR) % mpiface_sharedDomain(bfaceID(dR)) = dL
+!
+!           Get the rotary periodic flag (true or false)
+!           ---------------------------------------------
+            if (f % isRotaryPeriodic) then
+               partitions(dL) % mpiface_isRotaryPeriodic(bfaceID(dL)) = .true.
+               partitions(dR) % mpiface_isRotaryPeriodic(bfaceID(dR)) = .true.
+            else
+               partitions(dL) % mpiface_isRotaryPeriodic(bfaceID(dL)) = .false.
+               partitions(dR) % mpiface_isRotaryPeriodic(bfaceID(dR)) = .false.
+            end if
 
             end associate
             end associate

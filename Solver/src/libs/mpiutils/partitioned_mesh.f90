@@ -31,6 +31,7 @@ module PartitionedMeshClass
       integer, allocatable :: mpiface_elementSide(:)
       
       integer, allocatable :: mpiface_sharedDomain(:)    
+      logical, allocatable :: mpiface_isRotaryPeriodic(:)  ! True if the face was rotary-periodic on the serial mesh, false otherwise.
       contains
          procedure   :: Destruct             => PartitionedMesh_Destruct
          procedure   :: ConstructGeneralInfo => PartitionedMesh_ConstructGeneralInfo
@@ -123,6 +124,7 @@ module PartitionedMeshClass
          safedeallocate(ConstructPartitionedMesh % mpiface_rotation)
          safedeallocate(ConstructPartitionedMesh % mpiface_elementSide)
          safedeallocate(ConstructPartitionedMesh % mpiface_sharedDomain)
+         safedeallocate(ConstructPartitionedMesh % mpiface_isRotaryPeriodic)
    
       end function ConstructPartitionedMesh
 
@@ -141,7 +143,7 @@ module PartitionedMeshClass
 !        ---------------
 !
          integer  :: sizes(3), ierr, i
-         integer  :: recv_req(8), recv_reqHOPR
+         integer  :: recv_req(9), recv_reqHOPR
 
          if ( MPI_Process % isRoot ) return
 !
@@ -163,6 +165,7 @@ module PartitionedMeshClass
          allocate(mpi_partition % mpiface_rotation          (mpi_partition % no_of_mpifaces))
          allocate(mpi_partition % mpiface_elementSide       (mpi_partition % no_of_mpifaces))
          allocate(mpi_partition % mpiface_sharedDomain      (mpi_partition % no_of_mpifaces))
+         allocate(mpi_partition % mpiface_isRotaryPeriodic   (mpi_partition % no_of_mpifaces))
          
          if (meshIsHOPR) allocate(mpi_partition % HOPRnodeIDs(mpi_partition % no_of_nodes   )) 
 !
@@ -192,6 +195,9 @@ module PartitionedMeshClass
          call mpi_irecv(mpi_partition % mpiface_sharedDomain, mpi_partition % no_of_mpifaces, &
                         MPI_INT, 0, MPI_ANY_TAG, MPI_COMM_WORLD, recv_req(8), ierr)
 
+         call mpi_irecv(mpi_partition % mpiface_isRotaryPeriodic, mpi_partition % no_of_mpifaces, &
+                        MPI_LOGICAL, 0, MPI_ANY_TAG, MPI_COMM_WORLD, recv_req(9), ierr)
+
          if (meshIsHOPR) then
             call mpi_irecv(mpi_partition % HOPRnodeIDs, mpi_partition % no_of_nodes, MPI_INT, 0, &
                            MPI_ANY_TAG, MPI_COMM_WORLD, recv_reqHOPR, ierr)
@@ -199,7 +205,7 @@ module PartitionedMeshClass
 !
 !        Wait until all messages have been received
 !        ------------------------------------------
-         call mpi_waitall(8, recv_req, MPI_STATUSES_IGNORE, ierr)
+         call mpi_waitall(9, recv_req, MPI_STATUSES_IGNORE, ierr)
          if (meshIsHOPR) call mpi_wait(recv_reqHOPR, MPI_STATUS_IGNORE, ierr)
 
          mpi_partition % Constructed = .true.
@@ -222,7 +228,7 @@ module PartitionedMeshClass
 !
          integer          :: sizes(3)
          integer          :: domain, ierr, msg
-         integer          :: send_req(MPI_Process % nProcs - 1, 8)
+         integer          :: send_req(MPI_Process % nProcs - 1, 9)
          integer          :: send_reqHOPR(MPI_Process % nProcs - 1)
 !
 !        Send the MPI mesh partition to all processes 
@@ -277,6 +283,11 @@ module PartitionedMeshClass
                            MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, &
                            send_req(domain-1,8), ierr)
 
+            call mpi_isend(mpi_allPartitions(domain) % mpiface_isRotaryPeriodic, &
+                           mpi_allPartitions(domain) % no_of_mpifaces, &
+                           MPI_LOGICAL, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, &
+                           send_req(domain-1,9), ierr)
+
             if (meshIsHOPR) then
                call mpi_isend(mpi_allPartitions(domain) % HOPRnodeIDs, &
                            mpi_allPartitions(domain) % no_of_nodes, MPI_INT, domain-1, &
@@ -291,7 +302,7 @@ module PartitionedMeshClass
 !
 !        Wait until all messages have been delivered
 !        -------------------------------------------
-         do msg = 1, 8
+         do msg = 1, 9
             call mpi_waitall(MPI_Process % nProcs - 1, send_req(:,msg), MPI_STATUSES_IGNORE, ierr)
          end do
          if (meshIsHOPR) call mpi_waitall(MPI_Process % nProcs - 1, send_reqHOPR(:), MPI_STATUSES_IGNORE, ierr)
@@ -358,6 +369,7 @@ module PartitionedMeshClass
          safedeallocate(self % mpiface_rotation          )
          safedeallocate(self % mpiface_elementSide       )
          safedeallocate(self % mpiface_sharedDomain      )
+         safedeallocate(self % mpiface_isRotaryPeriodic   )
          safedeallocate(self % global2localeID           )
          safedeallocate(self % global2localeIDwith0      )
 
