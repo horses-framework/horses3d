@@ -889,6 +889,28 @@ jobs:
         if: '!cancelled()'
 
 #
+# 39) Density pulse with h-mortars (hanging nodes)
+# ------------------------------------------------
+# This test case needs hdf5, which is only available with gfortran in the github actions
+# The mesh is taken from the horses3d-meshes repository (see the top of the file)
+#
+      - name: Build DensityPulse_hMortars
+        working-directory: ./Solver/test/Euler/DensityPulse_hMortars/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: ('!cancelled()' && matrix.hdf5 == 'YES')
+
+      - name: Run DensityPulse_hMortars p=1
+        working-directory: ./Solver/test/Euler/DensityPulse_hMortars
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mkdir -p MESH
+          ln -sf "$HORSES3D_MESHES_DIR/cartesian-band-hanging-nodes/BAND_mesh.h5" MESH/
+          ./horses3d.ns DensityPulse_hMortars_p1.control
+        if: ('!cancelled()' && matrix.hdf5 == 'YES')
+
+#
 # CHECK CODE COVERAGE
 # -------------------------
 
