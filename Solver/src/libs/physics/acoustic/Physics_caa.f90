@@ -29,7 +29,7 @@
       implicit none
 
       private
-      public  APEFlux, APEFlux1D
+      public  APEFlux, APEFlux1D, APEFluxNormal
 !
 !     ========
       CONTAINS 
@@ -63,7 +63,7 @@
 !        ---------------
          real(kind=RP)              :: velocity_term
 
-         velocity_term = Qbase(ICAAU)*Q(IBU) + Qbase(ICAAV)*Q(IBV) + Qbase(ICAAW)*Q(IBW) + Q(ICAAP)/Qbase(IBRHO)
+         velocity_term = Qbase(IBU)*Q(ICAAU) + Qbase(IBV)*Q(ICAAV) + Qbase(IBW)*Q(ICAAW) + Q(ICAAP)/Qbase(IBRHO)
 !
 !        X-Flux
 !        ------         
@@ -105,18 +105,48 @@
 !        only X-Flux
 !        ------         
          F(ICAARHO) = 0.0_RP
-         F(ICAAU) = Qbase(ICAAU)*Q(IBU) + Qbase(ICAAV)*Q(IBV) + Qbase(ICAAW)*Q(IBW) + Q(ICAAP)/Qbase(IBRHO)
+         F(ICAAU) = Qbase(IBU)*Q(ICAAU) + Qbase(IBV)*Q(ICAAV) + Qbase(IBW)*Q(ICAAW) + Q(ICAAP)/Qbase(IBRHO)
          F(ICAAV) = 0.0_RP
          F(ICAAW) = 0.0_RP
          F(ICAAP) = Qbase(IBA2) * Qbase(IBRHO) * Q(ICAAU) + Qbase(IBU) * Q(ICAAP)
 
       end subroutine APEFlux1D
+!     
+      pure subroutine APEFluxNormal(Q, F, Qbase, nHat)
+         ! Computes F_n = /vec{F} /cdot /vec{n}
+         ! Q, Qbase are rotated in normal, tan1, tan2
+         ! F_n is cartesian
+         implicit none
+         real(kind=RP), intent(in)   :: Q(1:NCONS)
+         real(kind=RP), intent(out)  :: F(1:NCONS)
+         real(kind=RP), intent(in)   :: Qbase(1:NCONSB)
+         real(kind=RP), intent(in)   :: nHat(1:NDIM)
+!
+!        ---------------
+!        Local variables
+!        ---------------
+         real(kind=RP)              :: velocity_term
+         real(kind=RP)              :: u_n, uBase_n
+
+!        The dot product is mantained in the two basis, as is only a rotation
+!        vec{u_0}_cartesian /dot /vec{u'}_cartesian =  vec{u_0}_rotated /dot /vec{u'}_rotated  
+         velocity_term = Qbase(IBU)*Q(ICAAU) + Qbase(IBV)*Q(ICAAV) + Qbase(IBW)*Q(ICAAW) + Q(ICAAP)/Qbase(IBRHO)
+!
+!        Flux dot n
+!        ------         
+         F(ICAARHO) = 0.0_RP
+         F(ICAAU) = nHat(1)*velocity_term
+         F(ICAAV) = nHat(2)*velocity_term
+         F(ICAAW) = nHat(3)*velocity_term
+         F(ICAAP) = Qbase(IBA2) * Qbase(IBRHO) * Q(ICAAU) + Qbase(IBU) * Q(ICAAP)
+
+      end subroutine APEFluxNormal
    END Module Physics_CAA
 !
 ! /////////////////////////////////////////////////////////////////////
 !
 !----------------------------------------------------------------------
-!! This routine returns the maximum eigenvalues for the Euler equations 
+!! This routine returns the maximum eigenvalues for the APE equations 
 !! for the given solution value in each spatial direction. 
 !! These are to be used to compute the local time step.
 !----------------------------------------------------------------------

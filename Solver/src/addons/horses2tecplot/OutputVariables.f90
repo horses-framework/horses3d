@@ -31,6 +31,7 @@ module OutputVariables
    public   getOutputVariables, ComputeOutputVariables, getOutputVariablesLabel
    public   getOutputVariablesList, outputVariablesForVariable, OutputVariablesForPreliminarVariable
    public   outScale, hasVariablesFlag, Lreference
+   public   MPIRANK_V
 				 
    integer, parameter   :: STR_VAR_LEN = 16
 !

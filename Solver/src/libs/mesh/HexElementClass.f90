@@ -84,7 +84,6 @@
          integer, dimension(:,:,:), allocatable :: STL !STL file the DoFbelongs to if isInsideBody = .true. (IB)
          integer                                :: IP_index
          logical                                :: sliding
-         logical                                :: sliding_newnodes 
          contains
             procedure   :: Construct               => HexElement_Construct
             procedure   :: Destruct                => HexElement_Destruct
@@ -133,7 +132,6 @@
          self % ML_error_ratio      = 1.0_RP
          self % MortarFaces         = 0 
          self % sliding             = .false.
-         self % sliding_newnodes    = .false.
 !
 !        ----------------------------------------
 !        Solution Storage is allocated separately

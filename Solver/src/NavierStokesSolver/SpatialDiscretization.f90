@@ -24,6 +24,7 @@ module SpatialDiscretization
       use IBMClass
 #ifdef _HAS_MPI_
       use mpi
+      use SlidingMPIMortars
 #endif
 
       private
@@ -271,6 +272,10 @@ module SpatialDiscretization
 #ifdef _HAS_MPI_
 !$omp single
          call mesh % UpdateMPIFacesSolution(NCONS)
+         if (mesh % SlidingMesh % active) then
+            call SlidingUpdateMPIMortarSolution(mesh, NCONS)
+            call SlidingGatherMPIMortarSolution(mesh, NCONS)
+         end if
 !$omp end single
 #endif
 !
@@ -291,6 +296,10 @@ module SpatialDiscretization
 !$omp single
          if ( flowIsNavierStokes ) then
             call mesh % UpdateMPIFacesGradients(NGRAD)
+            if (mesh % SlidingMesh % active) then
+               call SlidingUpdateMPIMortarGradients(mesh, NGRAD)
+               call SlidingGatherMPIMortarGradients(mesh, NGRAD)
+            end if
          end if
 !$omp end single
 #endif
@@ -508,37 +517,54 @@ module SpatialDiscretization
 !$omp end do nowait
 
          if (mesh % SlidingMesh % active) then
-!$omp do schedule(runtime) private(fID)
+!$omp do schedule(runtime) private(k)
             do iFace = 1, size(mesh % mortar_faces)
-               fID = mesh % mortar_faces(iFace)%ID
-               associate(fstar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(1))%storage(1)%fStar)
-                  fstar=0.0_RP
+               associate(f => mesh % mortar_faces(iFace))
+               if (max(f % elementIDs(1), f % elementIDs(2)) <= 0) cycle   ! empty slot
+               do k = 1, 2
+                  if (f % Mortar(k) <= 0) cycle                            ! face on another rank
+                  mesh % faces(f % Mortar(k)) % storage(1) % fStar = 0.0_RP
+                  mesh % faces(f % Mortar(k)) % storage(2) % fStar = 0.0_RP
+               end do
                end associate
-               associate(fstar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(1))%storage(2)%fStar)
-                  fstar=0.0_RP
-               end associate
-               associate(fstar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(2))%storage(1)%fStar)
-                  fstar=0.0_RP
-               end associate
-               associate(fstar=>mesh % faces(mesh % mortar_faces(fID)%Mortar(2))%storage(2)%fStar)
-                  fstar=0.0_RP
-               end associate
-            end do  
-!$omp end do 
-         end if 
+            end do
+!$omp end do
+         end if
 
-         if (mesh % SlidingMesh % active) then 
+         if (mesh % SlidingMesh % active) then
 !$omp single
             do iFace = 1, size(mesh % mortar_faces)
-               fID = mesh % mortar_faces(iFace)%ID
-               if ( mesh % slidingflux ) then
-                  call computeElementInterfaceFlux(masterFace1=mesh % faces(mesh % mortar_faces(fID)%Mortar(1)), masterFace2=mesh % faces(mesh % mortar_faces(fID)%Mortar(2)), &
-                  f=mesh % mortar_faces(iFace), sliding=.true., SM=mesh % SlidingMesh)
+               associate(f => mesh % mortar_faces(iFace))
+               if (f % elementIDs(1) <= 0) cycle      ! empty slot or reduced record: the owner is elsewhere
+
+               if (f % Mortar(2) > 0) then
+                  if ( mesh % slidingflux ) then
+                     call computeElementInterfaceFlux(masterFace1 = mesh % faces(f % Mortar(1)), &
+                                                      masterFace2 = mesh % faces(f % Mortar(2)), &
+                                                      f = f, sliding = .true., SM = mesh % SlidingMesh)
+                  else
+                     call computeElementInterfaceFlux(masterFace1 = mesh % faces(f % Mortar(1)), &
+                                                      masterFace2 = mesh % faces(f % Mortar(2)), &
+                                                      f = f, sliding = .true.)
+                  end if
                else
-                  call computeElementInterfaceFlux(masterFace1=mesh % faces(mesh % mortar_faces(fID)%Mortar(1)), masterFace2=mesh % faces(mesh % mortar_faces(fID)%Mortar(2)), &
-                  f=mesh % mortar_faces(iFace), sliding=.true.)
+                  ! Rotor on another rank: the rotor-side flux is kept for the exchange
+                  if ( mesh % slidingflux ) then
+                     call computeElementInterfaceFlux(masterFace1 = mesh % faces(f % Mortar(1)), &
+                                                      f = f, sliding = .true., SM = mesh % SlidingMesh)
+                  else
+                     call computeElementInterfaceFlux(masterFace1 = mesh % faces(f % Mortar(1)), &
+                                                      f = f, sliding = .true.)
+                  end if
                end if
+
+               end associate
             end do
+
+#ifdef _HAS_MPI_
+            call SlidingUpdateMPIMortarFlux(mesh, NCONS)
+            call SlidingGatherMPIMortarFlux(mesh, NCONS)
+#endif
 !$omp end single
          end if
 !$omp do schedule(runtime) private(fID)
@@ -609,7 +635,9 @@ module SpatialDiscretization
                      end if 
                   end do 
                end if 
-
+!              An MPI face whose local element turns has a turning remote element
+!              too: SlidingPruneMPIFaces has removed the interface faces from the
+!              MPI lists. Both ranks therefore take the same branch.
                if ( mesh % slidingflux .and. mesh % elements(maxval(mesh % faces(fID) % elementIDs)) % sliding ) then
                   call computeMPIFaceFlux(mesh % faces(fID), SM = mesh % SlidingMesh)
                else
@@ -1477,10 +1505,10 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(i,j)
             do iFace = 1, size(mesh%mortar_faces)
                associate(f => mesh % mortar_faces(iFace))  
+               if (f % elementIDs(1) <= 0) cycle      ! empty slot or reduced record
                do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
                   do side = 1, no_of_sides
-
-                      call get_laminar_mu_kappa(f % storage(side) % Q(:,i,j), f % storage(side) % mu_NS(1,i,j), f % storage(side) % mu_NS(2,i,j))
+                     call get_laminar_mu_kappa(f % storage(side) % Q(:,i,j), f % storage(side) % mu_NS(1,i,j), f % storage(side) % mu_NS(2,i,j))
                   end do
                end do              ; end do
                end associate
@@ -1512,23 +1540,23 @@ module SpatialDiscretization
 
          if ( LESModel % Active .and. mesh % SlidingMesh % active) then
 !$omp do schedule(runtime) private(i,j,delta,mu_smag)
-                        do iFace = 1, size(mesh%mortar_faces)
-                           associate(f => mesh % mortar_faces(iFace))
-            
-                           delta = sqrt(f % geom % surface / product(f % Nf + 1))
-                           do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
-                              do side = 1, no_of_sides
-                                 call LESModel % ComputeViscosity(delta, f % geom % dWall(i,j), f % storage(side) % Q(:,i,j),   &
-                                                                                                f % storage(side) % U_x(:,i,j), &
-                                                                                                f % storage(side) % U_y(:,i,j), &
-                                                                                                f % storage(side) % U_z(:,i,j), &
-                                                                                                mu_smag)
-                                 f % storage(side) % mu_NS(1,i,j) = f % storage(side) % mu_NS(1,i,j) + mu_smag
-                                 f % storage(side) % mu_NS(2,i,j) = f % storage(side) % mu_NS(2,i,j) + mu_smag * dimensionless % mu_to_kappa
-                              end do
-                           end do              ; end do
-                           end associate
-                        end do
+            do iFace = 1, size(mesh%mortar_faces)
+               associate(f => mesh % mortar_faces(iFace))
+               if (f % elementIDs(1) <= 0) cycle      ! empty slot or reduced record
+               delta = sqrt(f % geom % surface / product(f % Nf + 1))
+               do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
+                  do side = 1, no_of_sides
+                     call LESModel % ComputeViscosity(delta, f % geom % dWall(i,j), f % storage(side) % Q(:,i,j),   &
+                                                                                    f % storage(side) % U_x(:,i,j), &
+                                                                                    f % storage(side) % U_y(:,i,j), &
+                                                                                    f % storage(side) % U_z(:,i,j), &
+                                                                                    mu_smag)
+                     f % storage(side) % mu_NS(1,i,j) = f % storage(side) % mu_NS(1,i,j) + mu_smag
+                     f % storage(side) % mu_NS(2,i,j) = f % storage(side) % mu_NS(2,i,j) + mu_smag * dimensionless % mu_to_kappa
+                  end do
+               end do              ; end do
+               end associate
+            end do
 !$omp end do
                      end if
 
@@ -2018,9 +2046,14 @@ module SpatialDiscretization
             end do ; end do
          end if
 
-         Sidearray = (/2,0/)
-         call masterFace2 % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
-         slaveFace=f, MortarFlux=flux,  sliding=.true.)
+         if ( present(masterFace2) ) then
+            Sidearray = (/2,0/)
+            call masterFace2 % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=Sidearray, &
+            slaveFace=f, MortarFlux=flux,  sliding=.true.)
+         else
+            ! Rotor on another rank: keep its flux for the exchange
+            f % storage(2) % fStar(1:NCONS,:,:) = flux
+         end if
      end if
 
      end subroutine computeElementInterfaceFlux
@@ -2031,7 +2064,7 @@ module SpatialDiscretization
          use SlidingMeshClass
          implicit none
          type(Face)   , intent(inout) :: f
-         type(SlidingMesh), optional, intent(in) :: SM  
+         type(SlidingMesh), optional, intent(in) :: SM  ! present => the face moves rigidly with the rotor
 
          integer       :: i, j
          integer       :: thisSide

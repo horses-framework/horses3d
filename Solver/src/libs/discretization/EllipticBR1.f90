@@ -11,6 +11,7 @@ module EllipticBR1
    use EllipticDiscretizationClass
    use FluidData
    use BoundaryConditions, only: BCs
+   use SlidingMPIMortars
    implicit none
 !
 !
@@ -170,6 +171,7 @@ module EllipticBR1
          use HexMeshClass
          use PhysicsStorage
          use Physics
+         use SlidingMPIMortars
          implicit none
          class(BassiRebay1_t), intent(in) :: self
          integer,              intent(in) :: nEqn, nGradEqn
@@ -426,24 +428,35 @@ module EllipticBR1
       if (mesh%SlidingMesh%active) then 
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % mortar_faces)
-            fID = mesh % mortar_faces(iFace)%ID
-            associate(unStar=>mesh% mortar_faces(fID)%storage(1)%unStar)
-               unStar=0.0_RP
-            end associate
-            associate(unStar=>mesh% mortar_faces(fID)%storage(2)%unStar)
-               unStar=0.0_RP
-            end associate
-         end do 
+            if (mesh % mortar_faces(iFace) % elementIDs(1) <= 0) cycle   ! empty slot or reduced record
+            mesh % mortar_faces(iFace) % storage(1) % unStar = 0.0_RP
+            mesh % mortar_faces(iFace) % storage(2) % unStar = 0.0_RP
+         end do
 !$omp end do        
       end if 
 
       if (mesh%SlidingMesh%active) then 
 !$omp single
          do iFace = 1, size(mesh % mortar_faces)
-            fID = mesh % mortar_faces(iFace)%ID
-            call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces (mesh % mortar_faces(fID)%Mortar(1)),masterFace2=mesh % faces (mesh % mortar_faces(fID)%Mortar(2)),&
-             nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, f=mesh % mortar_faces(fID), sliding=.true.)
+            associate(f => mesh % mortar_faces(iFace))
+            if (f % elementIDs(1) <= 0) cycle          ! empty slot or reduced record: the owner is elsewhere
+            if (f % Mortar(2) > 0) then
+               call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces(f % Mortar(1)), &
+                        masterFace2=mesh % faces(f % Mortar(2)), &
+                        nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, f=f, sliding=.true.)
+            else
+               ! Rotor on another rank: its gradient flux is kept for the exchange
+               call BR1_ComputeElementInterfaceAverage(self=self, masterFace1=mesh % faces(f % Mortar(1)), &
+                        nEqn=nEqn, nGradEqn=nGradEqn, GetGradients=GetGradients, f=f, sliding=.true.)
+            end if
+            end associate
          end do 
+#ifdef _HAS_MPI_
+         if (mesh % SlidingMesh % active) then
+            call SlidingUpdateMPIMortarGradFlux(mesh, nGradEqn)
+            call SlidingGatherMPIMortarGradFlux(mesh, nGradEqn, 1)
+         end if
+#endif
 !$omp end single     
       end if
 
@@ -867,7 +880,12 @@ module EllipticBR1
             Sidearray = (/1,0/)
             call masterFace1 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1, sliding=sliding) 
             Sidearray = (/2,0/)
-            call masterFace2 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1,sliding=sliding) 
+            if (present(masterFace2)) then
+               call masterFace2 % ProjectMortarGradientFluxToElements(nEqn=nGradEqn, slaveFace=f, Hflux=uStar_n,whichElements=Sidearray,factor=1,sliding=sliding) 
+            else
+!              Rotor on another rank: keep its gradient flux for the exchange
+               f % storage(2) % unStar(1:nGradEqn,1:NDIM,:,:) = uStar_n
+            end if
          end if 
          
       end subroutine BR1_ComputeElementInterfaceAverage   
@@ -1028,6 +1046,7 @@ module EllipticBR1
             call GetViscosity(e % storage % Q(INSRHO,i,j,k), mu(i,j,k))      
          end do                ; end do                ; end do
 
+         mu = mu + e % storage % mu_NS(1,:,:,:) ! Add Subgrid Viscosity
          kappa = 0.0_RP
          beta  = 0.0_RP
 

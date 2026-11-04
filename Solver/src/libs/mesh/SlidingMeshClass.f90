@@ -87,12 +87,8 @@ MODULE SlidingMeshClass
     type SlidingMesh
         logical                                :: active = .false.
         logical                                :: isConfigured = .false.
-        integer                                :: numPureSlidingElems = 0
         integer, allocatable                   :: slidingElems(:)       ! All sliding elements
         integer, allocatable                   :: slidingFaces(:)       ! All sliding faces
-        integer, allocatable                   :: mortarNeighborElems(:)! associated non-sliding neighbors across the interface (require mortars)
-        integer, allocatable                   :: slidingMortarElems(:) ! sliding elements at the interface (require mortars)
-        integer, allocatable                   :: pureSlidingElems(:)   ! sliding elements fully inside the region (no mortar)
         integer, allocatable                   :: slidingMortarConnectivity(:,:)
         !   slidingMortarConnectivity(i,:) :
         !   One row per static ring row this rank owns, in myMasterRows order.
@@ -146,7 +142,6 @@ MODULE SlidingMeshClass
         real(kind=RP)                          :: Rint     = 0.0_RP   ! interface radius, Allreduce(max)
         real(kind=RP)                          :: zetaMin  = 0.0_RP   ! axial extent of the rotating region
         real(kind=RP)                          :: zetaMax  = 0.0_RP
-        integer                                :: NfInterface(2) = 0   ! uniform polynomial order on the interface
         integer                                :: nodeGlobIDOffset = 0 ! global node count before the sliding split
         !  local counts, NOT to be confused with the global ones 
         integer                                :: nLocalSplitFaces = 0   ! of those, the ones needing a local split
@@ -307,18 +302,12 @@ subroutine SlidingMesh_Initialize(self, numLocalInterfaceElements, numLocalSlidi
    !========================
    ! Allocation
    !========================
-    if (.not. allocated(self % mortarNeighborElems))             allocate(self % mortarNeighborElems(numLocalInterfaceElements))
-    if (.not. allocated(self % slidingMortarElems))              allocate(self % slidingMortarElems(numLocalInterfaceElements))
-    if (.not. allocated(self % pureSlidingElems))                allocate(self % pureSlidingElems(numLocalSlidingElements))
     if (.not. allocated(self % slidingMortarConnectivity))       allocate(self % slidingMortarConnectivity(numLocalInterfaceElements, 21))
     
     !========================
     ! Initialization (first pass only)
     !========================
     if (.not. self % active) then
-       self % mortarNeighborElems       = 0
-       self % slidingMortarElems        = 0
-       self % pureSlidingElems          = 0
        self % slidingMortarConnectivity = 0
        self % localAngle                = 0
        self % currentSectorID           = -1
@@ -345,9 +334,6 @@ subroutine SlidingMesh_Destruct(self)
     ! ---------------------------------------------------------------------
     ! Deallocate sliding mesh connectivity and mortar storage
     ! ---------------------------------------------------------------------
-    safedeallocate(self % mortarNeighborElems)
-    safedeallocate(self % slidingMortarElems)
-    safedeallocate(self % pureSlidingElems)
     safedeallocate(self % slidingMortarConnectivity)
     safedeallocate(self % rotorRing)
     safedeallocate(self % statorRing)
@@ -381,7 +367,6 @@ subroutine SlidingMesh_Destruct(self)
     self % Rint             = 0.0_RP
     self % zetaMin          = 0.0_RP
     self % zetaMax          = 0.0_RP
-    self % NfInterface      = 0
     self % nodeGlobIDOffset = 0
     self % numElemsPerLayer = 0
     self % numLayers        = 0

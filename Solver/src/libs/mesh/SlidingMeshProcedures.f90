@@ -9,6 +9,12 @@
 !     file into mesh % SlidingMesh. Elements inside it turn, the rest stay, and the
 !     two sides are joined by mortar faces rebuilt at every stage.
 !
+!     The same code runs in sequential and in MPI. Two partitions are supported:
+!        strategy 1   both sides of an axial layer on the same rank, every
+!                     mortar is local
+!        strategy 2   the two sides always on different ranks, each mortar is
+!                     split between two ranks (see SlidingMPIMortars)
+!
 !     Who calls whom
 !     --------------
 !     AdvanceSlidingMesh is the only entry point. It runs at every Runge-Kutta
@@ -17,13 +23,12 @@
 !        AdvanceSlidingMesh
 !         |
 !         +-- IdentifySlidingRegion              first call only
-!         |     |  which elements rotate, plus the global geometric anchors
+!         |     |  which elements rotate, plus the interface radius and axial band
 !         |     +-- SlidingComputeGeometricAnchors
 !         |
 !         +-- SlidingBuildGlobalRings            first call only, collective
-!         |     |  the replicated interface directory: one entry per interface
-!         |     |  element on each side, indexed by (Azim_Id, Ax_Id), plus what
-!         |     |  this rank owns and what it is the slave of
+!         |     |  the interface directory, identical on every rank: one entry per
+!         |     |  interface face on each side, indexed by (Azim_Id, Ax_Id)
 !         |     +-- CollectLocalRingEntries
 !         |     |     +-- IsInterfaceFace
 !         |     |     +-- SlidingFaceDir
@@ -33,9 +38,8 @@
 !         |     |     +-- SortRingEntries
 !         |     +-- SlidingMaxSlaveRows
 !         |
-!         +-- BuildSlidingMortarConnectivity     first call only
-!         |     the rotating side of the interface, straight from the local
-!         |     ring entries: no neighbour lookup
+!         +-- SlidingConstructMPIMortars         first call only (SlidingMPIMortars)
+!         |     buffers of the split mortars; finds nothing to do outside strategy 2
 !         |
 !         +-- SplitInterfaceNodes                first call only
 !         |     gives the rotating side its own copy of the interface nodes
@@ -44,34 +48,27 @@
 !         |     how far we have turned: which sector, how far inside it
 !         |
 !         +-- InitializeSlidingConnectivity      every call
-!         |     +-- RotateSlidingRegion
-!         |           moves the nodes to their new position
+!         |     +-- RotateSlidingRegion          rotates the region, offsets and scales
+!         |     +-- SlidingRotateNodes           first call only, moves mesh % nodes
 !         |
 !         +-- UpdateSlidingMortarsConnectivity   when the sector changes
-!         |     pairs every static interface element this rank owns with the two
-!         |     rotating ones straddling it, lists those it is the slave of, and
-!         |     carries the orientation tags of each pair
+!         |     pairs each static interface face with the two rotating faces
+!         |     overlapping it
 !         |
-!         +-- SlidingSplitInterfaceFaces         first call only, if needsLocalSplit
-!         |     gives each locally shared interface face a second copy, one per
-!         |     side, leaving every other face as the mesh reader built it
-!         |
+!         +-- SlidingSplitInterfaceFaces         first call only, strategy 1 and sequential
 !         +-- SlidingBuildGeometryLists          first call only
-!         |     the rotating elements and their faces, so that the geometry
-!         |     rebuild can be restricted to what actually moves
-!         |
 !         +-- SlidingPruneMPIFaces               first call only
-!         |     drops the interface faces from the ordinary MPI face lists and
-!         |     resizes the buffers: their flux crosses through the mortars
+!         |     removes the interface faces from the ordinary MPI exchanges
 !         |
-!         +-- ConstructSlidingMortars            every call
-!               builds the mortar faces and their geometry; rotation and offset
-!               come from the orientation tags of the current pair, and each
-!               mortar builds its own projection matrices in LinkWithElements
-!               +-- SlidingPairRotation
-!               +-- QuadAzimSign
-!               +-- QuadAzimDir
-!
+!         +-- ConstructSlidingMortars            every call, strategy 1 and sequential
+!         |     both sides of every mortar are on this rank
+!         +-- SlidingConstructSplitMortars       every call, strategy 2
+!         |     full mortar on the static rank, light copy on the rotating rank
+!         |     (both use SetSlidingMortarPlacement: SlidingPairRotation,
+!         |      QuadAzimSign, QuadAzimDir)
+!         |
+!         +-- SlidingBuildCommLists              when the sector changes (SlidingMPIMortars)
+!         +-- SlidingCheckCommAlignment          when the sector changes (SlidingMPIMortars)
 !
 !/////////////////////////////////////////////////////////////////////////
 !
@@ -86,18 +83,14 @@ module SlidingMeshProcedures
    use NodeClass
    use ElementClass
    use FaceClass
-   use FacePatchClass
-   use TransfiniteMapClass
    use ElementConnectivityDefinitions
-   use ZoneClass                       , only: Zone_t, ConstructZones, ReassignZones
    use MPI_Process_Info
    use MPI_Face_Class
-   use FileReadingUtilities            , only: RemovePath, getFileName
-   use PartitionedMeshClass            , only: mpi_partition
+   use SlidingMPIMortars
+   use Headers
 #ifdef _HAS_MPI_
    use mpi
 #endif
-use Headers
    implicit none
 
    private
@@ -105,7 +98,6 @@ use Headers
    public :: AdvanceSlidingMesh
    public :: IdentifySlidingRegion
    public :: InitializeSlidingConnectivity
-   public :: BuildSlidingMortarConnectivity
    public :: RotateSlidingRegion
    public :: ConstructSlidingMortars
    public :: PrintMortarConnectivity
@@ -127,15 +119,12 @@ contains
 subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotateEntireMesh)
    use Physics
    use PartitionedMeshClass
-   use MPI_Process_Info
-   use Headers
 
    implicit none 
    ! =========================
    ! Arguments
    ! =========================
    class(HexMesh), intent(inout)        :: mesh
-   !integer, intent(inout)              :: dir2D
    integer, intent(inout)               :: numBFacePoints
    integer                              :: nodes
    logical, intent(in)                  :: useMPI 
@@ -145,8 +134,6 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
    ! Local variables
    ! =========================
    integer :: numSlidingElements
-   integer :: originalNodeCount
-   integer :: numberOfNodes
    integer :: l, eID, fID, r
    integer :: sectorID 
    logical :: isConforming 
@@ -157,7 +144,9 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
    integer :: no_interior_faces, no_boundary_faces, no_mpi_faces
    integer :: no_sequential_elems, no_mpi_elems
    integer :: aux_array(1:3)
+   logical :: sectorChanged 
 
+   sectorChanged = .false.
    associate(SM => mesh % SlidingMesh)
 
       ! Setup phase, first call only
@@ -178,16 +167,13 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
          call IdentifySlidingRegion(mesh, numSlidingElements)
          call SlidingBuildGlobalRings(mesh)
          call SM % Initialize(max(SM % nMasterRows, SM % nSlaveRowsMax), numSlidingElements, numBFacePoints)
+         ! Second MPI face set, for the mortars split across ranks. Called on every
+         ! rank: under strategy 1 it finds no partner and allocates nothing.
+         call SlidingConstructMPIMortars(mesh)
       end if
 
-      sectorID = 0
-
-      ! Build sliding mortar connectivity
+      ! Give the rotating side its own interface nodes
       if (.not. SM % active) then
-         SM % mortarNeighborElems = 0
-         SM % slidingMortarElems  = 0
-         
-         call BuildSlidingMortarConnectivity(mesh)
          call SplitInterfaceNodes(mesh)
 
          ! the local sweep is over
@@ -196,9 +182,6 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
          safedeallocate(SM % localStatorEnt) 
          SM % nLocalStatorEnt = 0
       end if
-
-      numberOfNodes = size(mesh % nodes)
-      originalNodeCount = size(mesh % nodes) - SM % numDuplicatedNodes
 
       ! Optional angle override
       if (present(angle)) then 
@@ -209,17 +192,15 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
       SM % omega = SM % omega + dTheta
       
       ! Core mesh modification
-      sectorID=0
-
       call GetSlidingTopologyState(SM % omega, SM % numElemsPerLayer, sectorID, isConforming, SM % localAngle)
 
-      call InitializeSlidingConnectivity(mesh, nodes, dTheta, offsetParams, &
-                                          scaleParams, originalNodeCount, numberOfNodes)
+      call InitializeSlidingConnectivity(mesh, dTheta, offsetParams, scaleParams)
 
-      if (sectorID .NE. SM % currentSectorID) then 
+      if (sectorID .NE. SM % currentSectorID) then
          call UpdateSlidingMortarsConnectivity(mesh, sectorID)
-         SM % currentSectorID=sectorID
-      end if 
+         SM % currentSectorID = sectorID
+         sectorChanged = .true.
+      end if
 
       if (.not. present(rotateEntireMesh)) then
          do r = 1, SM % nRingGlobal
@@ -271,8 +252,8 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
 
          !  Catch-all for the faces left undefined by the split
          do l = 1, size(mesh % faces)
-            if (mesh % faces(l) % faceType == -1) then
-               mesh % faces(l) % faceType = 1
+            if (mesh % faces(l) % faceType == HMESH_UNDEFINED) then
+               mesh % faces(l) % faceType = HMESH_INTERIOR
             end if
          end do
       end if
@@ -392,7 +373,8 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
 
          if (.not. allocated(mesh % mortar_faces)) then
             allocate(mesh % mortar_faces(MortarSlotCount(SM)))
-
+!           Empty slots are skipped by elementIDs <= 0; InitializeSlidingConnectivity
+!           only resets them from the second call on
             do l = 1, size(mesh % mortar_faces)
                mesh % mortar_faces(l) % ID          = -1
                mesh % mortar_faces(l) % elementIDs  = -1
@@ -400,8 +382,22 @@ subroutine AdvanceSlidingMesh(mesh, numBFacePoints, nodes, useMPI, angle, rotate
             end do
          end if
 
-         call ConstructSlidingMortars(mesh, nodes, SM % numSlidingInterfaceElements, SM % mortarNeighborElems, &
-                        SM % slidingMortarElems, SM % slidingMortarConnectivity, offsetParams, scaleParams)
+!        Strategy 1 and sequential: every pair is local. Strategy 2: every pair
+!        is split across ranks. The partition check in SlidingBuildGlobalRings
+!        guarantees there is nothing in between.
+         if (SM % needsLocalSplit) then
+            call ConstructSlidingMortars(mesh, nodes, SM % numSlidingInterfaceElements, &
+                           SM % slidingMortarConnectivity, offsetParams, scaleParams)
+         else
+            call SlidingConstructSplitMortars(mesh, nodes, offsetParams, scaleParams)
+         end if
+
+!        The links depend on the current pair only, and read the mortar sizes:
+!        rebuilt after the construction, when the sector has changed
+         if (sectorChanged) then
+            call SlidingBuildCommLists(mesh, SM % currentSectorID)
+            call SlidingCheckCommAlignment(mesh)   
+         end if
       end if
       
       SM  % active = .true.
@@ -574,13 +570,18 @@ end function IsInterfaceFace
 ! ---------------------------------------------------------------------------
 !  SlidingBuildGlobalRings
 !
-!  Builds the two interface directories, one per side, replicated identically on
-!  every rank, and everything derived from them: the global counts, the global to
+!  Builds the two interface directories, one per side, identical on every
+!  rank, and everything derived from them: the global counts, the global to
 !  local tables, and the rows this rank owns or is slave of.
 !
-!  The alignment check is an assertion, not a calibration. Rotating azimuths live
-!  in the rotating frame, so row i of one ring faces row i of the other by
-!  construction.
+!  Row i of one ring faces row i of the other, because rotating azimuths are
+!  stored in the rotating frame. The alignment check only confirms it.
+!
+!  Stops if the two sides are on different ranks and the polynomial order is
+!  not the same on every interface face.
+!
+!  Stops if the partition is neither strategy 1 nor strategy 2 on this rank:
+!  checked here on the whole ring, so it holds at every angle.
 !
 !  Called once. COLLECTIVE, on every rank.
 ! ---------------------------------------------------------------------------
@@ -595,7 +596,9 @@ subroutine SlidingBuildGlobalRings(mesh)
    ! =========================
    integer :: nRingRotor,  nAzimRotor,  nAxRotor
    integer :: nRingStator, nAzimStator, nAxStator
-   integer :: i, k
+   integer :: i, k, n0
+   integer :: nWhole, nMixed, nHeld
+   integer, allocatable :: nStaLayer(:), nRotLayer(:)
    real(kind=RP) :: tolz
    intrinsic :: count
 
@@ -678,6 +681,47 @@ subroutine SlidingBuildGlobalRings(mesh)
          end if
       end do
 
+      ! sides on different ranks: every interface face must have the same order
+      if (any(SM % statorRing(1:SM % nRingGlobal) % rank /= &
+              SM % rotorRing (1:SM % nRingGlobal) % rank)) then
+         n0 = SM % statorRing(1) % Nel(1)
+         if (any(SM % statorRing(1:SM % nRingGlobal) % Nel(1) /= n0) .or. &
+             any(SM % statorRing(1:SM % nRingGlobal) % Nel(2) /= n0) .or. &
+             any(SM % rotorRing (1:SM % nRingGlobal) % Nel(1) /= n0) .or. &
+             any(SM % rotorRing (1:SM % nRingGlobal) % Nel(2) /= n0)) then
+            if (MPI_Process % isRoot) then
+               write(STD_OUT,*) 'sliding: static and rotating sides on different ranks require'
+               write(STD_OUT,*) 'a uniform, isotropic polynomial order on the interface faces'
+            end if
+            error stop
+         end if
+      end if
+
+      ! partition: per layer, this rank holds the whole layer (strategy 1)
+      ! or one side only (strategy 2), and never both kinds of layer
+      allocate(nStaLayer(SM % numLayers), nRotLayer(SM % numLayers))
+      nStaLayer = 0
+      nRotLayer = 0
+      do i = 1, SM % nRingGlobal
+         if (SM % statorRing(i) % rank == MPI_Process % rank) then
+            nStaLayer(SM % statorRing(i) % Ax_Id) = nStaLayer(SM % statorRing(i) % Ax_Id) + 1
+         end if
+         if (SM % rotorRing(i) % rank == MPI_Process % rank) then
+            nRotLayer(SM % rotorRing(i) % Ax_Id) = nRotLayer(SM % rotorRing(i) % Ax_Id) + 1
+         end if
+      end do
+
+      nWhole = count(nStaLayer == SM % numElemsPerLayer .and. nRotLayer == SM % numElemsPerLayer)
+      nMixed = count(nStaLayer > 0 .and. nRotLayer > 0)
+      nHeld  = count(nStaLayer > 0 .or.  nRotLayer > 0)
+
+      if (nMixed > 0 .and. nWhole /= nHeld) then
+         write(STD_OUT,*) 'sliding: invalid partition on rank', MPI_Process % rank
+         write(STD_OUT,*) 'a rank must hold whole interface layers (strategy 1)'
+         write(STD_OUT,*) 'or a single side of each layer it touches (strategy 2)'
+         error stop
+      end if
+
       if (MPI_Process % isRoot) then
          write(STD_OUT,'(30X,A,A30,I0," x ",I0)') "->", "Interface ring: ", &
                SM % numElemsPerLayer, SM % numLayers
@@ -696,9 +740,8 @@ end subroutine SlidingBuildGlobalRings
 !  faces whose partner is local.
 !
 !  Rotating azimuths are stored in the rotating frame, phi - omega, so that
-!  Azim_Id is a property of the element and not of the current time: the two
-!  rings then align index by index, and a restart at any omega rebuilds the
-!  same directory.
+!  Azim_Id belongs to the element and does not change with time: the two
+!  rings then align index by index.
 ! ---------------------------------------------------------------------------
 subroutine CollectLocalRingEntries(mesh, rotorEnt, nRot, statorEnt, nSta)
    implicit none
@@ -771,7 +814,6 @@ subroutine CollectLocalRingEntries(mesh, rotorEnt, nRot, statorEnt, nSta)
             if (mesh % elements(eID) % sliding) then
                ! rotating frame, so that Azim_Id never depends on time
                e % phi = WrapPi(SM % phi(xc) - SM % omega)
-               mesh % elements(eID) % sliding_newnodes = .true.
 
                if (mesh % faces(fID) % faceType /= HMESH_MPI) then 
                   SM % nLocalSplitFaces = SM % nLocalSplitFaces+1
@@ -793,15 +835,7 @@ subroutine CollectLocalRingEntries(mesh, rotorEnt, nRot, statorEnt, nSta)
          end if
       end do
 
-      SM % numSlidingInterfaceElements = nRot ! local count
       SM % needsLocalSplit = (SM % nLocalSplitFaces > 0)
-
-      if (SM % nLocalSplitFaces > 0 .and. SM % nLocalSplitFaces < nRot) then
-         write(STD_OUT,*) 'sliding: rank', MPI_Process % rank, 'holds', &
-                          SM % nLocalSplitFaces, 'local interface faces out of', nRot, &
-                          ': the partition mixes strategies 1 and 2'
-         error stop
-      end if
    end associate
 
 end subroutine CollectLocalRingEntries
@@ -866,7 +900,7 @@ subroutine AllgatherRing(entMine, nMine, entAll, nAll)
    intDispl(1)  = 0
    realDispl(1) = 0
    do p = 2, MPI_Process % nProcs
-      intDispl(p)  = intDispl(p-1)  + intCount(p-1)
+      intDispl(p) = intDispl(p-1) + intCount(p-1)
       realDispl(p) = realDispl(p-1) + realCount(p-1)
    end do
 
@@ -1079,57 +1113,6 @@ subroutine SortRingEntries(ent, n, tolz)
    end do
 
 end subroutine SortRingEntries
-!
-!////////////////////////////////////////////////////////////////////////////////
-!
-! ---------------------------------------------------------------------------
-!  BuildSlidingMortarConnectivity
-!
-!  Records the rotating side of the interface: which local elements carry an
-!  interface face, which face, and its rotation index. Also lists the rotating
-!  elements away from the interface, which need no mortar.
-!
-!  Everything comes from localRotorEnt, produced geometrically by
-!  CollectLocalRingEntries. Nothing is looked up through a neighbour, which would
-!  fail silently across a partition boundary.
-!
-!  First step only.
-! ---------------------------------------------------------------------------
-subroutine BuildSlidingMortarConnectivity(mesh)
-   implicit none
-   ! =========================
-   ! Arguments
-   ! =========================
-   class(HexMesh), intent(inout)  :: mesh
-   ! =========================
-   ! Local variables
-   ! =========================
-   integer :: i, eID, elemCount
-
-   associate(SM => mesh % SlidingMesh)
-
-      ! rotating elements carrying an interface face 
-      do i = 1, SM % nLocalRotorEnt
-         SM % slidingMortarElems(i) = SM % localRotorEnt(i) % localEID
-         SM % slidingMortarConnectivity(i,1) = SM % localRotorEnt(i) % localEID
-         SM % slidingMortarConnectivity(i,4) = SM % localRotorEnt(i) % side
-         SM % slidingMortarConnectivity(i,7) = SM % localRotorEnt(i) % rotation
-      end do
-
-      ! rotating elements away from the interface 
-      elemCount = 0
-      do eID = 1, mesh % no_of_elements
-         if (mesh % elements(eID) % sliding .and. &
-             .not. mesh % elements(eID) % sliding_newnodes) then
-            elemCount = elemCount+1
-            SM % pureSlidingElems(elemCount) = eID
-         end if
-      end do
-      SM % numPureSlidingElems = elemCount
-
-   end associate
-
-end subroutine BuildSlidingMortarConnectivity
 !
 !////////////////////////////////////////////////////////////////////////////////
 !
@@ -1408,8 +1391,8 @@ end subroutine SlidingPruneMPIFaces
 !  Turns the cumulative angle omega into three things: sectorID, the number of
 !  whole element widths turned; localAngle, the remainder inside the sector; and
 !  isConforming, true when that remainder is zero and the two sides line up.
-!  Also nudges a remainder that sits within 1e-10 of a full sector up to the next
-!  one, so the near-conforming case does not produce a degenerate overlap.
+!  Stops if a step lands within 1e-10 of the next sector boundary, where one of
+!  the two mortars would be degenerate.
 ! ---------------------------------------------------------------------------
 subroutine GetSlidingTopologyState(omega, nElements, sectorID, isConforming, localAngle)
    use SMConstants
@@ -1453,56 +1436,33 @@ end subroutine GetSlidingTopologyState
 ! ---------------------------------------------------------------------------
 !  InitializeSlidingConnectivity
 !
-!  Prepares the stage: places the nodes through RotateSlidingRegion, and clears
-!  the mortar entries so nothing from the previous stage survives.
+!  Prepares the stage: rotates the region and computes the mortar offsets and
+!  scales (RotateSlidingRegion), moves the nodes on the first call only
+!  (SlidingRotateNodes), and clears the mortar entries so nothing from the
+!  previous stage survives.
 ! ---------------------------------------------------------------------------
-subroutine InitializeSlidingConnectivity(mesh, nodes, dTheta, offsetParams, &
-                                             scaleParams, originalNodeCount, totalNodeCount)
+subroutine InitializeSlidingConnectivity(mesh, dTheta, offsetParams, scaleParams)
    implicit none 
    ! =========================
    ! Arguments
    ! =========================
    class(HexMesh), intent(inout) :: mesh
-   integer, intent(in)           :: nodes
    real(kind=RP), intent(in)     :: dTheta                       
    real(kind=RP), intent(inout)  :: offsetParams(4)
    real(kind=RP), intent(inout)  :: scaleParams(4)
-   integer, intent(inout)        :: originalNodeCount
-   integer, intent(in)           :: totalNodeCount
    ! =========================
    ! Local variables
    ! =========================
-   type(Node), allocatable       :: new_nodes(:)
-   integer                       :: l, i, j
-   integer                       :: new_nNodes
+   integer :: l
 
-   ! Initialization
-   allocate(new_nodes(totalNodeCount))
-
-   new_nNodes = SIZE(mesh % nodes)
-
-   ! Initialize mortar mapping parameters
    offsetParams = 0.0_RP
-   scaleParams = 0.0_RP
+   scaleParams  = 0.0_RP
 
-   ! ======================================
-   ! Rotate sliding mesh region
-   ! - Update node coordinates
-   ! - Duplicate interface nodes if needed
-   ! ======================================
-   new_nNodes = SIZE(mesh % nodes)
+   call RotateSlidingRegion(mesh, dTheta, offsetParams, scaleParams)
 
-   call RotateSlidingRegion(mesh, dTheta, new_nNodes, new_nodes, &
-            mesh % SlidingMesh%slidingMortarElems, mesh % SlidingMesh%pureSlidingElems,  &
-            offsetParams, scaleParams, originalNodeCount)
-
-   ! Copy updated node coordinates
-   if (.not. mesh % SlidingMesh % active) then
-   do i = 1, size(mesh % nodes)
-      mesh % nodes(i) % X = new_nodes(i) % X
-      mesh % nodes(i) % GlobID = new_nodes(i) % GlobID
-   end do
-   end if
+   ! mesh % nodes only moves on the first call: afterwards the geometry is
+   ! rebuilt from SurfInfo, which RotateSlidingRegion rotates at every stage
+   if (.not. mesh % SlidingMesh % active) call SlidingRotateNodes(mesh, dTheta)
 
    ! Reset mortar face data
    if (allocated(mesh%mortar_faces)) then
@@ -1523,8 +1483,6 @@ subroutine InitializeSlidingConnectivity(mesh, nodes, dTheta, offsetParams, &
       end do
    end if
 
-   deallocate(new_nodes)
-
 end subroutine InitializeSlidingConnectivity
 !
 !////////////////////////////////////////////////////////////////////////////////
@@ -1532,68 +1490,38 @@ end subroutine InitializeSlidingConnectivity
 ! ---------------------------------------------------------------------------
 !  RotateSlidingRegion
 !
-!  Rotates the nodes of the rotating region, and derives the mortar mapping
-!  parameters from mortarShiftParam, the position inside the current sector in
-!  [-1,1]. offsetParams and scaleParams hold the start and the width of each of
-!  the four mortar pieces, two per family, in reference coordinates.
+!  Rotates the geometry of the rotating elements by dTheta: the corners or the
+!  face patches stored in SurfInfo, from which ConstructGeometry rebuilds the
+!  mappings. Also computes the mortar offsets and scales from the position
+!  inside the current sector. Called at every Runge-Kutta stage.
 ! ---------------------------------------------------------------------------
-subroutine RotateSlidingRegion(mesh, dTheta, newNodeCount, new_nodes, slidingMortarElems, &
-                            pureSlidingElems, offsetParams, scaleParams, originalNodeCount)
+subroutine RotateSlidingRegion(mesh, dTheta, offsetParams, scaleParams)
    implicit none
    ! =========================
    ! Arguments
    ! =========================
-   ! what turns, and by how much
    class(HexMesh), intent(inout) :: mesh
    real(kind=RP), intent(in)     :: dTheta                       ! rotation increment applied by this call:
                                                                  ! the RK stage fraction of theta, not theta itself
-   ! which elements are involved
-   integer,       intent(in)     :: slidingMortarElems(:)        ! interface elements, need mortars
-   integer,       intent(in)     :: pureSlidingElems(:)          ! elements fully inside the region
-   ! nodes: the interface splits, so the region gets its own copies
-   integer,       intent(inout)  :: newNodeCount
-   type(Node),    intent(inout)  :: new_nodes(newNodeCount)
-   integer,       intent(inout)  :: originalNodeCount
-   ! produced here, consumed by the mortar projections
    real(kind=RP), intent(inout)  :: offsetParams(4)              ! start of each mortar piece
    real(kind=RP), intent(inout)  :: scaleParams(4)               ! width of each mortar piece
    ! =========================
    ! Local variables
    ! =========================
-   real(KIND=RP) :: rotatedNodeCoords(8,3)       ! rotated coordinates of element nodes
-   real(KIND=RP) :: nodeCoord(3)                 ! temporary node coordinate
    integer :: i, j, uIdx, vIdx, cornerIdx
-   integer :: eID                                   ! element ID
-   real(kind=RP) :: mortarShiftParam                ! geometric parameter
+   integer :: eID
+   real(kind=RP) :: mortarShiftParam                ! position inside the sector, in [-1,1]
+   real(kind=RP) :: deltaTheta
    real(KIND=RP), allocatable :: facePatchPoints(:,:,:)
    real(KIND=RP), allocatable :: uNodes(:)
    real(KIND=RP), allocatable :: vNodes(:)
-   real(kind=RP) :: deltaTheta
 
-   ! Initialization
    offsetParams = 0.0_RP
    scaleParams  = 0.0_RP
-   rotatedNodeCoords = 0.0_RP
-   nodeCoord = 0.0_RP
 
-   ! Rotation-dependent scaling (linked to omega evolution)
+   ! Position inside the current sector
    deltaTheta       = 2.0_RP * PI / real(mesh % SlidingMesh % numElemsPerLayer, RP)
    mortarShiftParam = 1.0_RP - 2.0_RP * mesh % SlidingMesh % localAngle / deltaTheta
-
-   ! Copy existing nodes
-   do i = 1, size(mesh % nodes)
-      new_nodes(i)%X      = mesh % nodes(i)%X
-      new_nodes(i)%globID = mesh % nodes(i)%globID
-   end do
-
-   ! Mark nodes belonging to sliding elements
-   do i = 1, size(mesh % elements)
-      if (mesh % elements(i)%sliding) then
-         do j = 1, 8
-            new_nodes(mesh % elements(i)%nodeIDs(j))%tbrotated = .true.
-         end do
-      end if
-   end do
 
    ! Mortar geometric parameters
    offsetParams(1) = (mortarShiftParam - 1.0_RP) / 2.0_RP
@@ -1606,14 +1534,7 @@ subroutine RotateSlidingRegion(mesh, dTheta, newNodeCount, new_nodes, slidingMor
    scaleParams(3) = 1.0_RP - offsetParams(3)
    scaleParams(4) = offsetParams(4) + 1.0_RP
 
-   ! ===================================================
    ! Rotate sliding element geometry
-   ! - Applies rotation matrix to element corner nodes
-   ! - Updates surface representation:
-   !     * Linear faces (2x2 nodes)
-   !     * Curved face patches (high-order surfaces)
-   ! ===================================================
-
 !$omp parallel do schedule(runtime) default(shared) &
 !$omp private(i, eID, j, cornerIdx, uIdx, vIdx, uNodes, vNodes, facePatchPoints)
    do i = 1, mesh%no_of_elements
@@ -1666,51 +1587,46 @@ subroutine RotateSlidingRegion(mesh, dTheta, newNodeCount, new_nodes, slidingMor
    end do ! i
 !$omp end parallel do
 
-   ! Rotate interface sliding elements (with mortars)
-   do i = 1, size(slidingMortarElems)
-
-      ! empty slot: the rotor of this mortar row is on another rank
-      if (slidingMortarElems(i) <= 0) cycle
-
-      do j = 1, 8
-         nodeCoord = mesh % nodes(mesh % elements(slidingMortarElems(i)) % nodeIDs(j)) % X
-         call mesh % SlidingMesh % RotatePoint(dTheta, nodeCoord)
-         rotatedNodeCoords(j,:) = nodeCoord
-      end do
-
-      do j = 1, 8
-         if (.not. new_nodes(mesh % elements(slidingMortarElems(i)) % nodeIDs(j)) % rotated) then
-            new_nodes(mesh % elements(slidingMortarElems(i)) % nodeIDs(j)) % X = rotatedNodeCoords(j,:)
-            new_nodes(mesh % elements(slidingMortarElems(i)) % nodeIDs(j)) % rotated = .true.
-         end if
-      end do
-
-   end do
-
-   ! ===================================================
-   ! Rotate interior sliding elements (no mortars)
-   ! - Simple rotation of all nodes
-   ! - No duplication or connectivity updates
-   ! ===================================================
-
-   do i = 1, mesh % SlidingMesh % numPureSlidingElems
-      ! Rotate all nodes
-      do j = 1, 8
-         nodeCoord = mesh % nodes(mesh % elements(pureSlidingElems(i)) % nodeIDs(j)) % X
-         call mesh % SlidingMesh % RotatePoint(dTheta, nodeCoord)
-         rotatedNodeCoords(j,:) = nodeCoord
-      end do
-
-      ! Update node coordinates if not already rotated
-      do j = 1, 8
-         if (.not. new_nodes(mesh % elements(pureSlidingElems(i)) % nodeIDs(j)) % rotated) then
-            new_nodes(mesh % elements(pureSlidingElems(i)) % nodeIDs(j)) % X = rotatedNodeCoords(j,:)
-            new_nodes(mesh % elements(pureSlidingElems(i)) % nodeIDs(j)) % rotated = .true.
-         end if
-      end do
-   end do
-
 end subroutine RotateSlidingRegion
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+! ---------------------------------------------------------------------------
+!  SlidingRotateNodes
+!
+!  Rotates the nodes of the rotating elements by dTheta, each node once.
+!  First call only: afterwards nothing reads the node positions, the geometry
+!  is rebuilt from SurfInfo.
+! ---------------------------------------------------------------------------
+subroutine SlidingRotateNodes(mesh, dTheta)
+   implicit none
+   ! =========================
+   ! Arguments
+   ! =========================
+   class(HexMesh), intent(inout) :: mesh
+   real(kind=RP),  intent(in)    :: dTheta
+   ! =========================
+   ! Local variables
+   ! =========================
+   logical, allocatable :: done(:)
+   integer :: eID, j, nID
+
+   allocate(done(size(mesh % nodes)))
+   done = .false.
+
+   do eID = 1, mesh % no_of_elements
+      if (.not. mesh % elements(eID) % sliding) cycle
+      do j = 1, 8
+         nID = mesh % elements(eID) % nodeIDs(j)
+         if (done(nID)) cycle
+         call mesh % SlidingMesh % RotatePoint(dTheta, mesh % nodes(nID) % X)
+         done(nID) = .true.
+      end do
+   end do
+
+   deallocate(done)
+
+end subroutine SlidingRotateNodes
 !
 !////////////////////////////////////////////////////////////////////////////////
 !
@@ -1757,8 +1673,6 @@ subroutine UpdateSlidingMortarsConnectivity(mesh, sectorID)
 
       ! one entry per static row I own, both mortar families in it 
       SM % slidingMortarConnectivity = 0
-      SM % slidingMortarElems = 0
-      SM % mortarNeighborElems = 0
 
       do m = 1, SM % nMasterRows
          j = SM % myMasterRows(m)
@@ -1783,9 +1697,6 @@ subroutine UpdateSlidingMortarsConnectivity(mesh, sectorID)
          SM % slidingMortarConnectivity(m,10:13) = SM % rotorRing(rows(1)) % quad   ! Mortarpos 1 slave
          SM % slidingMortarConnectivity(m,14:17) = SM % rotorRing(rows(0)) % quad   ! Mortarpos 0 slave
          SM % slidingMortarConnectivity(m,18:21) = SM % statorRing(j)      % quad   ! master
-
-         SM % slidingMortarElems(m)  = SM % rotorLocalElem(rows(1))
-         SM % mortarNeighborElems(m) = SM % statorLocalElem(j)
       end do
 
    end associate
@@ -1892,32 +1803,25 @@ end subroutine SlidingSplitInterfaceFaces
 ! ---------------------------------------------------------------------------
 !  ConstructSlidingMortars
 !
-!  Builds mesh % mortar_faces, two per static interface face: Mortarpos 0 and 1
-!  cover the two halves of the overlap. Each gets its master and slave element
-!  and face, its rotation, its offset and scale, then LinkWithElements and
-!  geom % construct.
+!  Builds the mortars when both sides are on this rank (sequential and
+!  strategy 1). Two mortars per static interface face: Mortarpos 0 and 1
+!  cover the two parts of the overlap. Each gets its two elements and faces,
+!  its rotation, offset and scale, its projection matrices (LinkWithElements)
+!  and its geometry.
 !
-!  Rotation and offsets come from the orientation tags of the current pair.
-!  Each mortar builds its own projection matrices in LinkWithElements.
+!  At localAngle = 0, Mortarpos 0 has scale 1 and covers the whole face;
+!  Mortarpos 1 has scale 0 and contributes nothing.
 !
-!  At localAngle = 0 the formula gives scale 1 to Mortarpos 0 and scale 0 to
-!  Mortarpos 1: the first family is the conforming pair, the second is
-!  neutralised by a null projection.
-!
-!  Runs at every call, that is every Runge-Kutta stage. A zero element means
-!  the other side is on another rank.
+!  Called at every Runge-Kutta stage.
 ! ---------------------------------------------------------------------------
-subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidingMortarElems, &
-                                    slidingMortarConnectivity, offsetParams, scaleParams)
+subroutine ConstructSlidingMortars(mesh, nodes, nelm, slidingMortarConnectivity, offsetParams, scaleParams)
    implicit none
-   ! ==========
+   ! ================
    ! Arguments
-   ! ==========
+   ! ================
    class(HexMesh), intent(inout) :: mesh
    integer, intent(in)           :: nodes
    integer, intent(in)           :: nelm
-   integer, intent(in)           :: mortarNeighborElems(nelm)
-   integer, intent(in)           :: slidingMortarElems(nelm)
    integer, intent(in)           :: slidingMortarConnectivity(nelm,21)
    real(kind=RP), intent(in)     :: offsetParams(4)
    real(kind=RP), intent(in)     :: scaleParams(4)
@@ -1938,7 +1842,7 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
 
       ! The master is the same static face for both families
       masterElementID = slidingMortarConnectivity(i,3)
-      if (masterElementID <= 0) cycle ! master on another rank: SlidingMPIMortars
+      if (masterElementID <= 0) cycle ! unused row
       masterFaceNumber = slidingMortarConnectivity(i,6)
       masterFaceID = mesh % elements(masterElementID) % faceIDs(masterFaceNumber)
 
@@ -1963,7 +1867,7 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
             slaveElementID  = slidingMortarConnectivity(i,1)
             slaveFaceNumber = slidingMortarConnectivity(i,4)
          end if
-         if (slaveElementID <= 0) cycle ! slave on another rank: SlidingMPIMortars
+         if (slaveElementID <= 0) cycle ! unused row
 
          !Orientation tags of this pair, for the current sector
          masterQuad = slidingMortarConnectivity(i,18:21)
@@ -2015,6 +1919,7 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
    end do
 
    ! Link mortar faces with neighbouring elements
+!$omp parallel do schedule(runtime) if (mesh % SlidingMesh % active) private(i, NelL, NelR)
    do i = 1, size(mesh % mortar_faces)
       associate(f => mesh % mortar_faces(i))
          if (f % elementIDs(1) <= 0 .or. f % elementIDs(2) <= 0) cycle
@@ -2026,8 +1931,10 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
          end associate
       end associate
    end do
+!$omp end parallel do
 
-   !Mortar geometrical mappings
+   ! Mortar geometrical mappings
+!$omp parallel do schedule(runtime) if (mesh % SlidingMesh % active) private(i, NelL, NelR, jmax)
    do i = 1, size(mesh % mortar_faces)
       associate(f => mesh % mortar_faces(i))
          if (f % elementIDs(1) <= 0 .or. f % elementIDs(2) <= 0) cycle
@@ -2059,8 +1966,182 @@ subroutine ConstructSlidingMortars(mesh, nodes, nelm, mortarNeighborElems, slidi
 
       end associate
    end do
+!$omp end parallel do
 
 end subroutine ConstructSlidingMortars
+!
+!////////////////////////////////////////////////////////////////////////////////
+!
+! ---------------------------------------------------------------------------
+!  SlidingConstructSplitMortars
+!
+!  Strategy 2: builds the mortars whose two sides are on different ranks. Each
+!  rank builds its own copy. The static rank gets the full mortar with its
+!  geometry, the rotating rank a light copy without geometry
+!  (elementIDs(1) = 0). What a rank does not know about the remote element
+!  comes from the directory.
+!
+!  Called at every Runge-Kutta stage.
+! ---------------------------------------------------------------------------
+subroutine SlidingConstructSplitMortars(mesh, nodes, offsetParams, scaleParams)
+   implicit none
+   ! =========================
+   ! Arguments
+   ! =========================
+   class(HexMesh), intent(inout) :: mesh
+   integer,        intent(in)    :: nodes
+   real(kind=RP),  intent(in)    :: offsetParams(4)
+   real(kind=RP),  intent(in)    :: scaleParams(4)
+   ! =========================
+   ! Local variables
+   ! =========================
+   integer :: m, j, r, k, Mortarpos, mortarIndex, rows(0:1)
+   integer :: eID, side, fID
+   integer :: NelL(2), NelR(2)
+   integer :: mortarFaceNodeIDs(4), masterQuad(4), slaveQuad(4)
+   real(kind=RP) :: jmax
+
+   if (.not. MPI_Process % doMPIAction) return
+
+   associate(SM => mesh % SlidingMesh)
+
+!     Static side: the full mortar
+!$omp parallel do schedule(runtime) if (SM % active) &
+!$omp private(m, j, rows, eID, side, fID, k, mortarFaceNodeIDs, NelL, NelR, &
+!$omp masterQuad, slaveQuad, Mortarpos, r, mortarIndex, jmax)
+      do m = 1, SM % nMasterRows
+         j = SM % myMasterRows(m)
+         call SlidingSlaveRows(SM, j, SM % currentSectorID, rows)
+
+         eID  = SM % statorLocalElem(j)
+         side = SM % statorRing(j) % side
+         fID  = mesh % elements(eID) % faceIDs(side)
+         do k = 1, 4
+            mortarFaceNodeIDs(k) = mesh % elements(eID) % nodeIDs(localFaceNode(k, side))
+         end do
+         NelL       = mesh % elements(eID) % Nxyz(axisMap(:, side))
+         masterQuad = SM % statorRing(j) % quad
+
+         if (.not. allocated(mesh % faces(fID) % Mortar)) then
+            allocate(mesh % faces(fID) % Mortar(2))
+            mesh % faces(fID) % Mortar = 0
+         end if
+
+         do Mortarpos = 0, 1
+            r = rows(Mortarpos)
+            if (SM % rotorLocalElem(r) > 0) cycle      ! both sides local: ConstructSlidingMortars
+
+            mortarIndex = MortarSlot(SM, Mortarpos, m)
+            NelR        = SM % rotorRing(r) % Nel
+            slaveQuad   = SM % rotorRing(r) % quad
+
+            associate(f => mesh % mortar_faces(mortarIndex))
+
+            call f % Construct(ID = mortarIndex, nodeIDs = mortarFaceNodeIDs, &
+                               elementID = eID, side = side)
+            f % Mortarpos = Mortarpos
+            f % FaceType  = HMESH_INTERIOR
+
+            if (.not. allocated(f % Mortar)) allocate(f % Mortar(2))
+            f % Mortar = [fID, 0]                      ! slave face on another rank
+            mesh % faces(fID) % Mortar(1 + Mortarpos) = mortarIndex
+
+            f % elementIDs(2)  = 0                     ! slave element on another rank
+            f % elementSide(2) = SM % rotorRing(r) % side
+
+            mesh % elements(eID) % faceSide(side)    = 1
+            mesh % elements(eID) % MortarFaces(side) = 3
+
+            call SetSlidingMortarPlacement(f, masterQuad, slaveQuad, SM % statorRing(j) % dir, &
+                                           Mortarpos, offsetParams, scaleParams)
+            call f % LinkWithElements(NelL, NelR, nodes, f % offset, f % s)
+
+            associate(eL => mesh % elements(eID))
+            if (f % s(1) > 0.0_RP) then
+               call f % geom % construct(f % Nf, f % NelLeft, f % NfLeft, eL % Nxyz, &
+                                         eL % geom, eL % hexMap, f % elementSide(1), &
+                                         f % projectionType(1), 1, 0, .true.,        &
+                                         f % MIntSliding(:,:,1), f % s(1), f % slidingDir)
+            else
+               call f % geom % construct(f % Nf, f % NelLeft, f % NfLeft, eL % Nxyz, &
+                                         eL % geom, eL % hexMap, f % elementSide(1), &
+                                         f % projectionType(1), 1, 0)
+            end if
+            end associate
+
+            jmax = maxval(f % geom % jacobian)
+            if (jmax <= 0.0_RP) then
+               write(STD_OUT,*) 'FATAL: degenerate mortar face, fID=', f % ID
+               error stop
+            end if
+            ! The slave element is not local: its minimum jacobian is in the directory
+            f % geom % h = SM % rotorRing(r) % jacMin / jmax
+
+            end associate
+         end do
+      end do
+!$omp end parallel do
+
+      ! Rotating side: the reduced record, no geometry
+      do m = 1, SM % nSlaveRows
+         j = SM % mySlaveRows(m)
+         if (SM % statorLocalElem(j) > 0) cycle        ! both sides local: ConstructSlidingMortars
+         call SlidingSlaveRows(SM, j, SM % currentSectorID, rows)
+
+         NelL       = SM % statorRing(j) % Nel
+         masterQuad = SM % statorRing(j) % quad
+
+         do Mortarpos = 0, 1
+            r = rows(Mortarpos)
+            if (SM % rotorLocalElem(r) <= 0) cycle     ! this half is not mine
+
+            mortarIndex = MortarSlot(SM, Mortarpos, m)
+
+            eID  = SM % rotorLocalElem(r)
+            side = SM % rotorRing(r) % side
+            fID  = mesh % elements(eID) % faceIDs(side)
+            do k = 1, 4
+               mortarFaceNodeIDs(k) = mesh % elements(eID) % nodeIDs(localFaceNode(k, side))
+            end do
+            NelR      = mesh % elements(eID) % Nxyz(axisMap(:, side))
+            slaveQuad = SM % rotorRing(r) % quad
+
+            if (.not. allocated(mesh % faces(fID) % Mortar)) then
+               allocate(mesh % faces(fID) % Mortar(2))
+               mesh % faces(fID) % Mortar = 0
+            end if
+
+            associate(f => mesh % mortar_faces(mortarIndex))
+
+            call f % Construct(ID = mortarIndex, nodeIDs = mortarFaceNodeIDs, &
+                               elementID = eID, side = side)
+            f % Mortarpos = Mortarpos
+            f % FaceType  = HMESH_INTERIOR
+
+!           Mirror of the static copy: the local element sits on side 2,
+!           elementIDs(1) = 0 marks the record as reduced
+            f % elementIDs  = [0, eID]
+            f % elementSide = [SM % statorRing(j) % side, side]
+
+            if (.not. allocated(f % Mortar)) allocate(f % Mortar(2))
+            f % Mortar = [0, fID]                      ! master face on another rank
+            mesh % faces(fID) % Mortar(2 - Mortarpos) = mortarIndex
+
+            mesh % elements(eID) % faceSide(side)    = 2
+            mesh % elements(eID) % MortarFaces(side) = 4
+
+            call SetSlidingMortarPlacement(f, masterQuad, slaveQuad, SM % statorRing(j) % dir, &
+                                           Mortarpos, offsetParams, scaleParams)
+            call f % LinkWithElements(NelL, NelR, nodes, f % offset, f % s)
+!           No geometry: this side never solves a Riemann problem
+
+            end associate
+         end do
+      end do
+
+   end associate
+
+end subroutine SlidingConstructSplitMortars
 !
 !////////////////////////////////////////////////////////////////////////////////
 !

@@ -105,13 +105,13 @@ module SpatialDiscretization
             case ( "split-form")
                print*, "There are no split-forms available for the Multiphase Solver"
                errorMessage(STD_OUT)
-               stop
+               error stop
             case default
                write(STD_OUT,'(A,A,A)') 'Requested inviscid discretization "',trim(inviscidDiscretizationName),'" is not implemented.'
                write(STD_OUT,'(A)') "Implemented discretizations are:"
                write(STD_OUT,'(A)') "  * Standard"
                errorMessage(STD_OUT)
-               stop 
+               error stop 
 
             end select
                
@@ -122,7 +122,7 @@ module SpatialDiscretization
                if ( .not. controlVariables % ContainsKey(viscousDiscretizationKey) ) then
                   print*, "Input file is missing entry for keyword: viscous discretization"
                   errorMessage(STD_OUT)
-                  stop
+                  error stop
                end if
 
                viscousDiscretizationName = controlVariables % stringValueForKey(viscousDiscretizationKey, requestedLength = LINE_LENGTH)
@@ -145,7 +145,7 @@ module SpatialDiscretization
                   write(STD_OUT,'(A)') "  * BR2"
                   write(STD_OUT,'(A)') "  * IP"
                   errorMessage(STD_OUT)
-                  stop 
+                  error stop 
 
                end select
 
@@ -165,7 +165,7 @@ module SpatialDiscretization
             if ( .not. controlVariables % ContainsKey(CHDiscretizationKey) ) then
                print*, "Input file is missing entry for keyword: Cahn-Hilliard discretization"
                errorMessage(STD_OUT)
-               stop
+               error stop
             end if
    
             CHDiscretizationName = controlVariables % stringValueForKey(CHDiscretizationKey, requestedLength = LINE_LENGTH)
@@ -188,7 +188,7 @@ module SpatialDiscretization
                write(STD_OUT,'(A)') "  * BR2"
                write(STD_OUT,'(A)') "  * IP"
                errorMessage(STD_OUT)
-               stop 
+               error stop 
    
             end select
    
@@ -1589,18 +1589,19 @@ module SpatialDiscretization
                end if
             end do
 !$omp end do 
-            !$omp single
-            if ( mesh % nonconforming ) then
-               call mesh % UpdateMPIFacesMortarflux(NCONS)
-            end if
-      !$omp end single
-      
-      
-      !$omp single
-            if ( mesh % nonconforming ) then
-               call mesh % GatherMPIFacesMortarFlux(NCONS)         
-            end if
-      !$omp end single
+
+!$omp single
+   if ( mesh % nonconforming ) then
+      call mesh % UpdateMPIFacesMortarflux(NCOMP)
+   end if
+!$omp end single
+
+
+!$omp single
+   if ( mesh % nonconforming ) then
+      call mesh % GatherMPIFacesMortarFlux(NCOMP)
+   end if
+!$omp end single
       
 !
 !           ***********************************************************
@@ -1853,8 +1854,8 @@ module SpatialDiscretization
          call f % ProjectFluxToElements(NCOMP, flux, (/1,2/))
       end if 
       if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace)) then 
-         call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), slaveFace=f, MortarFlux=flux)
-         call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
+         call masterFace % ProjectMortarFluxToElements(nEqn=NCOMP, whichElements=(/1,0/), slaveFace=f, MortarFlux=flux)
+         call f % ProjectFluxToElements(NCOMP, flux, (/0,2/))
         end if 
       end subroutine Laplacian_computeElementInterfaceFlux
 
@@ -1908,7 +1909,7 @@ module SpatialDiscretization
          call f % ProjectFluxToElements(NCOMP, flux, (/thisSide, HMESH_NONE/))
 
          if (f % MortarType == MORTAR_SMALL4) then 
-            call f% Interpolatesmall2big(NCONS, flux)
+            call f% Interpolatesmall2big(NCOMP, flux)
             
          end if 
       end subroutine Laplacian_ComputeMPIFaceFlux

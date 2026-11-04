@@ -482,7 +482,6 @@ MODULE HexMeshClass
                   self % faces(faceID) % rotation       = faceRotation(masterNodeIDs = self % faces(faceID) % nodeIDs, &
                                                                        slaveNodeIDs  = faceNodeIDs                      )
                   !self % faces(faceID) % rotation       = 0
-                  !write(*,*) 'rotation', self % faces(faceID) % rotation
 
                ELSE
 !
@@ -1093,7 +1092,6 @@ slavecoord:             DO l = 1, 4
    IF (coord == 0) THEN
 
       DO i = 1,3
-         write(*,*) 'comparing', x1(i), 'with', x2(i)
          IF ( AlmostEqual( x1(i), x2(i), tol ) ) THEN
             counter = counter + 1
          ELSE
@@ -1163,7 +1161,6 @@ slavecoord:             DO l = 1, 4
       IF (coord == 0) THEN
 
          DO i = 1,3
-            !write(*,*) 'comparing', x1(i), 'with', x2(i)
             IF ( AlmostEqual( x1(i), x2(i), tol ) ) THEN
                counter = counter + 1
             ELSE
@@ -2126,7 +2123,7 @@ subroutine HexMesh_UpdateMPIFacesMortarFlux(self, nEqn)
                if (f % MortarType == MORTAR_SMALL4) then
                   do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                      MPIfaces % faces(domain) % Flux_M_Send(counter:counter+nEqn-1) = &
-                        f % storage(1) % MortarFlux(:,i,j)
+                        f % storage(1) % MortarFlux(1:nEqn,i,j)
                      counter = counter + nEqn
                   end do               ; end do
                end if
@@ -2194,17 +2191,17 @@ subroutine HexMesh_UpdateMPIFacesGradMortarFlux(self, nEqn)
          if (f % MortarType == MORTAR_SMALL4) then
             do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                  f % storage(1) % GradMortarFlux(:,1,i,j)
+                  f % storage(1) % GradMortarFlux(1:nEqn,1,i,j)
                counter = counter + nEqn
             end do               ; end do
             do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                  f % storage(1) % GradMortarFlux(:,2,i,j)
+                  f % storage(1) % GradMortarFlux(1:nEqn,2,i,j)
                counter = counter + nEqn
             end do               ; end do
             do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                MPIfaces % faces(domain) % GradFlux_M_Send(counter:counter+nEqn-1) = &
-                  f % storage(1) % GradMortarFlux(:,3,i,j)
+                  f % storage(1) % GradMortarFlux(1:nEqn,3,i,j)
                counter = counter + nEqn
             end do               ; end do
          end if
@@ -3601,18 +3598,18 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
                   call e % Connection(sideL) % construct (globID,Nxyz)
                   counter = counter + 6
                case (1)
-                  sideL = f % elementSide(side)                                  ! element side 1/2/3/4/5/6
- 
-                  Nel(:,      side ) = e % Nxyz(axisMap(:,sideL))
-                  Nel(:,other(side))= Nel(:,      side ) 
-                  call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes)
- 
-                  Nxyz   = self % MPIfaces % faces(domain) % Nrecv(counter+2:counter+4)
-                  globID = self % MPIfaces % faces(domain) % Nrecv(counter+5)
- 
-                  e % NumberOfConnections (sideL) = 1
-                  call e % Connection(sideL) % construct (globID,Nxyz)
-                  counter = counter + 6 
+                 sideL = f % elementSide(side)                                  ! element side 1/2/3/4/5/6
+
+                 Nel(:, side ) = e % Nxyz(axisMap(:,sideL))
+                 Nel(:,other(side))= Nel(:, side ) 
+                 call f % LinkWithElements(Nel(:,1), Nel(:,2), nodes)
+
+                 Nxyz   = self % MPIfaces % faces(domain) % Nrecv(counter+2:counter+4)
+                 globID = self % MPIfaces % faces(domain) % Nrecv(counter+5)
+
+                 e % NumberOfConnections (sideL) = 1
+                 call e % Connection(sideL) % construct (globID,Nxyz)
+                 counter = counter + 6
                end select 
                  end associate
                  end associate
@@ -4119,10 +4116,12 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
 !        Construct elements' geometry
 !        ----------------------------
 !
+!$omp parallel private(ii, eID, hexMap, hex8Map, genHexMap)
          allocate(hex8Map)
          call hex8Map % constructWithCorners(corners)
          allocate(genHexMap)
 
+!$omp do schedule(runtime)
          do ii=1, num_of_elements
             if ( present(elementList) ) then
                eID = elementList(ii)
@@ -4143,11 +4142,19 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
             call self % elements(eID) % ConstructGeometry (hexMap)
 
          end do
-!
+!$omp end do
+
+         CALL hex8Map % destruct()
+         DEALLOCATE(hex8Map)
+         CALL genHexMap % destruct()
+         DEALLOCATE(genHexMap)
+         nullify(hexMap)
+!$omp end parallel
 !        -------------------------
 !        Construct faces' geometry
 !        -------------------------
 !
+!$omp parallel do schedule(runtime) private(ii, fID, side, Nel, Nelf, rot)
          do ii=1, num_of_faces
             if ( present(facesList) ) then
                fID = facesList(ii)
@@ -4222,11 +4229,13 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
             end associate
 
          end do
+!$omp end parallel do
 !
 !        ------------------------------------------------------
 !        Compute the faces minimum orthogonal distance estimate
 !        ------------------------------------------------------
 !
+!$omp parallel do schedule(runtime) private(ii, fID, thisSide)
          do ii = 1, num_of_faces
             if ( present(facesList) ) then
                fID = facesList(ii)
@@ -4236,7 +4245,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
             associate(f => self % faces(fID))
             select case(f % faceType)
             case(HMESH_INTERIOR)
-               if (f % MortarType == MORTAR_NONE .OR. f % MortarType == MORTAR_SMALL4) then 
+               if (f % MortarType == MORTAR_NONE .OR. f % MortarType == MORTAR_SMALL4) then
                f % geom % h = min(minval(self % elements(f % elementIDs(1)) % geom % jacobian), &
                                   minval(self % elements(f % elementIDs(2)) % geom % jacobian)) &
                         / maxval(f % geom % jacobian)
@@ -4259,6 +4268,7 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
             end select
             end associate
          end do
+!$omp end parallel do
 
          if ( MPI_Process % doMPIAction ) then
             call CommunicateMPIFaceMinimumDistance(self)
@@ -4270,11 +4280,6 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
 !        ---------
 !
          deallocate (SurfInfo)
-         CALL hex8Map % destruct()
-         DEALLOCATE(hex8Map)
-         CALL genHexMap % destruct()
-         DEALLOCATE(genHexMap)
-		 nullify(hexMap)
 
       end subroutine HexMesh_ConstructGeometry
 
@@ -4635,6 +4640,13 @@ end subroutine HexMesh_UpdateMPIFacesGradMortarFluxJac
          refs(V_REF)     = refValues      % V
          refs(T_REF)     = 0.0_RP
          refs(MACH_REF)  = 0.0_RP
+#elif defined(ACOUSTIC)
+         refs(GAMMA_REF) = thermodynamics % gamma
+         refs(RGAS_REF) = thermodynamics % R
+         refs(RHO_REF) = refValues % rho
+         refs(V_REF) = refValues % V
+         refs(T_REF) = refValues % T
+         refs(MACH_REF) = dimensionless % Mach
 #else
          refs = 0.0_RP
 #endif
@@ -6193,7 +6205,7 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
     Subroutine HexMesh_SetUniformBaseFlow(self,Q_in)
         Implicit None
          CLASS(HexMesh)                  :: self
-         real(kind=RP), dimension(1:NCONS), intent(in)  :: Q_in
+         real(kind=RP), dimension(1:NCONSB), intent(in) :: Q_in
 !
 !        ---------------
 !        Local variables
@@ -6201,7 +6213,7 @@ subroutine HexMesh_InitializeBaseFlow(self, controlVariables)
          INTEGER                        :: eID, eq
 
          do eID = 1, size(self % elements)
-            do eq = 1,NCONS
+            do eq = 1,NCONSB
                 self % elements(eID) % storage % Qbase(eq,:,:,:) = Q_in(eq)
             end do
          end do
@@ -7071,6 +7083,7 @@ subroutine HexMesh_ProlongBaseSolutionToFaces(self, nEqn)
       character(len=LINE_LENGTH) :: time_int
       character(len=LINE_LENGTH) :: mg_smoother
       real(kind=RP), dimension(:,:,:),     pointer :: Qff
+      integer :: slotRef, slotSz
       !-----------------------------------------------------------
 
       if ( present(Face_Storage) ) then
@@ -7143,15 +7156,29 @@ subroutine HexMesh_ProlongBaseSolutionToFaces(self, nEqn)
          end do
       end if
 
-      if (self % slidingMesh % active) then 
+      if (self % slidingMesh % active) then
+         ! Mortar storage is allocated once, but a slot that is empty now can
+         ! receive a mortar later, after the rotor has turned. Empty slots are
+         ! therefore sized like a used one (same order on the whole interface).
+         slotRef = 0
          do fID = 1, size(self % mortar_faces)
-            associate ( f => self % mortar_faces(fID) )
-                  call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
-                  call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
-            end associate
-         end do 
-      end if 
+            if (maxval(self % mortar_faces(fID) % elementIDs) > 0) then
+               slotRef = fID
+               exit
+            end if
+         end do
 
+         do fID = 1, size(self % mortar_faces)
+            slotSz = fID
+            if (maxval(self % mortar_faces(fID) % elementIDs) <= 0) slotSz = slotRef
+            if (slotSz == 0) cycle
+            associate ( f => self % mortar_faces(fID), g => self % mortar_faces(slotSz) )
+                  call f % storage(1) % Construct(NDIM, g % Nf, g % NelLeft , computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
+                  call f % storage(2) % Construct(NDIM, g % Nf, g % NelRight, computeGradients, .FALSE., FaceComputeQdot, Mortar=.TRUE.)
+            end associate
+         end do
+      end if
+      
 !     Point element storage
 !     ---------------------
       DO eID = 1, SIZE(self % elements)

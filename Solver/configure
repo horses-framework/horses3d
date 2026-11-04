@@ -107,6 +107,10 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./Multiphase/Pipe \
             ./Multiphase/Monopole_pAdaptationRL \
             ./Multiphase/ActuatorLineInterpolation \
+            ./Multiphase/MeshPartitioningPolicies/Custom \
+            ./Multiphase/MeshPartitioningPolicies/FixedRatio \
+            ./Multiphase/MeshPartitioningPolicies/Proportional \
+            ./Multiphase/MeshPartitioningPolicies/Shared \
             ./Particles/FreeFall \
             ./Particles/RadiationHeat \
             ./Particles/Pouransari \
@@ -130,6 +134,10 @@ COMPONENTS_TEST_CASES="FacePatches \
 ADDONS="./AddOns/horsesConverter/MappingResult \
         ./AddOns/horsesConverter/HorsesMesh2OF \
         ./AddOns/horsesConverter/OF2Horses"
+
+# Test cases of horses.tools: they also use the solvers and a problem file
+TOOLS_TEST_CASES="./AddOns/MeshInterpolation"
+TEST_CASES="$TEST_CASES $TOOLS_TEST_CASES"
 
 cp -vf ../utils/modulefile/horses/dev-default ../utils/modulefile/horses/dev
 sed -i -e "s#@HORSES_HOME_DIR#$PWD#g" ../utils/modulefile/horses/dev
@@ -184,6 +192,10 @@ done
 
 for subdir in $ADDONS; do
 	ln -fsv $PWD/bin/horsesConverter ./test/$subdir
+done
+
+for subdir in $TOOLS_TEST_CASES; do
+	ln -fsv $PWD/bin/horses.tools ./test/$subdir
 done
 
 # Comment gradients as it is outdated

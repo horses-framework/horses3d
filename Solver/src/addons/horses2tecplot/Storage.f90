@@ -175,6 +175,12 @@ module Storage
          if (hasBoundaries) then
                call readBoundaryFile(self % boundaries)
          end if
+         
+!        Read mpi ranks (if present)
+!        ---------------------------
+         if (hasMPIranks) then
+               call readPartitionFile(self)
+         end if
 !
 !        Describe the mesh
 !        -----------------

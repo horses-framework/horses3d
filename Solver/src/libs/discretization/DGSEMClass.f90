@@ -35,6 +35,7 @@ Module DGSEMClass
    use MPI_Utilities,        only: MPI_MinMax
 #ifdef _HAS_MPI_
    use mpi
+   use SlidingMPIMortars, only: SlidingDestructMPIMortars
 #endif
 
    IMPLICIT NONE
@@ -535,7 +536,11 @@ Module DGSEMClass
 	  else 
 		 destMonitor = .TRUE.
       end if
-	  ! Destruct Mesh 
+
+#ifdef _HAS_MPI_
+      if (self % mesh % SlidingMesh % active) call SlidingDestructMPIMortars()
+#endif
+	  ! Destruct Mesh
       call self % mesh % destruct
 	  
       if ( destMonitor) then
