@@ -533,6 +533,7 @@ module SpatialDiscretization
 !        ----------------------------------------
 !
          call ViscousDiscretization % ComputeLocalGradients( NCONS, NCONS, mesh , time , mGradientVariables, element_mask=element_mask,  Level = locLevel)
+!$omp barrier
 !
 !        --------------------
 !        Update MPI Gradients
@@ -556,35 +557,33 @@ module SpatialDiscretization
             
             if (compute_element) then
 
-               associate(e => mesh % elements(eID))
-               do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-                  sqrtRho = sqrt(e % storage % rho(i,j,k))
+               do k = 0, mesh % elements(eID) % Nxyz(3) ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1)
+                  sqrtRho = sqrt(mesh % elements(eID) % storage % rho(i,j,k))
 
-                  invMa2 = e % storage % invMa2(i,j,k)
+                  invMa2 = mesh % elements(eID) % storage % invMa2(i,j,k)
 
-                  e % storage % QDot(IMC,i,j,k)      = 0.0_RP
-                  e % storage % QDot(IMSQRHOU,i,j,k) = -0.5_RP*sqrtRho*(  e % storage % Q(IMSQRHOU,i,j,k)*e % storage % U_x(IGU,i,j,k) & 
-                                                                        + e % storage % Q(IMSQRHOV,i,j,k)*e % storage % U_y(IGU,i,j,k) &   
-                                                                        + e % storage % Q(IMSQRHOW,i,j,k)*e % storage % U_z(IGU,i,j,k) ) &
-                                                       - e % storage % Q(IMC,i,j,k)*e % storage % U_x(IGMU,i,j,k)
+                  mesh % elements(eID) % storage % QDot(IMC,i,j,k)      = 0.0_RP
+                  mesh % elements(eID) % storage % QDot(IMSQRHOU,i,j,k) = -0.5_RP*sqrtRho*(  mesh % elements(eID) % storage % Q(IMSQRHOU,i,j,k)*mesh % elements(eID) % storage % U_x(IGU,i,j,k) & 
+                                                                        + mesh % elements(eID) % storage % Q(IMSQRHOV,i,j,k)*mesh % elements(eID) % storage % U_y(IGU,i,j,k) &   
+                                                                        + mesh % elements(eID) % storage % Q(IMSQRHOW,i,j,k)*mesh % elements(eID) % storage % U_z(IGU,i,j,k) ) &
+                                                       - mesh % elements(eID) % storage % Q(IMC,i,j,k)*mesh % elements(eID) % storage % U_x(IGMU,i,j,k)
 
-                  e % storage % QDot(IMSQRHOV,i,j,k) = -0.5_RP*sqrtRho*(  e % storage % Q(IMSQRHOU,i,j,k)*e % storage % U_x(IGV,i,j,k) & 
-                                                                        + e % storage % Q(IMSQRHOV,i,j,k)*e % storage % U_y(IGV,i,j,k) &   
-                                                                        + e % storage % Q(IMSQRHOW,i,j,k)*e % storage % U_z(IGV,i,j,k) ) &
-                                                       - e % storage % Q(IMC,i,j,k)*e % storage % U_y(IGMU,i,j,k)
+                  mesh % elements(eID) % storage % QDot(IMSQRHOV,i,j,k) = -0.5_RP*sqrtRho*(  mesh % elements(eID) % storage % Q(IMSQRHOU,i,j,k)*mesh % elements(eID) % storage % U_x(IGV,i,j,k) & 
+                                                                        + mesh % elements(eID) % storage % Q(IMSQRHOV,i,j,k)*mesh % elements(eID) % storage % U_y(IGV,i,j,k) &   
+                                                                        + mesh % elements(eID) % storage % Q(IMSQRHOW,i,j,k)*mesh % elements(eID) % storage % U_z(IGV,i,j,k) ) &
+                                                       - mesh % elements(eID) % storage % Q(IMC,i,j,k)*mesh % elements(eID) % storage % U_y(IGMU,i,j,k)
 
-                  e % storage % QDot(IMSQRHOW,i,j,k) = -0.5_RP*sqrtRho*(  e % storage % Q(IMSQRHOU,i,j,k)*e % storage % U_x(IGW,i,j,k) & 
-                                                                        + e % storage % Q(IMSQRHOV,i,j,k)*e % storage % U_y(IGW,i,j,k) &   
-                                                                        + e % storage % Q(IMSQRHOW,i,j,k)*e % storage % U_z(IGW,i,j,k) ) &
-                                                       - e % storage % Q(IMC,i,j,k)*e % storage % U_z(IGMU,i,j,k)
+                  mesh % elements(eID) % storage % QDot(IMSQRHOW,i,j,k) = -0.5_RP*sqrtRho*(  mesh % elements(eID) % storage % Q(IMSQRHOU,i,j,k)*mesh % elements(eID) % storage % U_x(IGW,i,j,k) & 
+                                                                        + mesh % elements(eID) % storage % Q(IMSQRHOV,i,j,k)*mesh % elements(eID) % storage % U_y(IGW,i,j,k) &   
+                                                                        + mesh % elements(eID) % storage % Q(IMSQRHOW,i,j,k)*mesh % elements(eID) % storage % U_z(IGW,i,j,k) ) &
+                                                       - mesh % elements(eID) % storage % Q(IMC,i,j,k)*mesh % elements(eID) % storage % U_z(IGMU,i,j,k)
                
                   ! e % storage % QDot(IMP,i,j,k) = -dimensionless % invMa2*(  e % storage % U_x(IGU,i,j,k) + e % storage % U_y(IGV,i,j,k) &
                   !                                                            + e % storage % U_z(IGW,i,j,k))    
-                   e % storage % QDot(IMP,i,j,k) = - invMa2*(  e % storage % U_x(IGU,i,j,k) + e % storage % U_y(IGV,i,j,k) &
-                                                                              + e % storage % U_z(IGW,i,j,k))                                                                                                                
-                  e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) * e % geom % jacobian(i,j,k)
+                   mesh % elements(eID) % storage % QDot(IMP,i,j,k) = - invMa2*(  mesh % elements(eID) % storage % U_x(IGU,i,j,k) + mesh % elements(eID) % storage % U_y(IGV,i,j,k) &
+                                                                              + mesh % elements(eID) % storage % U_z(IGW,i,j,k))                                                                                                                
+                  mesh % elements(eID) % storage % QDot(:,i,j,k) = mesh % elements(eID) % storage % QDot(:,i,j,k) * mesh % elements(eID) % geom % jacobian(i,j,k)
                end do                ; end do                ; end do
-               end associate
          endif 
          end do
 !$omp end do
@@ -726,15 +725,6 @@ module SpatialDiscretization
             locLevel = 1
          end if
 		 
-		 associate ( MLRK => mesh % MLRK)
-	     associate ( MLIter_eID      => MLRK % MLIter_eID, &
-                     MLIter          => MLRK % MLIter,      &
-                     MLIter_eID_Seq  => MLRK % MLIter_eID_Seq, &
-                     MLIter_eID_MPI  => MLRK % MLIter_eID_MPI,  &
-					 MLIter_fID      => MLRK % MLIter_fID,  &
-					 MLIter_fID_Interior => MLRK %  MLIter_fID_Interior, &
-					 MLIter_fID_Boundary => MLRK %  MLIter_fID_Boundary, & 
-					 MLIter_fID_MPI      => MLRK %  MLIter_fID_MPI )
 
          if (present(element_mask)) then
             call CreateFaceMask(mesh, element_mask, face_mask)
@@ -742,21 +732,19 @@ module SpatialDiscretization
 
          if ( LESModel % active) then
 !$omp do schedule(runtime) private(i,j,k,delta,mu_smag,eID)
-						do lID = 1, MLIter(locLevel,1)
-						    eID = MLIter_eID(lID)
-                            associate(e => mesh % elements(eID))
-                            delta = (e % geom % Volume / product(e % Nxyz + 1)) ** (1.0_RP / 3.0_RP)
+						do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+						    eID = mesh % MLRK % MLIter_eID(lID)
+                            delta = (mesh % elements(eID) % geom % Volume / product(mesh % elements(eID) % Nxyz + 1)) ** (1.0_RP / 3.0_RP)
 							
-                            do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-									call LESModel % ComputeViscosity(delta, e % geom % dWall(i,j,k), e % storage % Q(:,i,j,k),   &
-                                                                                               e % storage % U_x(:,i,j,k), &
-                                                                                               e % storage % U_y(:,i,j,k), &
-                                                                                               e % storage % U_z(:,i,j,k), &
-                                                                                               e % storage % mu_turb_NS(i,j,k) )
-									e % storage % mu_NS(1,i,j,k) = e % storage % mu_turb_NS(i,j,k)
+                            do k = 0, mesh % elements(eID) % Nxyz(3) ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1)
+									call LESModel % ComputeViscosity(delta, mesh % elements(eID) % geom % dWall(i,j,k), mesh % elements(eID) % storage % Q(:,i,j,k),   &
+                                                                                               mesh % elements(eID) % storage % U_x(:,i,j,k), &
+                                                                                               mesh % elements(eID) % storage % U_y(:,i,j,k), &
+                                                                                               mesh % elements(eID) % storage % U_z(:,i,j,k), &
+                                                                                               mesh % elements(eID) % storage % mu_turb_NS(i,j,k) )
+									mesh % elements(eID) % storage % mu_NS(1,i,j,k) = mesh % elements(eID) % storage % mu_turb_NS(i,j,k)
 
                             end do                ; end do                ; end do
-                            end associate
                         end do
 !$omp end do
                   end if
@@ -764,8 +752,8 @@ module SpatialDiscretization
 !
 !        Compute viscosity at interior and boundary faces
 !        ------------------------------------------------
-         call compute_viscosity_at_faces(MLIter(locLevel,3), 2, MLIter_fID_Interior(1:MLIter(locLevel,3)), mesh)
-         call compute_viscosity_at_faces(MLIter(locLevel,4), 1, MLIter_fID_Boundary(1:MLIter(locLevel,4)), mesh)
+         call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,3), 2, mesh % MLRK % MLIter_fID_Interior(1:mesh % MLRK % MLIter(locLevel,3)), mesh)
+         call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,4), 1, mesh % MLRK % MLIter_fID_Boundary(1:mesh % MLRK % MLIter(locLevel,4)), mesh)
 				  
 !
 !        ****************
@@ -773,8 +761,8 @@ module SpatialDiscretization
 !        ****************
 !
 !$omp do schedule(runtime) private(eID)
-		 do lID = 1, MLIter(locLevel,1)
-		    eID = MLIter_eID(lID)
+		 do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+		    eID = mesh % MLRK % MLIter_eID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
             
@@ -791,8 +779,8 @@ module SpatialDiscretization
 !        ******************************************
 !
 !$omp do schedule(runtime) private(fID)
-         do iFace = 1, MLIter(locLevel,3)
-		    fID = MLIter_fID_Interior(iFace)
+         do iFace = 1, mesh % MLRK % MLIter(locLevel,3)
+		    fID = mesh % MLRK % MLIter_fID_Interior(iFace)
 		    compute_element = .true.
 			if (present(element_mask)) compute_element = face_mask(fID)
      
@@ -803,8 +791,8 @@ module SpatialDiscretization
 !$omp end do nowait
 
 !$omp do schedule(runtime) private(fID)
-         do iFace = 1, MLIter(locLevel,4)
-		    fID = MLIter_fID_Boundary(iFace)
+         do iFace = 1, mesh % MLRK % MLIter(locLevel,4)
+		    fID = mesh % MLRK % MLIter_fID_Boundary(iFace)
 		    compute_element = .true.
 			if (present(element_mask)) compute_element = face_mask(fID)
      
@@ -820,32 +808,30 @@ module SpatialDiscretization
 !        *************************************************************************************
 ! 
 !$omp do schedule(runtime) private(i,j,k,eID,sqrtRho,invSqrtRho)
-         do iEl = 1, MLIter(locLevel,5)
-            eID = MLIter_eID_Seq(iEl)
+         do iEl = 1, mesh % MLRK % MLIter(locLevel,5)
+            eID = mesh % MLRK % MLIter_eID_Seq(iEl)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
             
             if (compute_element) then
 
-               associate(e => mesh % elements(eID)) 
 			   
-               call TimeDerivative_FacesContribution(e, t, mesh) 
+               call TimeDerivative_FacesContribution(mesh % elements(eID), t, mesh) 
                
-               do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1) 
-                  sqrtRho = sqrt(e % storage % rho(i,j,k))
+               do k = 0, mesh % elements(eID) % Nxyz(3) ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1) 
+                  sqrtRho = sqrt(mesh % elements(eID) % storage % rho(i,j,k))
                   invSqrtRho = 1.0_RP / sqrtRho
 !  
 !               + Scale with Jacobian and sqrt(Rho)
-                  e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) * e % geom % InvJacobian(i,j,k)
-                  e % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) = e % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) * invSqrtRho
+                  mesh % elements(eID) % storage % QDot(:,i,j,k) = mesh % elements(eID) % storage % QDot(:,i,j,k) * mesh % elements(eID) % geom % InvJacobian(i,j,k)
+                  mesh % elements(eID) % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) = mesh % elements(eID) % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) * invSqrtRho
 !  
 !               + Add gravity
-                  e % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) =   e % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) & 
+                  mesh % elements(eID) % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) =   mesh % elements(eID) % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) & 
                                                                 + sqrtRho * dimensionless % invFr2 * dimensionless % gravity_dir
 
                end do         ; end do          ; end do 
 
-               end associate 
             endif
          end do
 !$omp end do
@@ -864,15 +850,15 @@ module SpatialDiscretization
 !
 !           Compute viscosity at MPI faces
 !           ------------------------------
-            call compute_viscosity_at_faces(MLIter(locLevel,7), 2, MLIter_fID_MPI(1:MLIter(locLevel,7)), mesh)
+            call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,7), 2, mesh % MLRK % MLIter_fID_MPI(1:mesh % MLRK % MLIter(locLevel,7)), mesh)
 !
 !           **************************************
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
 !$omp do schedule(runtime) private(fID)
-            do iFace = 1, MLIter(locLevel,7)
-               fID = MLIter_fID_MPI(iFace)
+            do iFace = 1, mesh % MLRK % MLIter(locLevel,7)
+               fID = mesh % MLRK % MLIter_fID_MPI(iFace)
                compute_element = .true.
                if (present(element_mask)) compute_element = face_mask(fID)
                
@@ -887,32 +873,30 @@ module SpatialDiscretization
 !           ***********************************************************
 ! 
 !$omp do schedule(runtime) private(i,j,k, eID, sqrtRho, invSqrtRho)
-            do iEl = 1, MLIter(locLevel,6)
-               eID = MLIter_eID_MPI(iEl)
+            do iEl = 1, mesh % MLRK % MLIter(locLevel,6)
+               eID = mesh % MLRK % MLIter_eID_MPI(iEl)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
                
                if (compute_element) then
-                  associate(e => mesh % elements(eID))
-                  call TimeDerivative_FacesContribution(e, t, mesh)
+                  call TimeDerivative_FacesContribution(mesh % elements(eID), t, mesh)
  
-                  do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1) 
-                     sqrtRho = sqrt(e % storage % rho(i,j,k))
+                  do k = 0, mesh % elements(eID) % Nxyz(3) ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1) 
+                     sqrtRho = sqrt(mesh % elements(eID) % storage % rho(i,j,k))
                      invSqrtRho = 1.0_RP / sqrtRho
 !   
 !                  + Scale with Jacobian and sqrt(Rho)
-                     e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) * e % geom % InvJacobian(i,j,k)
-                     e % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) = e % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) * invSqrtRho
+                     mesh % elements(eID) % storage % QDot(:,i,j,k) = mesh % elements(eID) % storage % QDot(:,i,j,k) * mesh % elements(eID) % geom % InvJacobian(i,j,k)
+                     mesh % elements(eID) % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) = mesh % elements(eID) % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) * invSqrtRho
 !   
 !                  + Add gravity
-                     e % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) =   e % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) & 
+                     mesh % elements(eID) % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) =   mesh % elements(eID) % storage % QDot(IMSQRHOU:IMSQRHOW,i,j,k) & 
                                                                    + sqrtRho * dimensionless % invFr2 * dimensionless % gravity_dir
    
                   end do         ; end do          ; end do 
                ! do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
                !    e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) / e % geom % jacobian(i,j,k)
                ! end do         ; end do          ; end do
-                  end associate
                endif
             end do
 !$omp end do
@@ -929,22 +913,20 @@ module SpatialDiscretization
 !           Add source term
 !           ***************
 !$omp do schedule(runtime) private(i,j,k, InvSqrtRho, eID)
-            do lID = 1, MLIter(locLevel,1)
-			   eID = MLIter_eID(lID)
+            do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+			   eID = mesh % MLRK % MLIter_eID(lID)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
                
                if (compute_element) then
 
-                  associate ( e => mesh % elements(eID) )
-                  e % storage % S_NS = 0.0_RP
-                  do k = 0, e % Nxyz(3)   ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-                     InvSqrtRho = 1.0_RP / sqrt(e % storage % rho(i,j,k))
-                     call UserDefinedSourceTermNS(e % geom % x(:,i,j,k), e % storage % Q(:,i,j,k), t, e % storage % S_NS(:,i,j,k), thermodynamics, dimensionless, refValues, multiphase)
+                  mesh % elements(eID) % storage % S_NS = 0.0_RP
+                  do k = 0, mesh % elements(eID) % Nxyz(3)   ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1)
+                     InvSqrtRho = 1.0_RP / sqrt(mesh % elements(eID) % storage % rho(i,j,k))
+                     call UserDefinedSourceTermNS(mesh % elements(eID) % geom % x(:,i,j,k), mesh % elements(eID) % storage % Q(:,i,j,k), t, mesh % elements(eID) % storage % S_NS(:,i,j,k), thermodynamics, dimensionless, refValues, multiphase)
                      ! scale UserDefinedSourceTerm momentum with sqrtRho
-                     e % storage % S_NS(:,i,j,k) = e % storage % S_NS(:,i,j,k) * [1.0_RP,InvSqrtRho,InvSqrtRho,InvSqrtRho,1.0_RP]
+                     mesh % elements(eID) % storage % S_NS(:,i,j,k) = mesh % elements(eID) % storage % S_NS(:,i,j,k) * [1.0_RP,InvSqrtRho,InvSqrtRho,InvSqrtRho,1.0_RP]
                   end do                  ; end do                ; end do
-                  end associate
                endif
             end do
 !$omp end do
@@ -956,18 +938,16 @@ module SpatialDiscretization
 
 ! Add all the source terms
 !$omp do schedule(runtime) private(i,j,k, Source, eID)
-         do lID = 1, MLIter(locLevel,1)
-		    eID = MLIter_eID(lID)
+         do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+		    eID = mesh % MLRK % MLIter_eID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
             
             if (compute_element) then
 
-               associate ( e => mesh % elements(eID) )
-               do k = 0, e % Nxyz(3)   ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-                  e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) + e % storage % S_NS(:,i,j,k)
+               do k = 0, mesh % elements(eID) % Nxyz(3)   ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1)
+                  mesh % elements(eID) % storage % QDot(:,i,j,k) = mesh % elements(eID) % storage % QDot(:,i,j,k) + mesh % elements(eID) % storage % S_NS(:,i,j,k)
                end do                  ; end do                ; end do
-               end associate
             endif
          end do
 !$omp end do  
@@ -979,32 +959,28 @@ module SpatialDiscretization
          if( mesh% IBM% active ) then
             if( .not. mesh% IBM% semiImplicit ) then 
 !$omp do schedule(runtime) private(i,j,k,Source, eID)
-                  do lID = 1, MLIter(locLevel,1)
-					 eID = MLIter_eID(lID)
+                  do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+					 eID = mesh % MLRK % MLIter_eID(lID)
                      compute_element = .true.
                      if (present(element_mask)) compute_element = element_mask(eID)
                      
                      if (compute_element) then
 
-                        associate ( e => mesh % elements(eID) ) 
-                        do k = 0, e % Nxyz(3)   ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-                           if( e% isInsideBody(i,j,k) ) then
+                        do k = 0, mesh % elements(eID) % Nxyz(3)   ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1)
+                           if( mesh % elements(eID) % isInsideBody(i,j,k) ) then
                               ! only without moving for now in MULTIPHASE
-                              if( .not. mesh% IBM% stl(e% STL(i,j,k))% move ) then 
-                                 call mesh% IBM% SourceTerm( eID = eID, Q = e % storage % Q(:,i,j,k), Source = Source, wallfunction = .false. )
+                              if( .not. mesh% IBM% stl(mesh % elements(eID) % STL(i,j,k))% move ) then 
+                                 call mesh% IBM% SourceTerm( eID = eID, Q = mesh % elements(eID) % storage % Q(:,i,j,k), Source = Source, wallfunction = .false. )
                               end if 
-                              e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) + Source
+                              mesh % elements(eID) % storage % QDot(:,i,j,k) = mesh % elements(eID) % storage % QDot(:,i,j,k) + Source
                            end if
                         end do                  ; end do                ; end do
-                        end associate
                      endif
                   end do
 !$omp end do       
             end if 
          end if
 
-	    end associate
-	    end associate
 
          if (present(element_mask)) deallocate(face_mask)
 
@@ -1412,23 +1388,14 @@ module SpatialDiscretization
             locLevel = 1 
          end if
 		 
-		 associate ( MLRK => mesh % MLRK)
-		 associate ( MLIter_eID      => MLRK % MLIter_eID, &
-					 MLIter          => MLRK % MLIter,      &
-					 MLIter_eID_Seq  => MLRK % MLIter_eID_Seq, &
-					 MLIter_eID_MPI  => MLRK % MLIter_eID_MPI,  &
-					 MLIter_fID      => MLRK % MLIter_fID,  &
-					 MLIter_fID_Interior => MLRK %  MLIter_fID_Interior, &
-					 MLIter_fID_Boundary => MLRK %  MLIter_fID_Boundary, & 
-					 MLIter_fID_MPI      => MLRK %  MLIter_fID_MPI )	
 !
 !        ****************
 !        Volume integrals
 !        ****************
 !
 !$omp do schedule(runtime) private(eID)
-		 do lID = 1, MLIter(locLevel,1)
-		    eID = MLIter_eID(lID)
+		 do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+		    eID = mesh % MLRK % MLIter_eID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
             
@@ -1443,8 +1410,8 @@ module SpatialDiscretization
 !        ******************************************
 !
 !$omp do schedule(runtime) private(fID)
-         do iFace = 1, MLIter(locLevel,3)
-            fID = MLIter_fID_Interior(iFace)
+         do iFace = 1, mesh % MLRK % MLIter(locLevel,3)
+            fID = mesh % MLRK % MLIter_fID_Interior(iFace)
 			compute_element = .true.
             if (present(element_mask)) compute_element = face_mask(fID)
             
@@ -1455,8 +1422,8 @@ module SpatialDiscretization
 !$omp end do nowait
 
 !$omp do schedule(runtime) private(fID)
-         do iFace = 1, MLIter(locLevel,4)
-            fID = MLIter_fID_Boundary(iFace)
+         do iFace = 1, mesh % MLRK % MLIter(locLevel,4)
+            fID = mesh % MLRK % MLIter_fID_Boundary(iFace)
 			compute_element = .true.
             if (present(element_mask)) compute_element = face_mask(fID)
             
@@ -1471,20 +1438,18 @@ module SpatialDiscretization
 !        ***************************************************************
 ! 
 !$omp do schedule(runtime) private(i,j,k,eID)
-         do iEl = 1, MLIter(locLevel,5)
-            eID = MLIter_eID_Seq(iEl)
+         do iEl = 1, mesh % MLRK % MLIter(locLevel,5)
+            eID = mesh % MLRK % MLIter_eID_Seq(iEl)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
             
             if (compute_element) then
 
-               associate(e => mesh % elements(eID)) 
-               call Laplacian_FacesContribution(e, t, mesh) 
+               call Laplacian_FacesContribution(mesh % elements(eID), t, mesh) 
 
-               do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1) 
-                  e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) / e % geom % jacobian(i,j,k)
+               do k = 0, mesh % elements(eID) % Nxyz(3) ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1) 
+                  mesh % elements(eID) % storage % QDot(:,i,j,k) = mesh % elements(eID) % storage % QDot(:,i,j,k) / mesh % elements(eID) % geom % jacobian(i,j,k)
                end do         ; end do          ; end do 
-               end associate 
          endif
          end do
 !$omp end do
@@ -1504,8 +1469,8 @@ module SpatialDiscretization
 !           **************************************
 !
 !$omp do schedule(runtime) private(fID)
-            do iFace = 1, MLIter(locLevel,7)
-               fID = MLIter_fID_MPI(iFace)
+            do iFace = 1, mesh % MLRK % MLIter(locLevel,7)
+               fID = mesh % MLRK % MLIter_fID_MPI(iFace)
                compute_element = .true.
                if (present(element_mask)) compute_element = face_mask(fID)
                
@@ -1520,20 +1485,18 @@ module SpatialDiscretization
 !           ***********************************************************
 ! 
 !$omp do schedule(runtime) private(i,j,k,eID)
-            do iEl = 1, MLIter(locLevel,6)
-               eID = MLIter_eID_MPI(iEl)
+            do iEl = 1, mesh % MLRK % MLIter(locLevel,6)
+               eID = mesh % MLRK % MLIter_eID_MPI(iEl)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
                
                if (compute_element) then
-                  associate(e => mesh % elements(eID))
 				  
-                  call Laplacian_FacesContribution(e, t, mesh)
+                  call Laplacian_FacesContribution(mesh % elements(eID), t, mesh)
 
-                  do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
-                     e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) / e % geom % jacobian(i,j,k)
+                  do k = 0, mesh % elements(eID) % Nxyz(3) ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1)
+                     mesh % elements(eID) % storage % QDot(:,i,j,k) = mesh % elements(eID) % storage % QDot(:,i,j,k) / mesh % elements(eID) % geom % jacobian(i,j,k)
                   end do         ; end do          ; end do
-                  end associate
                endif
             end do
 !$omp end do
@@ -1545,8 +1508,6 @@ module SpatialDiscretization
 !$omp end single
          end if
 #endif
-      end associate
-	  end associate		
 	  
       if (present(element_mask)) deallocate(face_mask)
 
@@ -1597,14 +1558,12 @@ module SpatialDiscretization
 ! 
 !$omp do schedule(runtime) private(i, j, k)
          do eID = 1, size(mesh % elements) 
-            associate(e => mesh % elements(eID)) 
-            if ( e % hasSharedFaces ) cycle
-            call Laplacian_FacesContribution(e, t, mesh) 
+            if ( mesh % elements(eID) % hasSharedFaces ) cycle
+            call Laplacian_FacesContribution(mesh % elements(eID), t, mesh) 
  
-            do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1) 
-               e % storage % QDot(:,i,j,k) = e % storage % QDot(:,i,j,k) / e % geom % jacobian(i,j,k) 
+            do k = 0, mesh % elements(eID) % Nxyz(3) ; do j = 0, mesh % elements(eID) % Nxyz(2) ; do i = 0, mesh % elements(eID) % Nxyz(1) 
+               mesh % elements(eID) % storage % QDot(:,i,j,k) = mesh % elements(eID) % storage % QDot(:,i,j,k) / mesh % elements(eID) % geom % jacobian(i,j,k) 
             end do         ; end do          ; end do 
-            end associate 
          end do
 !$omp end do
 
