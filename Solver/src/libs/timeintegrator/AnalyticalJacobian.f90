@@ -475,6 +475,7 @@ contains
             if (e_plus % NumberOfConnections(elSide) == 0) cycle
             
             fID  = e_plus % faceIDs(elSide)
+            if (mesh % faces(fID) % MortarType /= MORTAR_NONE) cycle   ! 4:1 coupling not modelled yet
             side = e_plus % faceSide(elSide)
             
             f => mesh % faces(fID)
