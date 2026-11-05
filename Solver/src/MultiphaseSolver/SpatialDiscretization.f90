@@ -1774,7 +1774,7 @@ module SpatialDiscretization
 !$omp do schedule(runtime) private(i,j,delta,mu_smag,side)
             do iFace = 1, no_of_faces
                associate(f => mesh % faces(face_ids(iFace)))
-
+               if (f % MortarType == MORTAR_BIG) cycle
                delta = sqrt(f % geom % surface / product(f % Nf + 1))
 			  
                do j = 0, f % Nf(2) ; do i = 0, f % Nf(1)
