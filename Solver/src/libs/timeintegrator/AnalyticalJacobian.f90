@@ -450,12 +450,6 @@ contains
                   call mesh % faces(fID) % ProjectGradJacobianToElements(RIGHT,LEFT ) 
 
                elseif (mesh % faces(fID) % MortarType == MORTAR_BIG) then 
-                  associate(dFStar_dqEl=>mesh% faces(fID)%storage(1)%dFStar_dqEl)
-                     dFStar_dqEl=0.0_RP
-                  end associate
-                  associate(dFStar_dqEl=>mesh% faces(fID)%storage(2)%dFStar_dqEl)
-                     dFStar_dqEl=0.0_RP
-                  end associate
                   do m=1,4
                      if (mesh % faces(fID) % Mortar(m) .ne. 0) then 
                         call mesh % faces(fID) % ProjectMortarGradJacobianToElements(LEFT ,RIGHT, mesh % faces(mesh % faces(fID) % Mortar(m)))

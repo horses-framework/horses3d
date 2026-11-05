@@ -1308,7 +1308,7 @@
       integer,       intent(in)  :: nEqn
       integer,       intent(in)  :: whichElement
       integer,       intent(in)  :: whichderiv !<  One can either transfer the derivative with respect to qL (LEFT) or to qR (RIGHT)
-      type(Face), intent(inout)      :: slaveFace
+      type(Face), target, intent(inout) :: slaveFace
       logical, intent(in), optional  :: sliding 
 
 !
@@ -1329,7 +1329,7 @@
          !call GetSlidingMout(slaveFace, MoutSliding)
       !end if 
 
-         fluxDeriv(1:,1:,0:,0:) => self % storage(whichderiv) % dFStar_dqF
+         fluxDeriv(1:,1:,0:,0:) => slaveFace % storage(whichderiv) % dFStar_dqF
          dFStar_dqFAux=0.0_RP 
 
         ! Pass 1: contraction direction 1 (i <- m) -> Flux_tmp(i,l)
@@ -1898,7 +1898,7 @@
       class(Face), target        :: self
       integer,       intent(in)  :: whichElement
       integer,       intent(in)  :: whichderiv !<  One can either transfer the derivative with respect to qL (LEFT) or to qR (RIGHT)
-      type(Face), intent(inout)      :: slaveFace
+      type(Face), target, intent(inout) :: slaveFace
       logical, intent(in), optional  :: sliding 
 
 !
@@ -1920,7 +1920,7 @@
          !call GetSlidingMout(slaveFace, MoutSliding)
       !end if 
 
-         fluxDeriv(1:,1:,1:,0:,0:) => self % storage(whichderiv) % dFv_dGradQF
+         fluxDeriv(1:,1:,1:,0:,0:) => slaveFace % storage(whichderiv) % dFv_dGradQF
          dFv_dGradQElAux=0.0_RP 
 
         ! Pass 1: contraction direction 1 (i <- m) -> Flux_tmp(i,l)
