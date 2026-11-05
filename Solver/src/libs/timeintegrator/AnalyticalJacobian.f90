@@ -84,6 +84,8 @@ contains
       integer :: fID, eID
       !---------------------------------------------------
       
+      if (MPI_Process % doMPIAction .and. mesh % nonconforming) &
+         error stop "Analytical Jacobian with 4:1 mortars: sequential only for now"
 !
 !     Construct parent
 !     ----------------
