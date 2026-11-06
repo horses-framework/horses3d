@@ -1,0 +1,62 @@
+!
+! Navier-Stokes manufactured solution on a non-conforming mesh with hanging nodes (2:1 h-mortars).
+! CI case: parallel, polynomial order 3.
+! The mesh is taken from the horses3d-meshes repository:
+!     horses3d-meshes/cartesian-band-hanging-nodes/BAND_mesh.h5  ->  MESH/BAND_mesh.h5
+!
+Flow equations        = "NS"
+mesh file name        = "MESH/BAND_mesh.h5"
+periodic relative tolerance = .true.
+
+Polynomial order      = 3
+Discretization nodes  = "Gauss-Lobatto"
+
+solution file name    = "RESULTS/hMortars_MMS_p3.hsol"
+restart file name     = "RESULTS/hMortars_MMS_p3.hsol"
+restart               = .false.
+
+simulation type       = time-accurate
+final time            = 1.0
+dt = 1e-4
+Number of time steps  = 100
+Output Interval       = 100
+
+Number of plot points = 5
+Convergence tolerance = 1.d-10
+
+mach number           = 0.08
+Reynolds number       = 1600.0
+AOA theta             = 0.0
+AOA phi               = 0.0
+
+riemann solver        = roe
+
+#define boundary front
+  type = periodic
+  coupled boundary = back
+#end
+
+#define boundary back
+  type = periodic
+  coupled boundary = front
+#end
+
+#define boundary left
+  type = periodic
+  coupled boundary = right
+#end
+
+#define boundary right
+  type = periodic
+  coupled boundary = left
+#end
+
+#define boundary top
+  type = periodic
+  coupled boundary = bottom
+#end
+
+#define boundary bottom
+  type = periodic
+  coupled boundary = top
+#end
