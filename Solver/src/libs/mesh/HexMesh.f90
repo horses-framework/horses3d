@@ -7464,8 +7464,14 @@ subroutine HexMesh_pAdapt_MPI (self, NNew, controlVariables)
 !$omp parallel do schedule(runtime) private(f)
    do fID=1, self % no_of_faces  !Construct All faces storage
       f => self % faces( fID )
-      call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, analyticalJac, FaceComputeQdot)
-      call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, analyticalJac, FaceComputeQdot)
+
+      if (f % MortarType == MORTAR_SMALL4) then
+         call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, analyticalJac, FaceComputeQdot, Mortar=.TRUE.)
+         call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, analyticalJac, FaceComputeQdot, Mortar=.TRUE.)
+      else
+         call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, analyticalJac, FaceComputeQdot)
+         call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, analyticalJac, FaceComputeQdot)
+      end if
    end do
 !$omp end parallel do
 

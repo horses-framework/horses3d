@@ -1672,6 +1672,11 @@ module StorageClass
 
          safedeallocate(self % AviscFlux)
 
+         safedeallocate(self % MortarFlux)
+         safedeallocate(self % GradMortarFlux)
+         safedeallocate(self % MortarFlux_J)
+         safedeallocate(self % GradMortarFlux_J)
+
       end subroutine FaceStorage_Destruct
 #ifdef FLOW
       pure subroutine FaceStorage_SetStorageToNS(self)
