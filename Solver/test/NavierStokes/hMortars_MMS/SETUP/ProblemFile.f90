@@ -662,18 +662,17 @@ end module MMS
             print *, "Error in L2 norm: ", error_mesh
 
             ! The reference depends on the control file, identified by the polynomial order
-            ! TODO: fill in the reference values and uncomment the assertion
             if ( all(mesh % elements(1) % Nxyz == [1,1,1]) ) then      ! hMortars_MMS_p1.control
-               ! expectedError = 
+               expectedError = 4.1212748311841416_rp
             else if ( all(mesh % elements(1) % Nxyz == [3,3,3]) ) then ! hMortars_MMS_p3.control
-               expectedError = 3.6179333676541878E-004_rp 
+               expectedError = 1.6671749164137494E-003_rp 
             else if ( all(mesh % elements(1) % Nxyz == [3,3,1]) ) then ! hMortars_MMS_p331.control
-               ! expectedError = 
+               expectedError = 1.5091340487552098_rp 
             end if
 
             ! Relative check: FTAssertEqual falls back to an absolute tolerance when expectedValue <= tol
-            ! CALL FTAssert(test = abs(error_mesh - expectedError) <= 1.0e-8_RP*abs(expectedError), &
-            !               msg  = "L2 norm (relative error)")
+            CALL FTAssert(test = abs(error_mesh - expectedError) <= 1.0e-8_RP*abs(expectedError), &
+                          msg  = "L2 norm (relative error)")
 
             CALL sharedManager % summarizeAssertions(title = testName,iUnit = 6)
 
