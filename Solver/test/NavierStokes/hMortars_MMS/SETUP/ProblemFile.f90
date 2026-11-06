@@ -4,9 +4,12 @@
 !      Manufactured solution for the compressible Navier-Stokes equations on a
 !      non-conforming mesh with hanging nodes (2:1 h-mortars).
 !
-!      It is the manufactured solution of test/NavierStokes/LambVector, with
-!      x+y+z replaced by kx*x+ky*y+kz*z so that it is periodic in the current
-!      mesh. The source term is generated with NavierStokes_MMS_hMortars.ipynb.
+!      Density and velocity are those of the manufactured solution of
+!      test/NavierStokes/LambVector, with x+y+z replaced by kx*x+ky*y+kz*z so that
+!      they are periodic in the current mesh. The energy is set so that the
+!      temperature is uniform (T = 1): Sutherland's law then gives the constant
+!      viscosity 1/Re that the source term assumes.
+!      The source term is generated with NavierStokes_MMS_hMortars.ipynb.
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -164,9 +167,9 @@ module MMS
          8.1274388361574565E-002_RP /
 
    contains
-      pure subroutine evalManufacturedSolution(x, y, z, t, res)
+      pure subroutine evalManufacturedSolution(x, y, z, t, gamma, Mach, res)
          implicit none
-         real(kind=RP), intent(in)  :: x, y, z, t
+         real(kind=RP), intent(in)  :: x, y, z, t, gamma, Mach
          real(kind=RP), intent(out) :: res(5)
 
          real(kind=RP) :: s, rho_ms, u_ms, v_ms, w_ms, e_ms
@@ -176,7 +179,8 @@ module MMS
          u_ms = cos(s)*exp(-t)
          v_ms = sin(s)*exp(-t)
          w_ms = cos(s)*exp(-t)
-         e_ms = rho_ms * (u_ms**2+v_ms**2+w_ms**2) / 2.0_RP + 1.0_RP
+         ! p = rho/(gamma*Mach**2), i.e. T = 1
+         e_ms = 1.0_RP / (gamma*(gamma - 1.0_RP)*Mach**2) + (u_ms**2+v_ms**2+w_ms**2) / 2.0_RP
 
          res(1) = rho_ms
          res(2) = rho_ms * u_ms
@@ -376,7 +380,8 @@ end module MMS
                           Nz => mesh % elements(eID) % Nxyz(3) )
                do k = 0, Nz;  do j = 0, Ny;  do i = 0, Nx 
                   x = mesh % elements(eID) % geom % x(:,i,j,k)
-                  call evalManufacturedSolution(x(1), x(2), x(3), 0.0_RP, mesh % elements(eID) % storage % Q(:,i,j,k))
+                  call evalManufacturedSolution(x(1), x(2), x(3), 0.0_RP, thermodynamics_ % gamma, dimensionless_ % Mach, &
+                                                mesh % elements(eID) % storage % Q(:,i,j,k))
                end do;        end do;        end do
                end associate
             end do
@@ -529,54 +534,40 @@ end module MMS
 !           Local variables
 !           ---------------
 !
-            real(kind=RP) :: sn, cs, et, mu, kappa, gamma, M
+            real(kind=RP) :: sn, cs, et, mu, gamma, M
 
 #if defined(NAVIERSTOKES)
             sn = sin(kx*x(1) + ky*x(2) + kz*x(3))
             cs = cos(kx*x(1) + ky*x(2) + kz*x(3))
             et = exp(time)
-            ! Dimensionless viscosity (1/Re) and conductivity, as used by the viscous fluxes
+            ! Dimensionless viscosity (1/Re). No heat flux: the temperature is uniform
             mu    = dimensionless_ % mu
-            kappa = dimensionless_ % kappa
             gamma = thermodynamics_ % gamma
             M     = dimensionless_ % Mach
 
             S(IRHO) = (cs**2*et*kx + cs**2*et*kz + 2.0_RP*cs*et*ky*sn + 3.0_RP*cs*ky + et**2*sn - et*kx*sn**2 - &
                 et*kz*sn**2 - 3.0_RP*kx*sn - 3.0_RP*kz*sn)/et
-            S(IRHOU) = cs*gamma*kx*(4.0_RP*cs**2*et**2*sn + 10.0_RP*cs**2*et + 2.0_RP*et**3 - 5.0_RP*et*sn**2 - &
-                12.0_RP*sn)/(2.0_RP*et**2) + mu*(4.0_RP*cs*kx**2 + cs*kx*kz + 3.0_RP*cs*ky**2 + 3.0_RP*cs*kz**2 &
-                + kx*ky*sn)/(3.0_RP*et) - (4.0_RP*cs**3*et**2*kx*sn + 8.0_RP*cs**3*et*kx - 2.0_RP*cs**3*et*kz - &
-                4.0_RP*cs**2*et*ky*sn - 6.0_RP*cs**2*ky + 2.0_RP*cs*et**3*kx - cs*et*kx*sn**2 + &
-                4.0_RP*cs*et*kz*sn**2 + 6.0_RP*cs*et + 12.0_RP*cs*kz*sn + 2.0_RP*et*ky*sn**3 + &
-                6.0_RP*ky*sn**2)/(2.0_RP*et**2)
-            S(IRHOV) = cs*gamma*ky*(4.0_RP*cs**2*et**2*sn + 10.0_RP*cs**2*et + 2.0_RP*et**3 - 5.0_RP*et*sn**2 - &
-                12.0_RP*sn)/(2.0_RP*et**2) + mu*(cs*kx*ky + cs*ky*kz + 3.0_RP*kx**2*sn + 4.0_RP*ky**2*sn + &
-                3.0_RP*kz**2*sn)/(3.0_RP*et) - (4.0_RP*cs**3*et**2*ky*sn + 10.0_RP*cs**3*et*ky - &
-                4.0_RP*cs**2*et*kx*sn - 4.0_RP*cs**2*et*kz*sn - 6.0_RP*cs**2*kx - 6.0_RP*cs**2*kz + &
-                2.0_RP*cs*et**3*ky - 11.0_RP*cs*et*ky*sn**2 - 24.0_RP*cs*ky*sn + 2.0_RP*et*kx*sn**3 + &
-                2.0_RP*et*kz*sn**3 + 6.0_RP*et*sn + 6.0_RP*kx*sn**2 + 6.0_RP*kz*sn**2)/(2.0_RP*et**2)
-            S(IRHOW) = cs*gamma*kz*(4.0_RP*cs**2*et**2*sn + 10.0_RP*cs**2*et + 2.0_RP*et**3 - 5.0_RP*et*sn**2 - &
-                12.0_RP*sn)/(2.0_RP*et**2) + mu*(3.0_RP*cs*kx**2 + cs*kx*kz + 3.0_RP*cs*ky**2 + 4.0_RP*cs*kz**2 &
-                + ky*kz*sn)/(3.0_RP*et) - (4.0_RP*cs**3*et**2*kz*sn - 2.0_RP*cs**3*et*kx + 8.0_RP*cs**3*et*kz - &
-                4.0_RP*cs**2*et*ky*sn - 6.0_RP*cs**2*ky + 2.0_RP*cs*et**3*kz + 4.0_RP*cs*et*kx*sn**2 - &
-                cs*et*kz*sn**2 + 6.0_RP*cs*et + 12.0_RP*cs*kx*sn + 2.0_RP*et*ky*sn**3 + &
-                6.0_RP*ky*sn**2)/(2.0_RP*et**2)
-            S(IRHOE) = M**2*gamma*kappa*(gamma - 1.0_RP)*(kx**2 + ky**2 + kz**2)*(8.0_RP*cs**2*et*sn + &
-                4.0_RP*cs**2 - et*sn**3 - 4.0_RP*sn**2)/(2.0_RP*et**2) + 2.0_RP*mu*(2.0_RP*cs**2*kx**2 + &
-                cs**2*kx*kz + cs**2*ky**2 + 2.0_RP*cs**2*kz**2 + 2.0_RP*cs*kx*ky*sn + 2.0_RP*cs*ky*kz*sn - &
-                2.0_RP*kx**2*sn**2 - kx*kz*sn**2 - ky**2*sn**2 - 2.0_RP*kz**2*sn**2)/(3.0_RP*et**2) + &
-                gamma*(4.0_RP*cs**4*et**2*kx*sn + 4.0_RP*cs**4*et**2*kz*sn + 10.0_RP*cs**4*et*kx + &
-                10.0_RP*cs**4*et*kz + 6.0_RP*cs**3*et**2*ky*sn**2 + 20.0_RP*cs**3*et*ky*sn + 12.0_RP*cs**3*ky + &
-                2.0_RP*cs**2*et**3*kx + 2.0_RP*cs**2*et**3*kz - 2.0_RP*cs**2*et**2*kx*sn**3 - &
-                2.0_RP*cs**2*et**2*kz*sn**3 - 15.0_RP*cs**2*et*kx*sn**2 - 15.0_RP*cs**2*et*kz*sn**2 - &
-                24.0_RP*cs**2*kx*sn - 24.0_RP*cs**2*kz*sn + 4.0_RP*cs*et**3*ky*sn + cs*et**2*ky*sn**4 + &
-                6.0_RP*cs*et**2*ky - 6.0_RP*cs*ky*sn**2 - 2.0_RP*et**3*kx*sn**2 - 2.0_RP*et**3*kz*sn**2 - &
-                et**2*kx*sn**5 - 6.0_RP*et**2*kx*sn - et**2*kz*sn**5 - 6.0_RP*et**2*kz*sn - 5.0_RP*et*kx*sn**4 - &
-                5.0_RP*et*kz*sn**4 - 6.0_RP*kx*sn**3 - 6.0_RP*kz*sn**3)/(2.0_RP*et**3) + (2.0_RP*cs**4*et*kx + &
-                2.0_RP*cs**4*et*kz + 4.0_RP*cs**3*et*ky*sn + 6.0_RP*cs**3*ky - 12.0_RP*cs**2*et**2*sn - &
-                3.0_RP*cs**2*et*kx*sn**2 - 3.0_RP*cs**2*et*kz*sn**2 - 36.0_RP*cs**2*et - 12.0_RP*cs**2*kx*sn - &
-                12.0_RP*cs**2*kz*sn - 3.0_RP*cs*ky*sn**2 + 2.0_RP*et**4*sn - 6.0_RP*et**2*sn**3 - et*kx*sn**4 - &
-                et*kz*sn**4 - 18.0_RP*et*sn**2 - 3.0_RP*kx*sn**3 - 3.0_RP*kz*sn**3)/(2.0_RP*et**3)
+            S(IRHOU) = mu*(4.0_RP*cs*kx**2 + cs*kx*kz + 3.0_RP*cs*ky**2 + 3.0_RP*cs*kz**2 + &
+                kx*ky*sn)/(3.0_RP*et) + (cs**3*et*kx + cs**3*et*kz + 2.0_RP*cs**2*et*ky*sn + 3.0_RP*cs**2*ky - &
+                2.0_RP*cs*et*kx*sn**2 - 2.0_RP*cs*et*kz*sn**2 - 3.0_RP*cs*et - 6.0_RP*cs*kx*sn - 6.0_RP*cs*kz*sn &
+                - et*ky*sn**3 - 3.0_RP*ky*sn**2)/et**2 + cs*et*kx/(M**2*gamma)
+            S(IRHOV) = mu*(cs*kx*ky + cs*ky*kz + 3.0_RP*kx**2*sn + 4.0_RP*ky**2*sn + &
+                3.0_RP*kz**2*sn)/(3.0_RP*et) + (2.0_RP*cs**2*et*kx*sn + 2.0_RP*cs**2*et*kz*sn + 3.0_RP*cs**2*kx &
+                + 3.0_RP*cs**2*kz + 3.0_RP*cs*et*ky*sn**2 + 6.0_RP*cs*ky*sn - et*kx*sn**3 - et*kz*sn**3 - &
+                3.0_RP*et*sn - 3.0_RP*kx*sn**2 - 3.0_RP*kz*sn**2)/et**2 + cs*et*ky/(M**2*gamma)
+            S(IRHOW) = mu*(3.0_RP*cs*kx**2 + cs*kx*kz + 3.0_RP*cs*ky**2 + 4.0_RP*cs*kz**2 + &
+                ky*kz*sn)/(3.0_RP*et) + (cs**3*et*kx + cs**3*et*kz + 2.0_RP*cs**2*et*ky*sn + 3.0_RP*cs**2*ky - &
+                2.0_RP*cs*et*kx*sn**2 - 2.0_RP*cs*et*kz*sn**2 - 3.0_RP*cs*et - 6.0_RP*cs*kx*sn - 6.0_RP*cs*kz*sn &
+                - et*ky*sn**3 - 3.0_RP*ky*sn**2)/et**2 + cs*et*kz/(M**2*gamma)
+            S(IRHOE) = 2.0_RP*mu*(2.0_RP*cs**2*kx**2 + cs**2*kx*kz + cs**2*ky**2 + 2.0_RP*cs**2*kz**2 + &
+                2.0_RP*cs*kx*ky*sn + 2.0_RP*cs*ky*kz*sn - 2.0_RP*kx**2*sn**2 - kx*kz*sn**2 - ky**2*sn**2 - &
+                2.0_RP*kz**2*sn**2)/(3.0_RP*et**2) + (2.0_RP*cs**4*et*kx + 2.0_RP*cs**4*et*kz + &
+                4.0_RP*cs**3*et*ky*sn + 6.0_RP*cs**3*ky - 2.0_RP*cs**2*et**2*sn - 3.0_RP*cs**2*et*kx*sn**2 - &
+                3.0_RP*cs**2*et*kz*sn**2 - 12.0_RP*cs**2*et - 12.0_RP*cs**2*kx*sn - 12.0_RP*cs**2*kz*sn - &
+                3.0_RP*cs*ky*sn**2 - et**2*sn**3 - et*kx*sn**4 - et*kz*sn**4 - 6.0_RP*et*sn**2 - 3.0_RP*kx*sn**3 &
+                - 3.0_RP*kz*sn**3)/(2.0_RP*et**3) + (cs**2*et*gamma*kx + cs**2*et*gamma*kz + &
+                2.0_RP*cs*et*gamma*ky*sn + 3.0_RP*cs*gamma*ky + et**2*sn - et*gamma*kx*sn**2 - et*gamma*kz*sn**2 &
+                - 3.0_RP*gamma*kx*sn - 3.0_RP*gamma*kz*sn)/(M**2*et*gamma*(gamma - 1.0_RP))
 #endif
          end subroutine UserDefinedSourceTermNS
 #endif
@@ -652,7 +643,7 @@ end module MMS
                associate( e => mesh % elements(eID) )
                DO k = 0, e % Nxyz(3) ; DO j = 0, e % Nxyz(2) ; DO i = 0, e % Nxyz(1)
                   x = e % geom % x(:,i,j,k)
-                  call evalManufacturedSolution(x(1), x(2), x(3), time, u)
+                  call evalManufacturedSolution(x(1), x(2), x(3), time, thermodynamics_ % gamma, dimensionless_ % Mach, u)
                   call chooseIntegrationWeights(e % Nxyz(1), e % Nxyz(2), e % Nxyz(3), i, j, k, wi, wj, wk)
                   error_mesh = error_mesh + wi*wj*wk * e % geom % jacobian(i,j,k) &
                                           * sum((u - e % storage % Q(:,i,j,k))**2)
@@ -675,7 +666,7 @@ end module MMS
             if ( all(mesh % elements(1) % Nxyz == [1,1,1]) ) then      ! hMortars_MMS_p1.control
                ! expectedError = 
             else if ( all(mesh % elements(1) % Nxyz == [3,3,3]) ) then ! hMortars_MMS_p3.control
-               ! expectedError = 
+               expectedError = 3.6179333676541878E-004_rp 
             else if ( all(mesh % elements(1) % Nxyz == [3,3,1]) ) then ! hMortars_MMS_p331.control
                ! expectedError = 
             end if
