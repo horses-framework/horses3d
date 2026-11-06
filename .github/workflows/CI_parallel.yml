@@ -1230,6 +1230,34 @@ jobs:
           mpiexec -n 64 ./horses3d.ns IBM-MORTARS.control
         if: '!cancelled()'
 
+#
+# 42) Manufactured solution with h-mortars (hanging nodes)
+# --------------------------------------------------------
+#    The mesh is taken from the horses3d-meshes repository (see the top of the file)
+#
+      - name: Build hMortars_MMS
+        working-directory: ./Solver/test/NavierStokes/hMortars_MMS/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: '!cancelled()'
+
+      - name: Run hMortars_MMS p=3
+        working-directory: ./Solver/test/NavierStokes/hMortars_MMS
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mkdir -p MESH
+          ln -sf "$HORSES3D_MESHES_DIR/cartesian-band-hanging-nodes/BAND_mesh.h5" MESH/
+          mpiexec -n 4 ./horses3d.ns hMortars_MMS_p3.control
+        if: '!cancelled()'
+
+      - name: Run hMortars_MMS p=(3,3,1)
+        working-directory: ./Solver/test/NavierStokes/hMortars_MMS
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 4 ./horses3d.ns hMortars_MMS_p331.control
+        if: '!cancelled()'
+
 ########################################################################
 #######                       PARTICLES                         ########
 ########################################################################
