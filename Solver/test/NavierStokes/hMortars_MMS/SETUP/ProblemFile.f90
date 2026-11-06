@@ -16,8 +16,9 @@ module MMS
    implicit none
 
    ! Size of the periodic domain (horses3d-meshes/cartesian-band-hanging-nodes/BAND_mesh.h5)
-   real(kind=RP), parameter :: Lx = 6.0_RP, Ly = 6.0_RP, Lz = 6.0_RP
-   real(kind=RP), parameter :: kx = 2.0_RP*PI/Lx, ky = 2.0_RP*PI/Ly, kz = 2.0_RP*PI/Lz
+   ! No variation in z: the domain is only 1 unit thick (the p331 case uses order 1 in z)
+   real(kind=RP), parameter :: Lx = 6.0_RP, Ly = 6.0_RP
+   real(kind=RP), parameter :: kx = 2.0_RP*PI/Lx, ky = 2.0_RP*PI/Ly, kz = 0.0_RP
 
    logical :: useGaussLobatto = .true.
    !
