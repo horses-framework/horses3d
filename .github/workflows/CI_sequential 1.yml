@@ -37,11 +37,16 @@ jobs:
         comm: ['SEQUENTIAL']
         enable_threads: ['YES']
         mkl: ['YES','NO']
+        hdf5: ['YES','NO']
         exclude:
         - compiler: gfortran
-          mkl: 'YES'          
+          mkl: 'YES'
+        - compiler: gfortran
+          hdf5: 'NO'
         - compiler: ifort
-          mkl: 'NO'          
+          mkl: 'NO'
+        - compiler: ifort
+          hdf5: 'YES'
     env:
       INTEL_COMPILER_DIR : /opt/intel/oneapi/compiler/2023.2.0
 
@@ -59,6 +64,7 @@ jobs:
         with:
           repository: horses-framework/horses3d-meshes
           path: horses3d-meshes
+          lfs: true
 
       - name: Install Gmsh
         run: |
@@ -68,6 +74,14 @@ jobs:
           "$RUNNER_TEMP/gmsh-venv/bin/pip" install -q gmsh
           echo "HORSES3D_MESHES_DIR=$GITHUB_WORKSPACE/horses3d-meshes" >> $GITHUB_ENV
           echo "GMSH_PYTHON=$RUNNER_TEMP/gmsh-venv/bin/python" >> $GITHUB_ENV
+
+      - name: Install hdf5 (only gfortran)
+        if: (matrix.compiler == 'gfortran')
+        run: |
+          sudo apt-get update
+          sudo apt install libhdf5-dev
+          dpkg -L libhdf5-dev
+          echo "HDF5_ROOT="/usr/lib/x86_64-linux-gnu/hdf5/serial/"" >> $GITHUB_ENV
       - name: Set Coverage Flags
         run: |
           if [ "${{ matrix.compiler }}" = "gfortran" ] && [ "${{ matrix.mode }}" = "DEBUG" ]; then
@@ -402,7 +416,6 @@ jobs:
           source /opt/intel/oneapi/setvars.sh || true
           ./horses3d.ns Cylinder_ErrorEstimation_pAdaptationRL.control
         if: '!cancelled()'
-
 
 #
 # CHECK CODE COVERAGE

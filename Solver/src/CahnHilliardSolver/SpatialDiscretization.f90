@@ -388,7 +388,7 @@ error stop
          logical, intent(in), optional   :: element_mask(:)    
          integer, intent(in), optional   :: Level		 
          
-         error stop 'ComputeTimeDerivativeIsolated not implemented for Cahn-Hilliard'
+         ERROR stop 'ComputeTimeDerivativeIsolated not implemented for Cahn-Hilliard'
       end subroutine ComputeTimeDerivativeIsolated
 !
 !///////////////////////////////////////////////////////////////////////////////////////////
@@ -407,7 +407,7 @@ error stop
 !        Local variables
 !        ---------------
 !
-         integer     :: eID , i, j, k, ierr, fID
+         integer     :: eID , i, j, k, ierr, fID, m
 !
 !        ****************
 !        Volume integrals
@@ -423,12 +423,34 @@ error stop
 !        Compute Riemann solver of non-shared faces
 !        ******************************************
 !
-!$omp do schedule(runtime) 
+!$omp do schedule(runtime) private(m)
          do fID = 1, size(mesh % faces) 
             associate( f => mesh % faces(fID)) 
             select case (f % faceType) 
             case (HMESH_INTERIOR) 
+               if (f% MortarType == MORTAR_SLIDING) then 
+                  associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                     fstar=0.0_RP
+                  end associate
+                  associate(fstar=>mesh% faces(fID)%storage(2)%fStar)
+                     fstar=0.0_RP
+                  end associate
+               end if 
+               if (f % MortarType == MORTAR_BIG) then 
+                  associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                     fstar=0.0_RP
+                  end associate
+                  associate(fstar=>mesh% faces(fID)%storage(2)%fStar)
+                     fstar=0.0_RP
+                  end associate
+                  do m=1,4
+                     if (f%Mortar(m) .ne. 0) then 
+                        CALL computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                     end if 
+                  end do  
+               elseif (f % MortarType == MORTAR_NONE) then
                CALL computeElementInterfaceFlux( f ) 
+               end if 
  
             case (HMESH_BOUNDARY) 
                CALL computeBoundaryFlux(f, t) 
@@ -478,16 +500,42 @@ error stop
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
-!$omp do schedule(runtime) 
+!$omp do schedule(runtime) private(m)
             do fID = 1, size(mesh % faces) 
                associate( f => mesh % faces(fID)) 
                select case (f % faceType) 
                case (HMESH_MPI) 
+                  if (f%MortarType == MORTAR_BIG) then 
+                     associate(fstar=>mesh% faces(fID)%storage(1)%fStar)
+                        fstar=0.0_RP
+                     end associate
+                     associate(fstar=>mesh% faces(fID)%storage(2)%fStar)
+                        fstar=0.0_RP
+                     end associate
+                     do m=1,4
+                        if (mesh % faces(fID)%Mortar(m) .ne. 0) then
+                           CALL computeElementInterfaceFlux(masterFace=mesh % faces(fID), f=mesh % faces(mesh % faces(fID)%Mortar(m)))
+                        end if 
+                     end do 
+                  end if 
                   CALL computeMPIFaceFlux( f ) 
                end select 
                end associate 
             end do 
 !$omp end do 
+
+!$omp single
+            if ( mesh % nonconforming ) then
+               call mesh % UpdateMPIFacesMortarflux(NCONS)
+            end if
+      !$omp end single
+      
+      
+      !$omp single
+            if ( mesh % nonconforming ) then
+               call mesh % GatherMPIFacesMortarFlux(NCONS)         
+            end if
+      !$omp end single
 !
 !           ***********************************************************
 !           Surface integrals and scaling of elements with shared faces
@@ -686,12 +734,14 @@ error stop
 ! 
 !///////////////////////////////////////////////////////////////////////////////////////////// 
 ! 
-      subroutine computeElementInterfaceFlux(f)
+      subroutine computeElementInterfaceFlux(f, masterFace)
          use FaceClass
          use Physics
          use PhysicsStorage
          IMPLICIT NONE
          TYPE(Face)   , INTENT(inout) :: f   
+         type(Face), optional, intent(inout) :: masterFace    
+
          integer       :: i, j
          real(kind=RP) :: flux(1:NCOMP,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: mu
@@ -731,7 +781,15 @@ error stop
 !        Return the flux to elements
 !        ---------------------------
 !
+      if (f % MortarType == MORTAR_NONE) then 
          call f % ProjectFluxToElements(NCOMP, flux, (/1,2/))
+      end if 
+      if (f % MortarType == MORTAR_SMALL4 .and. present(masterFace)) then 
+         call masterFace % ProjectMortarFluxToElements(nEqn=NCONS, whichElements=(/1,0/), &
+            slaveFace=f, MortarFlux=flux)
+         call f % ProjectFluxToElements(NCONS, flux, (/0,2/))
+      end if 
+      !end if 
 
       end subroutine computeElementInterfaceFlux
 
@@ -782,6 +840,11 @@ error stop
 !
          thisSide = maxloc(f % elementIDs, dim = 1)
          call f % ProjectFluxToElements(NCOMP, flux, (/thisSide, HMESH_NONE/))
+         if (f % MortarType == MORTAR_SMALL4) then 
+            !write(*,*) 'this side', thisSide
+            call f% Interpolatesmall2big(NCONS, flux)
+            
+         end if 
 
       end subroutine ComputeMPIFaceFlux
 
@@ -955,5 +1018,4 @@ error stop
          end do                ; end do
 
       end subroutine GetPoiseuilleFlow_Face
-
 end module SpatialDiscretization

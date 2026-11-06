@@ -14,6 +14,7 @@ MODULE ExplicitMethods
    use DGSEMClass, only: ComputeTimeDerivative_f
    use ParticlesClass
    use PhysicsStorage, only: CTD_IGNORE_MODE
+   use SlidingMeshProcedures
    IMPLICIT NONE
 
    private
@@ -678,9 +679,9 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 !
       type(HexMesh)      :: mesh
 #ifdef FLOW
-      type(Particles_t)  :: particles
+            type(Particles_t)  :: particles
 #else
-      logical            :: particles
+            logical            :: particles
 #endif
       REAL(KIND=RP)   :: t, deltaT, tk
       real(kind=RP), allocatable, dimension(:), intent(in), optional :: dt_vec
@@ -697,7 +698,10 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
       REAL(KIND=RP), DIMENSION(3) :: a = (/0.0_RP       , -5.0_RP /9.0_RP , -153.0_RP/128.0_RP/)
       REAL(KIND=RP), DIMENSION(3) :: b = (/0.0_RP       ,  1.0_RP /3.0_RP ,    3.0_RP/4.0_RP  /)
       REAL(KIND=RP), DIMENSION(3) :: c = (/1.0_RP/3.0_RP,  15.0_RP/16.0_RP,    8.0_RP/15.0_RP /)
-
+!     Stage-to-stage rotation fractions for the sliding mesh: the geometry must
+!     sit at angle theta(t + b(k)*dt) when stage k's QDot is evaluated, so after
+!     stage k it advances by (b(k+1)-b(k))*theta, and by (1-b(3))*theta at the end
+      REAL(KIND=RP), DIMENSION(3) :: auxiliar = (/1.0_RP/3.0_RP, (3.0_RP/4.0_RP-1.0_RP/3.0_RP) , 1.0_RP/4.0_RP /)
 
       INTEGER :: i, j, k, id
       logical :: updateQLowRK
@@ -728,17 +732,17 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
             end if
 
 !$omp parallel do schedule(runtime)
-            do id = 1, SIZE( mesh % elements )
+                  do id = 1, SIZE( mesh % elements )
 #ifdef FLOW
-                  mesh % elements(id) % storage % G_NS = a(k)* mesh % elements(id) % storage % G_NS  +              mesh % elements(id) % storage % QDot
-                  mesh % elements(id) % storage % Q =       mesh % elements(id) % storage % Q  + c(k)*dt_vec(id)* mesh % elements(id) % storage % G_NS
+                        mesh % elements(id) % storage % G_NS = a(k)* mesh % elements(id) % storage % G_NS  +              mesh % elements(id) % storage % QDot
+                        mesh % elements(id) % storage % Q =       mesh % elements(id) % storage % Q  + c(k)*dt_vec(id)* mesh % elements(id) % storage % G_NS
 #endif
-
+       
 #if (defined(CAHNHILLIARD)) && (!defined(FLOW))
-                  mesh % elements(id) % storage % G_CH = a(k)*mesh % elements(id) % storage % G_CH + mesh % elements(id) % storage % cDot
-                  mesh % elements(id) % storage % c    = mesh % elements(id) % storage % c         + c(k)*dt_vec(id)* mesh % elements(id) % storage % G_CH
+                        mesh % elements(id) % storage % G_CH = a(k)*mesh % elements(id) % storage % G_CH + mesh % elements(id) % storage % cDot
+                        mesh % elements(id) % storage % c    = mesh % elements(id) % storage % c         + c(k)*dt_vec(id)* mesh % elements(id) % storage % G_CH
 #endif
-            end do ! id
+                  end do ! id
 !$omp end parallel do
 
          end do ! k
@@ -755,7 +759,7 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
             if (k==1 .and. updateQLowRK) then
 !$omp parallel do schedule(runtime)
                do id = 1, SIZE( mesh % elements )
-#ifdef FLOW 
+#ifdef FLOW
                   mesh % elements(id) % storage % QLowRK = mesh % elements(id) % storage % Q + deltaT*mesh % elements(id) % storage % QDot
 #endif
                end do ! id
@@ -763,29 +767,37 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
             end if
 
 !$omp parallel do schedule(runtime)
-            do id = 1, SIZE( mesh % elements )
+                  do id = 1, SIZE( mesh % elements )
 #ifdef FLOW
-                  mesh % elements(id) % storage % G_NS = a(k)* mesh % elements(id) % storage % G_NS  +              mesh % elements(id) % storage % QDot
-                  mesh % elements(id) % storage % Q =       mesh % elements(id) % storage % Q  + c(k)*deltaT* mesh % elements(id) % storage % G_NS
+                        mesh % elements(id) % storage % G_NS = a(k)* mesh % elements(id) % storage % G_NS  +              mesh % elements(id) % storage % QDot
+                        mesh % elements(id) % storage % Q =       mesh % elements(id) % storage % Q  + c(k)*deltaT* mesh % elements(id) % storage % G_NS
 #endif
 
 #if (defined(CAHNHILLIARD)) && (!defined(FLOW))
-                  mesh % elements(id) % storage % G_CH = a(k)*mesh % elements(id) % storage % G_CH + mesh % elements(id) % storage % cDot
-                  mesh % elements(id) % storage % c    = mesh % elements(id) % storage % c         + c(k)*deltaT* mesh % elements(id) % storage % G_CH
+                        mesh % elements(id) % storage % G_CH = a(k)*mesh % elements(id) % storage % G_CH + mesh % elements(id) % storage % cDot
+                        mesh % elements(id) % storage % c    = mesh % elements(id) % storage % c         + c(k)*deltaT* mesh % elements(id) % storage % G_CH
 #endif
-            end do ! id
+                  end do ! id
 !$omp end parallel do
-
-         end do ! k
-
-      end if
 !
-!     To obtain the updated residuals
-      if ( CTD_AFTER_STEPS ) CALL ComputeTimeDerivative( mesh, particles, t+deltaT, CTD_IGNORE_MODE)
+!           Advance the sliding region to the next stage position
+!           -----------------------------------------------------
+            if ( mesh % SlidingMesh % active .and. mesh % slidingflux ) then
+               call AdvanceSlidingMesh( mesh, mesh % numBFacePoints, mesh % nodeType, .FALSE.,&
+                                        angle = mesh % SlidingMesh % theta * auxiliar(k) )
+               mesh % slidingflux = .true.
+            end if
 
-      call checkForNan(mesh, t)
+               end do ! k
 
-   END SUBROUTINE TakeRK3Step
+            end if
+      !
+      !     To obtain the updated residuals
+            if ( CTD_AFTER_STEPS ) CALL ComputeTimeDerivative( mesh, particles, t+deltaT, CTD_IGNORE_MODE)
+       
+            call checkForNan(mesh, t)
+       
+         END SUBROUTINE TakeRK3Step
 
    SUBROUTINE TakeRK5Step( mesh, particles, t, deltaT, ComputeTimeDerivative , dt_vec, dts, global_dt, iter, dtAdaptation)
 !

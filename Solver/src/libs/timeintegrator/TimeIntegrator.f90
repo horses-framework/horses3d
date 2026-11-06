@@ -7,7 +7,7 @@
 !////////////////////////////////////////////////////////////////////////
 !
 #include "Includes.h"
-      MODULE TimeIntegratorClass
+MODULE TimeIntegratorClass
 
       USE SMConstants
       use FTValueDictionaryClass
@@ -18,7 +18,7 @@
       USE Physics
       USE ExplicitMethods
       USE IMEXMethods
-      use AutosaveClass                   , only: Autosave_t, AUTOSAVE_BY_TIME, Autosave_LambVectorConfigure
+      use AutosaveClass
       use StopwatchClass
       use MPI_Process_Info
       use TimeIntegratorDefinitions
@@ -36,13 +36,13 @@
       use MultiTauEstimationClass         , only: MultiTauEstim_t
       use JacobianComputerClass
 #if defined(NAVIERSTOKES)
-      use SurfaceMesh                     , only: surfacesMesh, getU_tauInSurfaces, getWallDistInSurfaces
+use SurfaceMesh                     , only: surfacesMesh, getU_tauInSurfaces, getWallDistInSurfaces
 #else
-      use SurfaceMesh                     , only: surfacesMesh
+use SurfaceMesh                     , only: surfacesMesh
 #endif
-      IMPLICIT NONE
+IMPLICIT NONE
 
-      INTEGER, PARAMETER :: TIME_ACCURATE = 0, STEADY_STATE = 1
+INTEGER, PARAMETER :: TIME_ACCURATE = 0, STEADY_STATE = 1
 
       TYPE TimeIntegrator_t
          INTEGER                                :: integratorType
@@ -54,57 +54,58 @@
          class(pAdaptation_t), allocatable      :: pAdaptator
          type(adaptiveTimeStep_t)               :: adaptiveTimeStep
          type(Autosave_t)                       :: lambSave
+         type(AutosaveSlidingMesh_t)            :: SlidingMeshSave
          type(MultiTauEstim_t)                  :: TauEstimator
          character(len=LINE_LENGTH)             :: integration_method
          integer                                :: RKStep_key
-		 REAL(KIND=RP)                          :: ML_CFL_CutOff
-		 INTEGER                                :: ML_ReLevel_Iteration, ML_Counter, ML_nLevel
-		 logical                                :: ML_ReLevel	
+         REAL(KIND=RP)                          :: ML_CFL_CutOff
+         INTEGER                                :: ML_ReLevel_Iteration, ML_Counter, ML_nLevel
+         logical                                :: ML_ReLevel	
          PROCEDURE(TimeStep_FCN), NOPASS , POINTER :: RKStep
 !
 !        ========
-         CONTAINS
+   CONTAINS
 !        ========
 !
-         PROCEDURE :: construct  => constructTimeIntegrator
-         PROCEDURE :: destruct   => destructTimeIntegrator
-         PROCEDURE :: integrate
-         procedure :: Display    => TimeIntegrator_Display
-         procedure :: CorrectDt  => TimeIntegrator_CorrectDt
-      END TYPE TimeIntegrator_t
+   PROCEDURE :: construct  => constructTimeIntegrator
+   PROCEDURE :: destruct   => destructTimeIntegrator
+   PROCEDURE :: integrate
+   procedure :: Display    => TimeIntegrator_Display
+   procedure :: CorrectDt  => TimeIntegrator_CorrectDt
+END TYPE TimeIntegrator_t
 
-      abstract interface
-         subroutine RKStepFcn( sem , t , deltaT )
-            use SMConstants, only: RP
-            use DGSEMClass,  only: DGSEM
-            implicit none
-            type(DGSem)     :: sem
-            real(kind=RP)   :: t, deltaT
-         end subroutine RKStepFcn
-      end interface
+abstract interface
+   subroutine RKStepFcn( sem , t , deltaT )
+      use SMConstants, only: RP
+      use DGSEMClass,  only: DGSEM
+      implicit none
+      type(DGSem)     :: sem
+      real(kind=RP)   :: t, deltaT
+   end subroutine RKStepFcn
+end interface
 
-      character(len=*), parameter   :: TIME_INTEGRATION_KEY  = 'time integration'
-      character(len=*), parameter   :: EXPLICIT_SOLVER   = 'explicit'
-      character(len=*), parameter   :: IMEX_SOLVER       = 'imex'
-      character(len=*), parameter   :: IMPLICIT_SOLVER   = 'implicit'
-      character(len=*), parameter   :: FAS_SOLVER        = 'fas'
-      character(len=*), parameter   :: ANISFAS_SOLVER    = 'anisfas'
-      character(len=*), parameter   :: ROSENBROCK_SOLVER = 'rosenbrock'
+character(len=*), parameter   :: TIME_INTEGRATION_KEY  = 'time integration'
+character(len=*), parameter   :: EXPLICIT_SOLVER   = 'explicit'
+character(len=*), parameter   :: IMEX_SOLVER       = 'imex'
+character(len=*), parameter   :: IMPLICIT_SOLVER   = 'implicit'
+character(len=*), parameter   :: FAS_SOLVER        = 'fas'
+character(len=*), parameter   :: ANISFAS_SOLVER    = 'anisfas'
+character(len=*), parameter   :: ROSENBROCK_SOLVER = 'rosenbrock'
 !
 !     ========
-      CONTAINS
+CONTAINS
 !     ========
 !
 !     ////////////////////////////////////////////////////////////////////////////////////////
 !
-      SUBROUTINE constructTimeIntegrator(self,controlVariables, sem, initial_iter, initial_time)
+SUBROUTINE constructTimeIntegrator(self,controlVariables, sem, initial_iter, initial_time)
 
-         IMPLICIT NONE
-         CLASS(TimeIntegrator_t)     :: self
-         TYPE(FTValueDictionary)     :: controlVariables
-         type(DGSem)                 :: sem
-         integer                     :: initial_iter
-         real(kind=RP)               :: initial_time
+   IMPLICIT NONE
+   CLASS(TimeIntegrator_t)     :: self
+   TYPE(FTValueDictionary)     :: controlVariables
+   type(DGSem)                 :: sem
+   integer                     :: initial_iter
+   real(kind=RP)               :: initial_time
 
          character(len=STRING_CONSTANT_LENGTH) :: keyword
          logical                               :: limit
@@ -177,21 +178,21 @@
 
          IF (controlVariables % containsKey("cfl")) THEN
 #ifdef FLOW
-            self % Compute_dt = .TRUE.
-            self % cfl        = controlVariables % doublePrecisionValueForKey("cfl")
+      self % Compute_dt = .TRUE.
+      self % cfl        = controlVariables % doublePrecisionValueForKey("cfl")
 #if defined(NAVIERSTOKES)
-            if (flowIsNavierStokes) then
-               if (controlVariables % containsKey("dcfl")) then
-                  self % dcfl       = controlVariables % doublePrecisionValueForKey("dcfl")
-               else
-                  error stop '"cfl" and "dcfl", or "dt" keyword must be specified for the time integrator'
-               end if
-            end if
+      if (flowIsNavierStokes) then
+         if (controlVariables % containsKey("dcfl")) then
+            self % dcfl       = controlVariables % doublePrecisionValueForKey("dcfl")
+         else
+            error stop '"cfl" and "dcfl", or "dt" keyword must be specified for the time integrator'
+         end if
+      end if
 #endif
 #elif defined(CAHNHILLIARD)
-            print*, "Error, use fixed time step to solve Cahn-Hilliard equations"
-            errorMessage(STD_OUT)
-            error stop
+      print*, "Error, use fixed time step to solve Cahn-Hilliard equations"
+      errorMessage(STD_OUT)
+      error stop
 #endif
          ELSEIF (controlVariables % containsKey("dt")) THEN
             self % Compute_dt = .FALSE.
@@ -206,127 +207,128 @@
 !        Common initializations
 !        ----------------------
 !
-         self % time           =  initial_time
-         self % initial_time   =  initial_time
-         self % initial_iter   =  initial_iter
-         self % numTimeSteps   =  controlVariables % integerValueForKey ("number of time steps")
-         self % outputInterval =  controlVariables % integerValueForKey("output interval")
-         self % tolerance      =  controlVariables % doublePrecisionValueForKey("convergence tolerance")
-         self % RKStep         => TakeRK3Step
+   self % time           =  initial_time
+   self % initial_time   =  initial_time
+   self % initial_iter   =  initial_iter
+   self % numTimeSteps   =  controlVariables % integerValueForKey ("number of time steps")
+   self % outputInterval =  controlVariables % integerValueForKey("output interval")
+   self % tolerance      =  controlVariables % doublePrecisionValueForKey("convergence tolerance")
+   self % RKStep         => TakeRK3Step
 
-         if (controlVariables % containsKey(TIME_INTEGRATION_KEY)) then
-            self % integration_method = controlVariables % stringValueForKey(TIME_INTEGRATION_KEY, LINE_LENGTH)
+   if (controlVariables % containsKey(TIME_INTEGRATION_KEY)) then
+      self % integration_method = controlVariables % stringValueForKey(TIME_INTEGRATION_KEY, LINE_LENGTH)
+   else
+      self % integration_method = EXPLICIT_SOLVER
+   end if
+   call toLower(self % integration_method)
+
+   if ( controlVariables % ContainsKey("explicit method") ) then
+      keyword = controlVariables % StringValueForKey("explicit method",LINE_LENGTH)
+      call toLower(keyword)
+      select case (keyword)
+      case(EULER_NAME)
+         self % RKStep => TakeExplicitEulerStep
+         self % RKStep_key = EULER_KEY
+
+      case(RK3_NAME)
+         self % RKStep => TakeRK3Step
+         self % RKStep_key = RK3_KEY
+
+      case(RK5_NAME)
+         self % RKStep => TakeRK5Step
+         self % RKStep_key = RK5_KEY
+
+      case(LSERK14_4_NAME)
+         self % RKStep => TakeLSERK14_4Step
+         self % RKStep_key = LSERK14_4_KEY
+
+      case(SSPRK33_NAME)
+         self % RKStep => TakeSSPRK33Step
+         self % RKStep_key = SSPRK33_KEY
+
+      case(SSPRK43_NAME)
+         self % RKStep => TakeSSPRK43Step
+         self % RKStep_key = SSPRK43_KEY
+
+      case(EULER_RK3_NAME)
+         self % RKStep => TakeEulerRK3Step
+         self % RKStep_key = EULER_RK3_KEY
+         !Create the array of High-Order elements and faces for the Euler-RK3 method
+         call sem % mesh % UpdateHOArrays()
+
+      case(MIXED_RK_NAME)
+         self % RKStep => TakeMixedRKStep
+         self % RKStep_key = MIXED_RK_KEY
+
+      case(ML_RK3_NAME)
+         if ( controlVariables % ContainsKey("cfl cut-off") ) then
+               self % ML_CFL_CutOff = controlVariables % doublePrecisionValueForKey("cfl cut-off")
+               self % ML_CFL_CutOff = min(max(self % ML_CFL_CutOff,0.0001_RP),10.0_RP)
+         else 
+               self % ML_CFL_CutOff = 0.5_RP
+         end if 
+         if ( controlVariables % ContainsKey("relevel iteration") ) then
+               self % ML_ReLevel_Iteration = controlVariables % integerValueForKey ("relevel iteration")
+         else 
+               self % ML_ReLevel_Iteration = 1000000000
+         end if
+         if ( controlVariables % ContainsKey("number of level") ) then
+               self % ML_nLevel = controlVariables % integerValueForKey ("number of level")
+         else 
+               self % ML_nLevel = 3
+         end if
+         self % ML_ReLevel = .true. 
+         
+               self % RKStep => TakeMLRK3Step
+               self % RKStep_key = ML_RK3_KEY
+         self % ML_Counter = 0
+         
+         call sem % mesh % MLRK % construct(sem % mesh, self % ML_nLevel) ! construct nlevel  
+
+      case default
+         print*, "Explicit time integration method not implemented"
+         error stop
+
+      end select
+   else
+      self % RKStep => TakeRK3Step
+      self % RKStep_key = RK3_KEY
+   end if
+
+   if ( controlVariables % ContainsKey("compute time derivative after timestep") ) then
+      if ( controlVariables % LogicalValueForKey("compute time derivative after timestep") ) then
+         call Enable_CTD_AFTER_STEPS
+         call Enable_CTD_AFTER_STEPS_IMEX
+      end if
+   end if
+
+   if ( controlVariables % ContainsKey("limit timestep") ) then
+      if ( controlVariables % LogicalValueForKey("limit timestep") ) then
+         if ( controlVariables % ContainsKey("limiter minimum") ) then
+            limiter_minimum = controlVariables % RealValueForKey("limiter minimum")
+            call Enable_limiter(self % RKStep_key, limiter_minimum)
          else
-            self % integration_method = EXPLICIT_SOLVER
+            call Enable_limiter(self % RKStep_key)
          end if
-         call toLower(self % integration_method)
-
-         if ( controlVariables % ContainsKey("explicit method") ) then
-            keyword = controlVariables % StringValueForKey("explicit method",LINE_LENGTH)
-            call toLower(keyword)
-            select case (keyword)
-            case(EULER_NAME)
-               self % RKStep => TakeExplicitEulerStep
-               self % RKStep_key = EULER_KEY
-
-            case(RK3_NAME)
-               self % RKStep => TakeRK3Step
-               self % RKStep_key = RK3_KEY
-
-            case(RK5_NAME)
-               self % RKStep => TakeRK5Step
-               self % RKStep_key = RK5_KEY
-
-            case(LSERK14_4_NAME)
-               self % RKStep => TakeLSERK14_4Step
-               self % RKStep_key = LSERK14_4_KEY
-
-            case(SSPRK33_NAME)
-               self % RKStep => TakeSSPRK33Step
-               self % RKStep_key = SSPRK33_KEY
-
-            case(SSPRK43_NAME)
-               self % RKStep => TakeSSPRK43Step
-               self % RKStep_key = SSPRK43_KEY
-
-            case(EULER_RK3_NAME)
-               self % RKStep => TakeEulerRK3Step
-               self % RKStep_key = EULER_RK3_KEY
-               !Create the array of High-Order elements and faces for the Euler-RK3 method
-               call sem % mesh % UpdateHOArrays()
-
-            case(MIXED_RK_NAME)
-               self % RKStep => TakeMixedRKStep
-               self % RKStep_key = MIXED_RK_KEY
-			case(ML_RK3_NAME)
-				if ( controlVariables % ContainsKey("cfl cut-off") ) then
-				     self % ML_CFL_CutOff = controlVariables % doublePrecisionValueForKey("cfl cut-off")
-					 self % ML_CFL_CutOff = min(max(self % ML_CFL_CutOff,0.0001_RP),10.0_RP)
-				else 
-					 self % ML_CFL_CutOff = 0.5_RP
-			    end if 
-				if ( controlVariables % ContainsKey("relevel iteration") ) then
-				     self % ML_ReLevel_Iteration = controlVariables % integerValueForKey ("relevel iteration")
-				else 
-					 self % ML_ReLevel_Iteration = 1000000000
-			    end if
-				if ( controlVariables % ContainsKey("number of level") ) then
-				     self % ML_nLevel = controlVariables % integerValueForKey ("number of level")
-				else 
-					 self % ML_nLevel = 3
-			    end if
-				self % ML_ReLevel = .true. 
-				
-                self % RKStep => TakeMLRK3Step
-                self % RKStep_key = ML_RK3_KEY
-				self % ML_Counter = 0
-				
-				call sem % mesh % MLRK % construct(sem % mesh, self % ML_nLevel) ! construct nlevel  
-
-            case default
-               print*, "Explicit time integration method not implemented"
-               error stop
-
-            end select
-         else
-            self % RKStep => TakeRK3Step
-            self % RKStep_key = RK3_KEY
-         end if
-
-         if ( controlVariables % ContainsKey("compute time derivative after timestep") ) then
-            if ( controlVariables % LogicalValueForKey("compute time derivative after timestep") ) then
-               call Enable_CTD_AFTER_STEPS
-               call Enable_CTD_AFTER_STEPS_IMEX
-            end if
-         end if
-
-         if ( controlVariables % ContainsKey("limit timestep") ) then
-            if ( controlVariables % LogicalValueForKey("limit timestep") ) then
-               if ( controlVariables % ContainsKey("limiter minimum") ) then
-                  limiter_minimum = controlVariables % RealValueForKey("limiter minimum")
-                  call Enable_limiter(self % RKStep_key, limiter_minimum)
-               else
-                  call Enable_limiter(self % RKStep_key)
-               end if
-            end if
-         end if
+      end if
+   end if
 !
 !        ------------------------------------
 !        Integrator-dependent initializations
 !        ------------------------------------
 !
-         SELECT CASE (controlVariables % StringValueForKey("simulation type",LINE_LENGTH))
-            CASE ('time-accurate')
-               IF (controlVariables % containsKey("final time")) THEN
-                  self % tFinal         = controlVariables % doublePrecisionValueForKey("final time")
-               ELSE
-                  self % tFinal         = huge(self % tFinal)
+   SELECT CASE (controlVariables % StringValueForKey("simulation type",LINE_LENGTH))
+      CASE ('time-accurate')
+         IF (controlVariables % containsKey("final time")) THEN
+            self % tFinal         = controlVariables % doublePrecisionValueForKey("final time")
+         ELSE
+            self % tFinal         = huge(self % tFinal)
 !~                  error stop '"final time" keyword must be specified for time-accurate integrators'
-               ENDIF
-               self % integratorType = TIME_ACCURATE
-            CASE DEFAULT ! Using 'steady-state' even if not specified in input file
-               self % integratorType = STEADY_STATE
-         END SELECT
+         ENDIF
+         self % integratorType = TIME_ACCURATE
+      CASE DEFAULT ! Using 'steady-state' even if not specified in input file
+         self % integratorType = STEADY_STATE
+   END SELECT
 !
 !        ----------------
 !        Set the autosave
@@ -339,20 +341,22 @@
          call self % TauEstimator % construct(controlVariables, sem)
 
          call Autosave_LambVectorConfigure(self % lambsave, controlVariables, initial_time)
+         
+         call self % SlidingMeshSave % Configure(controlVariables, initial_time)
 
-         if (.not. MPI_Process % isRoot ) return
+   if (.not. MPI_Process % isRoot ) return
 
-         write(STD_OUT,'(/)')
-         call Section_Header("Time integrator")
-         write(STD_OUT,'(/)')
+   write(STD_OUT,'(/)')
+   call Section_Header("Time integrator")
+   write(STD_OUT,'(/)')
 
-         write(STD_OUT,'(30X,A,A28,I10)',advance='no') "->" , "Simulation type: "
-         select case (self % integratorType)
-            case (TIME_ACCURATE)
-               write(STD_OUT,'(A)') "Time accurate"
-            case (STEADY_STATE)
-               write(STD_OUT,'(A)') "Steady state"
-         end select
+   write(STD_OUT,'(30X,A,A28,I10)',advance='no') "->" , "Simulation type: "
+   select case (self % integratorType)
+      case (TIME_ACCURATE)
+         write(STD_OUT,'(A)') "Time accurate"
+      case (STEADY_STATE)
+         write(STD_OUT,'(A)') "Steady state"
+   end select
 
          write(STD_OUT,'(30X,A,A28,I10)',advance='no') "->" , "Method: "
          if (self % integration_method == EXPLICIT_SOLVER) then
@@ -382,34 +386,34 @@
 			   write(STD_OUT,'(35X,A,A23,A)')  "->" , "Cut-Off Level N: ","CFL Cut-Off x 2.5^(N-1) "
             end select
 
-            write(STD_OUT,'(30X,A,A28)',advance='no') "->" , "Stage limiter: "
-            if (LIMITED) then
-               write(STD_OUT,'(A,1pG10.3)') "min. value ", LIMITER_MIN
-            else
-               write(STD_OUT,'(L)') LIMITED
-            end if
+      write(STD_OUT,'(30X,A,A28)',advance='no') "->" , "Stage limiter: "
+      if (LIMITED) then
+         write(STD_OUT,'(A,1pG10.3)') "min. value ", LIMITER_MIN
+      else
+         write(STD_OUT,'(L)') LIMITED
+      end if
 
-         else
-            write(STD_OUT,'(A)') self % integration_method
+   else
+      write(STD_OUT,'(A)') self % integration_method
 
-         end if
+   end if
 
-         write(STD_OUT,'(30X,A,A28,L)') "->" , "Derivative after timestep: ", CTD_AFTER_STEPS
+   write(STD_OUT,'(30X,A,A28,L)') "->" , "Derivative after timestep: ", CTD_AFTER_STEPS
 
-      END SUBROUTINE constructTimeIntegrator
+END SUBROUTINE constructTimeIntegrator
 !
 !     ////////////////////////////////////////////////////////////////////////////////////////
 !
-      SUBROUTINE destructTimeIntegrator( self )
-         CLASS(TimeIntegrator_t) :: self
-         self % tFinal       = 0.0_RP
-         self % numTimeSteps = 0
-         self % dt           = 0.0_RP
+SUBROUTINE destructTimeIntegrator( self )
+   CLASS(TimeIntegrator_t) :: self
+   self % tFinal       = 0.0_RP
+   self % numTimeSteps = 0
+   self % dt           = 0.0_RP
 
-         if (self % pAdaptator % Constructed) call self % pAdaptator % destruct()
+   if (self % pAdaptator % Constructed) call self % pAdaptator % destruct()
 
-         call self % TauEstimator % destruct
-      END SUBROUTINE destructTimeIntegrator
+   call self % TauEstimator % destruct
+END SUBROUTINE destructTimeIntegrator
 !
 !     ////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -434,9 +438,9 @@
 !     Internal variables
 !     ---------
 !
-      real(kind=RP)        :: FMGres    ! Target residual for FMG solver
-      REAL(KIND=RP)        :: maxResidual(NCONS)
-      type(FASMultigrid_t) :: FMGSolver ! FAS multigrid solver for Full-Multigrid (FMG) initialization
+real(kind=RP)        :: FMGres    ! Target residual for FMG solver
+REAL(KIND=RP)        :: maxResidual(NCONS)
+type(FASMultigrid_t) :: FMGSolver ! FAS multigrid solver for Full-Multigrid (FMG) initialization
 
 !     Initializations
 !     ---------------
@@ -448,37 +452,37 @@
 !     Measure solver time
 !     -------------------
 
-      call Stopwatch % CreateNewEvent("Solver")
-      call Stopwatch % Start("Solver")
+call Stopwatch % CreateNewEvent("Solver")
+call Stopwatch % Start("Solver")
 
 !     Estimate Tau initially, if requested
 !     ------------------------------------
-      if ( controlVariables % logicalValueForKey("plot truncation error") ) then
-         call EstimateAndPlotTruncationError(sem,0._RP,controlVariables,ComputeTimeDerivative,ComputeTimeDerivativeIsolated)
-      end if
+if ( controlVariables % logicalValueForKey("plot truncation error") ) then
+   call EstimateAndPlotTruncationError(sem,0._RP,controlVariables,ComputeTimeDerivative,ComputeTimeDerivativeIsolated)
+end if
 
 !     Perform FMG cycle if requested
 !        (only for steady simulations)
 !     ------------------------------
 
-      if (controlVariables % containsKey("fasfmg residual")) then
+if (controlVariables % containsKey("fasfmg residual")) then
 
-         FMGres = controlVariables % doubleprecisionValueForKey("fasfmg residual")
-         write(STD_OUT,*) 'Using FMG solver to get initial condition. Res =', FMGres
+   FMGres = controlVariables % doubleprecisionValueForKey("fasfmg residual")
+   write(STD_OUT,*) 'Using FMG solver to get initial condition. Res =', FMGres
 
-         call FMGSolver % construct(controlVariables,sem)
-         call FMGSolver % solve(0,0._RP, ComputeTimeDerivative, ComputeTimeDerivativeIsolated, .TRUE.,FMGres)
+   call FMGSolver % construct(controlVariables,sem)
+   call FMGSolver % solve(0,0._RP, ComputeTimeDerivative, ComputeTimeDerivativeIsolated, .TRUE.,FMGres)
 
-         call FMGSolver % destruct
-      end if
+   call FMGSolver % destruct
+end if
 
 !     Perform static p-adaptation stage(s) if requested
 !     -------------------------------------------------
-      if (self % pAdaptator % adaptation_mode == ADAPT_STATIC) then
+if (self % pAdaptator % adaptation_mode == ADAPT_STATIC) then
 
-         do while (self % pAdaptator % Adapt)
+   do while (self % pAdaptator % Adapt)
 
-            if (self % integratorType == STEADY_STATE) then
+      if (self % integratorType == STEADY_STATE) then
 !
 !              Lower the residual to 0.1 * truncation error threshold
 !              -> See Kompenhans et al. "Adaptation strategies for high order discontinuous Galerkin methods based on Tau-estimation." Journal of Computational Physics 306 (2016): 216-236.
@@ -489,8 +493,8 @@
             call self % pAdaptator % pAdapt(sem,sem  % numberOfTimeSteps, self % time, ComputeTimeDerivative, ComputeTimeDerivativeIsolated, controlVariables, self % adaptiveTimeStep)
             sem % numberOfTimeSteps = sem % numberOfTimeSteps + 1
 
-         end do
-      end if
+   end do
+end if
 
 !     Finish time integration
 !     -----------------------
@@ -498,9 +502,9 @@
 
 !     Measure solver time
 !     -------------------
-      call Stopwatch % Pause("Solver")
+call Stopwatch % Pause("Solver")
 
-      END SUBROUTINE Integrate
+END SUBROUTINE Integrate
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -522,6 +526,8 @@
 #if defined(NAVIERSTOKES)
       use ShockCapturing
       use TripForceClass, only: randomTrip
+      use ActuatorLine, only: farm
+      use SpongeClass, only: sponge
       use WallFunctionDefinitions, only: useAverageV
       use WallFunctionConnectivity, only: Initialize_WallConnection, WallUpdateMeanV, useWallFunc
 #endif
@@ -536,9 +542,9 @@
       use APESourceClass, only: apeSource, constructAPESource
 #endif
 
-      use IBMClass
+use IBMClass
 
-      IMPLICIT NONE
+IMPLICIT NONE
 !
 !     ---------
 !     Arguments
@@ -568,6 +574,7 @@
       integer                       :: eID
 	  logical                       :: updatelevel
       CHARACTER(len=LINE_LENGTH)    :: SolutionFileName
+      CHARACTER(len=LINE_LENGTH)    :: filename
       ! Time-step solvers:
       type(FASMultigrid_t)          :: FASSolver
       type(AnisFASMultigrid_t)      :: AnisFASSolver
@@ -596,13 +603,13 @@
 !     Initializations
 !     ---------------
 !
-      if (present(tolerance)) then
-         Tol = tolerance
-      else
-         Tol = self % tolerance
-      end if
+if (present(tolerance)) then
+   Tol = tolerance
+else
+   Tol = self % tolerance
+end if
 
-      t = self % time
+t = self % time
 
       if (self % adaptive_dt) then
          dt = self % dt
@@ -639,7 +646,7 @@
             end if
          end if
 
-         if( sem % mesh% IBM% TimePenal ) then 
+   if( sem % mesh% IBM% TimePenal ) then 
 !
 !           Correct time step
 !           -----------------
@@ -647,8 +654,8 @@
             sem % mesh% IBM% eta = self% CorrectDt(t, dt)
             sem % mesh% IBM% penalization = sem % mesh% IBM% eta
 #endif
-         end if
-      end if
+   end if
+end if
 !
 !     ------------------
 !     Configure restarts
@@ -679,62 +686,62 @@
 		 call samplings % UpdateInterp(sem % mesh)
       end if
 
-      call monitors % WriteToFile(sem % mesh)
+call monitors % WriteToFile(sem % mesh)
 
-      IF (self % integratorType == STEADY_STATE) THEN
-         IF (maxval(maxResidual) <= Tol )  THEN
-            if (MPI_Process % isRoot) then
-               write(STD_OUT,'(/,A,I0,A,ES10.3)') "   *** Residual tolerance reached at iteration ",sem % numberOfTimeSteps," with Residual = ", maxval(maxResidual)
-            end if
-            call monitors % WriteToFile(sem % mesh, force = .TRUE.)
-#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
-            call sem % fwh % writeToFile( force = .TRUE. )
-#endif
-            return
-         END IF
+IF (self % integratorType == STEADY_STATE) THEN
+   IF (maxval(maxResidual) <= Tol )  THEN
+      if (MPI_Process % isRoot) then
+         write(STD_OUT,'(/,A,I0,A,ES10.3)') "   *** Residual tolerance reached at iteration ",sem % numberOfTimeSteps," with Residual = ", maxval(maxResidual)
       end if
+      call monitors % WriteToFile(sem % mesh, force = .TRUE.)
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
+      call sem % fwh % writeToFile( force = .TRUE. )
+#endif
+      return
+   END IF
+end if
 !
 !     Update shock-capturing sensor
 !     -----------------------------
 #if defined(NAVIERSTOKES)
-      if (ShockCapturingDriver % isActive) then
-         call ShockCapturingDriver % Detect(sem, t)
-      end if
-      call getWallDistInSurfaces(surfacesMesh, sem % mesh)
+if (ShockCapturingDriver % isActive) then
+   call ShockCapturingDriver % Detect(sem, t)
+end if
+call getWallDistInSurfaces(surfacesMesh, sem % mesh)
 #endif
 !
 !     Save surfaces sol before the first time step
 !     --------------------------------------------
 #if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
-      call sem % fwh % updateValues(sem % mesh, t, sem % numberOfTimeSteps )
-      call sem % fwh % writeToFile()
+call sem % fwh % updateValues(sem % mesh, t, sem % numberOfTimeSteps )
+call sem % fwh % writeToFile()
 #endif
-      call surfacesMesh % saveAllSolution(sem % mesh, self % initial_iter, t, controlVariables)
+call surfacesMesh % saveAllSolution(sem % mesh, self % initial_iter, t, controlVariables)
 !
 !     -----------------
 !     Integrate in time
 !     -----------------
 !
-      select case (self % integration_method)
-      case(FAS_SOLVER)
-         call FASSolver % construct(controlVariables,sem)
+select case (self % integration_method)
+case(FAS_SOLVER)
+   call FASSolver % construct(controlVariables,sem)
 
-      case(ANISFAS_SOLVER)
-         call AnisFASSolver % construct(controlVariables,sem)
+case(ANISFAS_SOLVER)
+   call AnisFASSolver % construct(controlVariables,sem)
 
-      case(IMPLICIT_SOLVER)
-         call BDFSolver % construct(controlVariables,sem)
+case(IMPLICIT_SOLVER)
+   call BDFSolver % construct(controlVariables,sem)
 
-      case(ROSENBROCK_SOLVER)
-         call RosenbrockSolver % construct(controlVariables,sem)
+case(ROSENBROCK_SOLVER)
+   call RosenbrockSolver % construct(controlVariables,sem)
 
-      end select
+end select
 !
 !     ----------------
 !     Start time loop
 !     ----------------
 !
-      DO k = sem  % numberOfTimeSteps, self % initial_iter + self % numTimeSteps-1
+DO k = sem  % numberOfTimeSteps, self % initial_iter + self % numTimeSteps-1
 
 !
 !        CFL-bounded time step or adaptive time step
@@ -751,30 +758,30 @@
 !
 !        Correct time step
 !        -----------------
-         dt = self % CorrectDt(t,self % dt)
+   dt = self % CorrectDt(t,self % dt)
 
 !
 !        Set penalization term for IBM
 !        -----------------------------
-         if( sem % mesh% IBM% active ) then
-            if( sem% mesh% IBM% TimePenal ) sem % mesh% IBM% penalization = dt
-         end if
+   if( sem % mesh% IBM% active ) then
+      if( sem% mesh% IBM% TimePenal ) sem % mesh% IBM% penalization = dt
+   end if
 
 !
 !        Moving Body IMMERSED BOUNDARY
 !        -----------------------------
-         if( sem% mesh% IBM% active ) then
-            call sem% mesh% IBM% MoveBody( sem% mesh% elements,                  &
-                                           sem% mesh% no_of_elements,            &
-                                           sem% mesh% NDOF, sem% mesh% child, t, &
-                                           k+1,                                  &
-                                           self % autosave % Autosave(k+1)       )
-         end if
- 
+   if( sem% mesh% IBM% active ) then
+      call sem% mesh% IBM% MoveBody( sem% mesh% elements,                  &
+                                     sem% mesh% no_of_elements,            &
+                                     sem% mesh% NDOF, sem% mesh% child, t, &
+                                     k+1,                                  &
+                                     self % autosave % Autosave(k+1)       )
+   end if
+
 !
 !        User defined periodic operation
 !        -------------------------------
-         CALL UserDefinedPeriodicOperation(sem % mesh, t, dt, monitors, FLUID_DATA_VARS)
+   CALL UserDefinedPeriodicOperation(sem % mesh, t, dt, monitors, FLUID_DATA_VARS)
 #if defined(NAVIERSTOKES)
          if (useTrip) call randomTrip % gTrip % updateInTime(t)
 #endif
@@ -784,6 +791,21 @@
 #if defined(ACOUSTIC)
          call LambInterpolation % interpolate(sem % mesh, t)
 #endif
+!
+!        Sliding mesh: arm the ALE fluxes for this step. The grid angular speed
+!        is exactly the angle the geometry advances per step divided by the
+!        step size, so flux and mesh motion cannot drift apart even with a
+!        CFL-based (varying) dt. The geometry itself is advanced inside the
+!        RK3 stepper, once per stage, so every stage residual is evaluated at
+!        its own stage position. Other integrators are not wired yet and run
+!        with a frozen mesh and inertial fluxes.
+!        ----------------------------------------------------------------------
+         if ( sem % mesh % SlidingMesh % active .and. self % integratorType == TIME_ACCURATE .and. &
+            self % integration_method == EXPLICIT_SOLVER .and. (.not. self % adaptive_dt) .and. &
+            self % RKStep_key == RK3_KEY ) then
+            sem % mesh % SlidingMesh % angularVelocity = sem % mesh % SlidingMesh % theta / dt
+            sem % mesh % slidingflux = .true.
+         end if
 !
 !        Perform time step
 !        -----------------
@@ -844,25 +866,39 @@
 !
 !        Compute the new time
 !        --------------------
-         t = t + dt
-         self % time = t
+   t = t + dt
+   self % time = t
 !
 !        Get maximum residuals
 !        ---------------------
-         maxResidual       = ComputeMaxResiduals(sem % mesh)
-         sem % maxResidual = maxval(maxResidual)
+   maxResidual       = ComputeMaxResiduals(sem % mesh)
+   sem % maxResidual = maxval(maxResidual)
 !
 !        Update sensor
 !        -------------
 #ifdef NAVIERSTOKES
-         if (ShockCapturingDriver % isActive) then
-            call ShockCapturingDriver % Detect(sem, t)
-         end if
+   if (ShockCapturingDriver % isActive) then
+      call ShockCapturingDriver % Detect(sem, t)
+   end if
 #endif
 !
 !        Update monitors
 !        ---------------
-         call Monitors % UpdateValues( sem % mesh, t, k+1, maxResidual, self% autosave% Autosave(k+1), dt )
+   call Monitors % UpdateValues( sem % mesh, t, k+1, maxResidual, self% autosave% Autosave(k+1), dt )
+
+   if (sem%mesh%SlidingMesh%active) then 
+
+      ! Sliding mesh autosave
+      if ( self % SlidingMeshSave % Autosave(k+1) ) then
+         write(filename,'(A,A,I10.10)') trim(SolutionFileName), "_", k+1
+         call sem % mesh % Export( trim(filename) )
+      end if
+      
+      IF( (MOD( k+1, self % outputInterval) == 0) .or. (k .eq. self % initial_iter) ) then 
+         !write(*,*) 'writing malla',achar(48+(k/9))
+        ! call sem % mesh % Export( "malla"//achar(48+(k/9)) )
+      end if 
+   end if 
 !
 !        Update samplings
 !        ----------------
@@ -870,33 +906,33 @@
 !
 !        Exit if the target is reached
 !        -----------------------------
-         IF (self % integratorType == STEADY_STATE) THEN
-            IF (maxval(maxResidual) <= Tol )  THEN
-               call self % Display(sem % mesh, monitors, k+1)
-               if (MPI_Process % isRoot) then
-                  write(STD_OUT,'(/,A,I0,A,ES10.3)') "   *** Residual tolerance reached at iteration ",k+1," with Residual = ", maxval(maxResidual)
-               end if
-               sem % numberOfTimeSteps = k + 1               
-               exit
-            END IF
-         ELSEIF (self % integratorType == TIME_ACCURATE) THEN
-            IF ( (t .ge. self % tFinal) .or. (abs(t-self % tFinal) .le. 100.0_RP*epsilon(1.0_RP))) then
-               call self % Display( sem % mesh, monitors, k+1)
-               sem % numberOfTimeSteps = k + 1
-               exit
-            end if
-         END IF
+   IF (self % integratorType == STEADY_STATE) THEN
+      IF (maxval(maxResidual) <= Tol )  THEN
+         call self % Display(sem % mesh, monitors, k+1)
+         if (MPI_Process % isRoot) then
+            write(STD_OUT,'(/,A,I0,A,ES10.3)') "   *** Residual tolerance reached at iteration ",k+1," with Residual = ", maxval(maxResidual)
+         end if
+         sem % numberOfTimeSteps = k + 1               
+         exit
+      END IF
+   ELSEIF (self % integratorType == TIME_ACCURATE) THEN
+      IF ( (t .ge. self % tFinal) .or. (abs(t-self % tFinal) .le. 100.0_RP*epsilon(1.0_RP))) then
+         call self % Display( sem % mesh, monitors, k+1)
+         sem % numberOfTimeSteps = k + 1
+         exit
+      end if
+   END IF
 #if defined(NAVIERSTOKES)
 !
 !        Update wall avg
 !        ---------------
-         if (useAverageV) call WallUpdateMeanV(sem % mesh, dt)
+   if (useAverageV) call WallUpdateMeanV(sem % mesh, dt)
 !
 !        Integration of particles
 !        ------------------------
-         if ( sem % particles % active ) then
+   if ( sem % particles % active ) then
 
-            call sem % particles % Integrate(sem % mesh, dt)
+      call sem % particles % Integrate(sem % mesh, dt)
 
             if ( sem % particles % injection % active ) then
                if ( (MOD(k+1, sem % particles % injection % period) == 0 ) .or. (k .eq. self % initial_iter) ) then
@@ -908,7 +944,7 @@
 !
 !        Print monitors
 !        --------------
-         IF( (MOD( k+1, self % outputInterval) == 0) .or. (k .eq. self % initial_iter) ) call self % Display(sem % mesh, monitors, k+1)
+   IF( (MOD( k+1, self % outputInterval) == 0) .or. (k .eq. self % initial_iter) ) call self % Display(sem % mesh, monitors, k+1)
 !
 !        p- Adapt
 !        --------------
@@ -923,9 +959,9 @@
          if ( self % autosave % Autosave(k+1) ) then
             call SaveRestart(sem,k+1,t,SolutionFileName, saveGradients, saveSensor, saveLES, saveSource)
 #if defined(NAVIERSTOKES)
-            if ( sem % particles % active ) then
-               call sem % particles % ExportToVTK ( k+1, monitors % solution_file )
-            end if
+      if ( sem % particles % active ) then
+         call sem % particles % ExportToVTK ( k+1, monitors % solution_file )
+      end if
 #endif
 #if defined(NAVIERSTOKES) || defined(INCNS) || defined(MULTIPHASE)
             if(ActuatorLineFlag .and. ActuatorLineControlFlag) then ! CONTROLLER HERE
@@ -940,16 +976,16 @@
 !
 !        Save surfaces solution
 !        ----------------------
-         if (surfacesMesh % autosave % Autosave(k+1)) then
+   if (surfacesMesh % autosave % Autosave(k+1)) then
 #if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
-             call sem % fwh % updateValues(sem % mesh, t, k+1)
-             call sem % fwh % writeToFile()
+       call sem % fwh % updateValues(sem % mesh, t, k+1)
+       call sem % fwh % writeToFile()
 #endif
 #if defined(NAVIERSTOKES)
-      if (.not. useWallFunc) call getU_tauInSurfaces(surfacesMesh, sem % mesh)
+if (.not. useWallFunc) call getU_tauInSurfaces(surfacesMesh, sem % mesh)
 #endif
-             call surfacesMesh % saveAllSolution(sem % mesh, k+1, t, controlVariables)
-         end if
+       call surfacesMesh % saveAllSolution(sem % mesh, k+1, t, controlVariables)
+   end if
 
 !        Flush monitors
 !        --------------
@@ -973,30 +1009,30 @@
 #if defined(FLOW) 
          call WriteBaseFlowSponge(sponge, sem % mesh, k, t, last=.true.)
 #endif
-      end if
+end if
 
-      sem % maxResidual       = maxval(maxResidual)
-      self % time             = t
+sem % maxResidual       = maxval(maxResidual)
+self % time             = t
 
 !
 !     ---------
 !     Finish up
 !     ---------
 !
-      select case(self % integration_method)
-      case(FAS_SOLVER)
-         CALL FASSolver % destruct
+select case(self % integration_method)
+case(FAS_SOLVER)
+   CALL FASSolver % destruct
 
-      case(ANISFAS_SOLVER)
-         CALL AnisFASSolver % destruct
+case(ANISFAS_SOLVER)
+   CALL AnisFASSolver % destruct
 
-      case(IMPLICIT_SOLVER)
-         call BDFSolver % destruct
+case(IMPLICIT_SOLVER)
+   call BDFSolver % destruct
 
-      case(ROSENBROCK_SOLVER)
-         call RosenbrockSolver % destruct
+case(ROSENBROCK_SOLVER)
+   call RosenbrockSolver % destruct
 
-      end select
+end select
 
 #if defined(NAVIERSTOKES)
          if (useTrip) call randomTrip % destruct
@@ -1008,9 +1044,9 @@
 #if defined(NAVIERSTOKES) || defined(INCNS) || defined(MULTIPHASE)
          if(ActuatorLineFlag) call DestructFarm(farm)
 #endif
-      if (saveOrders) call sem % mesh % ExportOrders(SolutionFileName)
+if (saveOrders) call sem % mesh % ExportOrders(SolutionFileName)
 
-   end subroutine IntegrateInTime
+end subroutine IntegrateInTime
 
 !
 !/////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1018,44 +1054,44 @@
 !     Subroutine to print the residuals
 !
 !
-   subroutine TimeIntegrator_Display(self, mesh, monitors, iter)
-      implicit none
-      class(TimeIntegrator_t),   intent(in)     :: self
-      class(HexMesh),            intent(in)     :: mesh
-      class(Monitor_t),          intent(inout)  :: monitors
-      integer                  , intent(in)     :: iter
+subroutine TimeIntegrator_Display(self, mesh, monitors, iter)
+implicit none
+class(TimeIntegrator_t),   intent(in)     :: self
+class(HexMesh),            intent(in)     :: mesh
+class(Monitor_t),          intent(inout)  :: monitors
+integer                  , intent(in)     :: iter
 !
 !     ---------------
 !     Local variables
 !     ---------------
 !
-      real(kind=RP)           :: ETA, tEl
-      integer, parameter      :: showLabels = 50
-      integer, save           :: shown = 0
+real(kind=RP)           :: ETA, tEl
+integer, parameter      :: showLabels = 50
+integer, save           :: shown = 0
 
-      if ( .not. MPI_Process % isRoot ) return
+if ( .not. MPI_Process % isRoot ) return
 
-      if ( mod(shown, showLabels) .eq. 0 ) then
-         if ( (self % integratorType .eq. TIME_ACCURATE) .and. (iter .gt. self % initial_iter+1) ) then
+if ( mod(shown, showLabels) .eq. 0 ) then
+   if ( (self % integratorType .eq. TIME_ACCURATE) .and. (iter .gt. self % initial_iter+1) ) then
 !
 !           Compute ETA
 !           -----------
-            tEl = Stopwatch % ElapsedTime("Solver")
-            ETA = (self % tFinal - self % initial_time) * tEl / (self % time - self % initial_time) - tEl
-            write(STD_OUT,'(A,F10.3,A)') "*** ETA:", ETA," seconds."
-         end if
-         write(STD_OUT,'(/)')
-         write(STD_OUT,'(/)')
+      tEl = Stopwatch % ElapsedTime("Solver")
+      ETA = (self % tFinal - self % initial_time) * tEl / (self % time - self % initial_time) - tEl
+      write(STD_OUT,'(A,F10.3,A)') "*** ETA:", ETA," seconds."
+   end if
+   write(STD_OUT,'(/)')
+   write(STD_OUT,'(/)')
 
-         call monitors % WriteLabel
-         call monitors % WriteUnderlines
+   call monitors % WriteLabel
+   call monitors % WriteUnderlines
 
-      end if
-      shown = shown + 1
+end if
+shown = shown + 1
 
-      call monitors % WriteValues
+call monitors % WriteValues
 
-   end subroutine TimeIntegrator_Display
+end subroutine TimeIntegrator_Display
 !
 !/////////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -1063,7 +1099,7 @@
 #if defined(FLOW) 
       use SpongeClass, only: sponge, WriteBaseFlowSponge
 #endif
-      IMPLICIT NONE
+IMPLICIT NONE
 !
 !     ------------------------------------
 !     Save the results to the restart file
@@ -1079,8 +1115,8 @@
       logical,          intent(in) :: saveLES
       logical,          intent(in) :: saveSource
 !     ----------------------------------------------
-      INTEGER                      :: fd             !  File unit for new restart file
-      CHARACTER(len=LINE_LENGTH)   :: FinalName      !  Final name for particular restart file
+INTEGER                      :: fd             !  File unit for new restart file
+CHARACTER(len=LINE_LENGTH)   :: FinalName      !  Final name for particular restart file
 !     ----------------------------------------------
 
       WRITE(FinalName,'(2A,I10.10,A)')  TRIM(RestFileName),'_',k,'.hsol'
@@ -1089,7 +1125,7 @@
 #if defined(FLOW)
       call WriteBaseFlowSponge(sponge, sem % mesh, k, t)
 #endif
-   END SUBROUTINE SaveRestart
+END SUBROUTINE SaveRestart
 !
 !/////////////////////////////////////////////////////////////////////////////////////////////
 !
@@ -1097,22 +1133,23 @@
 !  This routine corrects the time-step size, so that
 !  time-periodic operations can be performed
 !  -------------------------------------------------
-   recursive function TimeIntegrator_CorrectDt (self, t, dt_in) result(dt_out)
-      implicit none
-      !-arguments------------------------------------------------
-      class(TimeIntegrator_t) , intent(inout)   :: self
-      real(kind=RP)           , intent(in)      :: t
-      real(kind=RP)           , intent(in)      :: dt_in
-      real(kind=RP)                             :: dt_out
-      !-local-variables------------------------------------------
-      real(kind=RP) :: dt_temp
+recursive function TimeIntegrator_CorrectDt (self, t, dt_in) result(dt_out)
+implicit none
+!-arguments------------------------------------------------
+class(TimeIntegrator_t) , intent(inout)   :: self
+real(kind=RP)           , intent(in)      :: t
+real(kind=RP)           , intent(in)      :: dt_in
+real(kind=RP)                             :: dt_out
+!-local-variables------------------------------------------
+real(kind=RP) :: dt_temp
 
       integer, parameter :: DO_NOTHING  = 0
       integer, parameter :: AUTOSAVE    = 1
       integer, parameter :: ADAPT       = 2
       integer, parameter :: SURFSAVE    = 3
       integer, parameter :: LAMBSAVE    = 4
-      integer, parameter :: DONT_KNOW   = 5
+      integer, parameter :: SLIDINGMESHSAVE = 5
+      integer, parameter :: DONT_KNOW   = 6
       integer, save :: next_time_will = DONT_KNOW
       !----------------------------------------------------------
 
@@ -1123,83 +1160,84 @@
       self % autosave   % performAutosave = .FALSE.
       surfacesMesh % autosave % performAutosave = .FALSE.
       self % lambsave   % performAutosave = .FALSE.
+      self % SlidingMeshSave   % performAutosave = .FALSE.
       dt_out = dt_in
 
 !
 !     time-step bounded by final time
 !     -------------------------------
-      if ( self % integratorType .eq. TIME_ACCURATE ) then
-         if ( ( t + dt_out) .gt. self % tFinal ) then
-            dt_out = self % tFinal - t
-         end if
-      end if
+if ( self % integratorType .eq. TIME_ACCURATE ) then
+   if ( ( t + dt_out) .gt. self % tFinal ) then
+      dt_out = self % tFinal - t
+   end if
+end if
 
 !
 !     time-step bounded by periodic operations
 !     ----------------------------------------
 
-      select case (next_time_will)
-         case (DO_NOTHING)
-            return
+select case (next_time_will)
+   case (DO_NOTHING)
+      return
 
-         case (AUTOSAVE)
+   case (AUTOSAVE)
 
-            if ( self % autosave % nextAutosaveTime < (t + dt_out) ) then
-               dt_out = self % autosave % nextAutosaveTime - t
-               self % autosave % performAutosave = .TRUE.
+      if ( self % autosave % nextAutosaveTime < (t + dt_out) ) then
+         dt_out = self % autosave % nextAutosaveTime - t
+         self % autosave % performAutosave = .TRUE.
 
-               if ( AlmostEqual(self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime) ) then
-                  self % pAdaptator % performPAdaptationT = .TRUE.
-                  self % pAdaptator % nextAdaptationTime = self % pAdaptator % nextAdaptationTime + self % pAdaptator % time_interval
-               end if
+         if ( AlmostEqual(self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime) ) then
+            self % pAdaptator % performPAdaptationT = .TRUE.
+            self % pAdaptator % nextAdaptationTime = self % pAdaptator % nextAdaptationTime + self % pAdaptator % time_interval
+         end if
 
-               if ( AlmostEqual(self % autosave % nextAutosaveTime, surfacesMesh % autosave % nextAutosaveTime) ) then
-                  surfacesMesh % autosave % performAutosave = .TRUE.
-                  surfacesMesh % autosave % nextAutosaveTime = surfacesMesh % autosave % nextAutosaveTime + surfacesMesh % autosave % time_interval
-               end if
+         if ( AlmostEqual(self % autosave % nextAutosaveTime, surfacesMesh % autosave % nextAutosaveTime) ) then
+            surfacesMesh % autosave % performAutosave = .TRUE.
+            surfacesMesh % autosave % nextAutosaveTime = surfacesMesh % autosave % nextAutosaveTime + surfacesMesh % autosave % time_interval
+         end if
 
                self % autosave % nextAutosaveTime = self % autosave % nextAutosaveTime + self % autosave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
             end if
 
-         case (ADAPT)
+   case (ADAPT)
 
-            if ( self % pAdaptator % nextAdaptationTime < (t + dt_out) ) then
-               dt_out = self % pAdaptator % nextAdaptationTime - t
-               self % pAdaptator % performPAdaptationT = .TRUE.
+      if ( self % pAdaptator % nextAdaptationTime < (t + dt_out) ) then
+         dt_out = self % pAdaptator % nextAdaptationTime - t
+         self % pAdaptator % performPAdaptationT = .TRUE.
 
-               if ( AlmostEqual(self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime) ) then
-                  self % autosave % performAutosave = .TRUE.
-                  self % autosave % nextAutosaveTime = self % autosave % nextAutosaveTime + self % autosave % time_interval
-               end if
+         if ( AlmostEqual(self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime) ) then
+            self % autosave % performAutosave = .TRUE.
+            self % autosave % nextAutosaveTime = self % autosave % nextAutosaveTime + self % autosave % time_interval
+         end if
 
-               if ( AlmostEqual(self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime) ) then
-                  surfacesMesh % autosave % performAutosave = .TRUE.
-                  surfacesMesh % autosave % nextAutosaveTime = surfacesMesh % autosave % nextAutosaveTime + surfacesMesh % autosave%time_interval
-               end if
+         if ( AlmostEqual(self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime) ) then
+            surfacesMesh % autosave % performAutosave = .TRUE.
+            surfacesMesh % autosave % nextAutosaveTime = surfacesMesh % autosave % nextAutosaveTime + surfacesMesh % autosave%time_interval
+         end if
 
                self % pAdaptator % nextAdaptationTime = self % pAdaptator % nextAdaptationTime + self % pAdaptator % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
             end if
 
-         case (SURFSAVE)
+   case (SURFSAVE)
 
-            if ( surfacesMesh % autosave % nextAutosaveTime < (t + dt_out) ) then
-               dt_out = surfacesMesh % autosave % nextAutosaveTime - t
-               surfacesMesh % autosave % performAutosave = .TRUE.
+      if ( surfacesMesh % autosave % nextAutosaveTime < (t + dt_out) ) then
+         dt_out = surfacesMesh % autosave % nextAutosaveTime - t
+         surfacesMesh % autosave % performAutosave = .TRUE.
 
-               if ( AlmostEqual(surfacesMesh % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime) ) then
-                  self % pAdaptator % performPAdaptationT = .TRUE.
-                  self % pAdaptator % nextAdaptationTime = self % pAdaptator % nextAdaptationTime + self % pAdaptator % time_interval
-               end if
+         if ( AlmostEqual(surfacesMesh % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime) ) then
+            self % pAdaptator % performPAdaptationT = .TRUE.
+            self % pAdaptator % nextAdaptationTime = self % pAdaptator % nextAdaptationTime + self % pAdaptator % time_interval
+         end if
 
-               if ( AlmostEqual(self % autosave % nextAutosaveTime, surfacesMesh % autosave % nextAutosaveTime) ) then
-                  self % autosave % performAutosave = .TRUE.
-                  self % autosave % nextAutosaveTime = self % autosave % nextAutosaveTime + self % autosave % time_interval
-               end if
+         if ( AlmostEqual(self % autosave % nextAutosaveTime, surfacesMesh % autosave % nextAutosaveTime) ) then
+            self % autosave % performAutosave = .TRUE.
+            self % autosave % nextAutosaveTime = self % autosave % nextAutosaveTime + self % autosave % time_interval
+         end if
 
                surfacesMesh % autosave % nextAutosaveTime = surfacesMesh % autosave % nextAutosaveTime + surfacesMesh % autosave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
             end if
          
          case (LAMBSAVE)
@@ -1209,26 +1247,37 @@
                self % lambsave % performAutosave = .TRUE.
 
                self % lambsave % nextAutosaveTime = self % lambsave % nextAutosaveTime + self % lambsave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
             end if
 
-         case (DONT_KNOW)
+         case (SLIDINGMESHSAVE)
+
+            if ( self % SlidingMeshSave % nextAutosaveTime < (t + dt_out) ) then
+               dt_out = self % SlidingMeshSave % nextAutosaveTime - t
+               self % SlidingMeshSave % performAutosave = .TRUE.
+
+               self % SlidingMeshSave % nextAutosaveTime = self % SlidingMeshSave % nextAutosaveTime + self % SlidingMeshSave % time_interval
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
+            end if
+
+   case (DONT_KNOW)
 
             if (  self % pAdaptator % adaptation_mode == ADAPT_DYNAMIC_TIME .or. &
                   surfacesMesh % autosave % mode      == AUTOSAVE_BY_TIME .or. &
                   self % autosave % mode              == AUTOSAVE_BY_TIME .or. &
-                  self % lambsave % mode              == AUTOSAVE_BY_TIME) then
+                  self % lambsave % mode              == AUTOSAVE_BY_TIME .or. &
+                  self % SlidingMeshSave % mode       == AUTOSAVE_BY_TIME) then
 
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime, self % SlidingMeshSave % nextAutosaveTime],1)
                dt_temp = self % CorrectDt (t, dt_out)
                dt_out  = dt_temp
             else
                next_time_will = DO_NOTHING
             end if
 
-      end select
+end select
 
-   end function TimeIntegrator_CorrectDt
+end function TimeIntegrator_CorrectDt
 !
 !/////////////////////////////////////////////////////////////////////////////////////////////
 !

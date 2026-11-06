@@ -178,7 +178,13 @@
       pure SUBROUTINE destructTransfiniteHexMap(self)
          IMPLICIT NONE  
           CLASS(TransFiniteHexMap), intent(inout) :: self
-          IF(ALLOCATED(self % faces))   DEALLOCATE(self % faces)
+          integer :: i
+          IF(ALLOCATED(self % faces)) then
+                  DO i=1, SIZE(self % faces)
+                        CALL self % faces(i) % Destruct()
+                  END DO
+                  DEALLOCATE(self % faces)
+          end if
      END SUBROUTINE destructTransfiniteHexMap
 !
 !////////////////////////////////////////////////////////////////////////
