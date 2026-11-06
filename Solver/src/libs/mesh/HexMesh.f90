@@ -670,7 +670,7 @@ MODULE HexMeshClass
 !              Fix small-face rotations (and ordering if needed)
 !              -------------------------------------------------
 !
-               if (.not.present(globalToLocalElementID) .and. present(HorsesMortars)) then
+               if (present(HorsesMortars) .and. all(self % faces(mID) % Mortar /= 0)) then
                   rotations=0
                   do l=1,4 
                      small(l)=self%faces(self % faces(mID)% Mortar(l))
@@ -678,9 +678,11 @@ MODULE HexMeshClass
             
                   call GetSmallFacesRotation(self % faces(mID), small, self % nodes, rotations,change_pos)
 
-                  do l=1,4 
-                     if (rotations(l) .NE. 0) self%faces(self % faces(mID)% Mortar(l))% rotation=rotations(l)
-                  end do 
+                  do l=1,4
+                     if (rotations(l) < 0) error stop "4:1 mortar: no rotation found for a small face"
+                     self%faces(self % faces(mID)% Mortar(l))% rotation = rotations(l)
+                  end do
+
                end if 
 
             END IF  
