@@ -7640,8 +7640,14 @@ end subroutine HexMesh_pAdapt_MPI
 !$omp parallel do private(f) schedule(runtime)
       do fID=1, size(facesArray)
          f => self % faces( facesArray(fID) )  ! associate fails here in intel compilers
-         call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, analyticalJac, FaceComputeQdot)
-         call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, analyticalJac, FaceComputeQdot)
+
+         if (f % MortarType == MORTAR_SMALL4) then
+            call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, analyticalJac, FaceComputeQdot, Mortar=.TRUE.)
+            call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, analyticalJac, FaceComputeQdot, Mortar=.TRUE.)
+         else
+            call f % storage(1) % Construct(NDIM, f % Nf, f % NelLeft , computeGradients, analyticalJac, FaceComputeQdot)
+            call f % storage(2) % Construct(NDIM, f % Nf, f % NelRight, computeGradients, analyticalJac, FaceComputeQdot)
+         end if
       end do
 !$omp end parallel do
 
