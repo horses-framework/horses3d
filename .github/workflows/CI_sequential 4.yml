@@ -175,7 +175,16 @@ jobs:
         if: '!cancelled()'
 
 #
-# 4) Mesh interpolation - horses.tools
+# 4) horses2plt
+# -------------
+      - name: Run horses2plt
+        working-directory: ./Solver/test/AddOns/horses2plt
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./run_test.sh
+        if: '!cancelled()'
+
+# 5) Mesh interpolation - horses.tools
 # ------------------------------------
 #    The meshes are generated with the scripts of the horses3d-meshes repository (see the top of the file)
       - name: Generate MeshInterpolation meshes
