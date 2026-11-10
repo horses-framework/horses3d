@@ -351,7 +351,13 @@ module SCsensorClass
       end do
 !$omp end parallel do
 
-      call sensor % TEestim % coarseSem % mesh % pAdapt(N, controlVariables)
+!     If this is an MPI simulation, we have to call the `pAdapt` routine that is specialized for parallel
+!     simulations (see comments in Solver/src/libs/mesh/HexMesh.f90 - HexMesh_pAdapt)
+      if (MPI_Process % doMPIAction) then
+         call sensor % TEestim % coarseSem % mesh % pAdapt_MPI(N, controlVariables)
+      else
+         call sensor % TEestim % coarseSem % mesh % pAdapt(N, controlVariables)
+      end if
       call sensor % TEestim % coarseSem % mesh % storage % PointStorage()
 !
 !     Update the SVV if active
@@ -469,7 +475,7 @@ module SCsensorClass
 !     Add 'inertia' to the scaled value
 !     ---------------------------------
       if (sensor % min_steps > 1) then   ! Enter the loop only if necessary
-!$omp parallel do default(private) shared(sem)
+!$omp parallel do default(private) shared(sem, sensor)
          do eID = 1, sem % mesh % no_of_elements
             e => sem % mesh % elements(eID)
             s = e % storage % sensor
@@ -846,7 +852,7 @@ module SCsensorClass
 !
 !     Maximum TE computation
 !     ----------------------
-!$omp parallel do default(private) shared(sem, csem)
+!$omp parallel do default(private) shared(sem, csem, sensor, t, NodalStorage, thermodynamics, dimensionless, refValues)
       do eID = 1, sem % mesh % no_of_elements
 
          e  => sem % mesh % elements(eID)
