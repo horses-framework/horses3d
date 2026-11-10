@@ -238,7 +238,6 @@ module RiemannSolvers_MU
          real(kind=RP)  :: cL,uL, vL, wL, pL, invRhoL, invSqrtRhoL, lambdaMinusL, lambdaPlusL
          real(kind=RP)  :: cR,uR, vR, wR, pR, invRhoR, invSqrtRhoR, lambdaMinusR, lambdaPlusR
          real(kind=RP)  :: rhoStarL, rhoStarR, uStar, pStar, rhoStar, vStar, wStar, cuStar, halfRhouStar
-         real(kind=RP)  :: QLRot(NCONS), QRRot(NCONS), invMa2Avg, halfRhouL, halfRhouR
          real(kind=RP)  :: lambda_mu = 0.0_RP
 
 !
@@ -260,7 +259,6 @@ module RiemannSolvers_MU
          wR = invSqrtRhoR * (QRight(IMSQRHOU) * t2(1)   + QRight(IMSQRHOV) * t2(2)   + QRight(IMSQRHOW) * t2(3))
          pR = QRight(IMP)
 
-		   invMa2Avg = 0.5_RP * (invMa2L/rhoL + invMa2R/rhoR) ! This is c^2 (normalized with Vref)
 !
 !        Compute the Star Region
 !        -----------------------
@@ -289,17 +287,15 @@ module RiemannSolvers_MU
 
          cuStar = 0.5_RP*(cL*uL + cR*uR)
          halfRhouStar = 0.5_RP*rhoStar*uStar
-		   halfRhouL = 0.5_RP*rhoL*uL
-		   halfRhouR = 0.5_RP*rhoR*uR
 !
 !      - Add first the common (conservative) part
          !fL = [cuStar+lambda_mu*(muL-muR), rhoStar*uStar*uStar + pStar, rhoStar*uStar*vStar, rhoStar*uStar*wStar, dimensionless % invMa2 * uStar]
-         fL = [cuStar+lambda_mu*(muL-muR), halfRhouStar*uStar + pStar, halfRhouStar*vStar, halfRhouStar*wStar, 0.0_RP] ! 0.5*(invMa2L+invMa2R) * uStar
+         fL = [cuStar+lambda_mu*(muL-muR), rhoStar*uStar*uStar + pStar, rhoStar*uStar*vStar, rhoStar*uStar*wStar, 0.0_RP]
          fR = fL
 !
 !      - Add the non--conservative part
-         fL = fL + [0.0_RP, cL*0.5_RP*(muR-muL)+ 0.5_RP*halfRhouStar*(uStar-uL),0.5_RP*halfRhouStar*(vStar-vL), 0.5_RP*halfRhouStar*(wStar-wL), (invMa2L)*(uStar-uL)]
-         fR = fR + [0.0_RP, cR*0.5_RP*(muL-muR)+ 0.5_RP*halfRhouStar*(uStar-uR),0.5_RP*halfRhouStar*(vStar-vR), 0.5_RP*halfRhouStar*(wStar-wR), (invMa2R)*(uStar-uR)]
+         fL = fL + [0.0_RP, cL*0.5_RP*(muR-muL)-halfRhouStar*uL,-halfRhouStar*vL, -halfRhouStar*wL, (invMa2L)*(uStar-uL)]
+         fR = fR + [0.0_RP, cR*0.5_RP*(muL-muR)-halfRhouStar*uR,-halfRhouStar*vR, -halfRhouStar*wR, (invMa2R)*(uStar-uR)]
 !
 !        ************************************************
 !        Return momentum equations to the cartesian frame

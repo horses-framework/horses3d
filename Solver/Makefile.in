@@ -18,6 +18,7 @@ WITH_PETSC?=NO
 WITH_METIS?=NO
 WITH_HDF5?=NO
 WITH_MKL?=NO
+EXTRA_FFLAGS?=
 
 MAKE=make
 AR=ar
@@ -165,6 +166,10 @@ ifeq '$(WITH_MKL)''YES'
   	FFLAGS+= -qmkl
   endif
 endif
+##################
+## Add extra flags
+##################
+FFLAGS  += $(EXTRA_FFLAGS)
 
 ################
 ## Link METIS ##
