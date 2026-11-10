@@ -1,0 +1,47 @@
+!
+! Step 3 of the test (see MeshInterpolation_source.control)
+!
+Flow equations        = "NS"
+mesh file name        = "MESH/box_target.msh"
+Polynomial order      = 4
+discretization nodes  = Gauss-Lobatto
+Number of time steps  = 0
+Output Interval       = 1
+Convergence tolerance = 1.d-10
+cfl                   = 0.4
+dcfl                  = 0.4
+mach number           = 0.4
+Reynolds number       = 1600.0
+AOA theta             = 0.0
+AOA phi               = 0.0
+solution file name    = "RESULTS/Check.hsol"
+restart               = .true.
+restart file name     = "RESULTS/Source_0000000000.Interpolated.hsol"
+riemann solver        = roe
+simulation type       = time-accurate
+time integration      = explicit
+explicit method       = RK3
+
+#define boundary bottom
+   type = FreeSlipWall
+#end
+
+#define boundary top
+   type = FreeSlipWall
+#end
+
+#define boundary left
+   type = FreeSlipWall
+#end
+
+#define boundary right
+   type = FreeSlipWall
+#end
+
+#define boundary front
+   type = FreeSlipWall
+#end
+
+#define boundary back
+   type = FreeSlipWall
+#end

@@ -1,0 +1,40 @@
+!
+! Step 2 of the test (see MeshInterpolation_source.control)
+!
+tool type               = mesh interpolation
+interpolation field     = auto      ! solution and Lamb vector files
+input hmesh file name   = MESH/Source_0000000000.hmesh
+input file name         = RESULTS/Source_0000000000.hsol
+input file name 2       = RESULTS/Source_0000000000.Lamb.hsol
+
+! Output mesh: different elements, polynomial order and discretization nodes
+mesh file name          = "MESH/box_target.msh"
+Polynomial order        = 4
+discretization nodes    = Gauss-Lobatto
+
+output directory        = RESULTS
+output file suffix      = .Interpolated
+
+#define boundary bottom
+   type = FreeSlipWall
+#end
+
+#define boundary top
+   type = FreeSlipWall
+#end
+
+#define boundary left
+   type = FreeSlipWall
+#end
+
+#define boundary right
+   type = FreeSlipWall
+#end
+
+#define boundary front
+   type = FreeSlipWall
+#end
+
+#define boundary back
+   type = FreeSlipWall
+#end
