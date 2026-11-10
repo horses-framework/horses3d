@@ -665,7 +665,7 @@ module SpectralVanishingViscosity
          invRho  = 1.0_RP / Q(IRHO)
          u = Q(IRHOU:IRHOW)*invRho
 
-         divV = Hx(IX) + Hy(IY) + Hz(IZ)
+         divV = Hx(IPU) + Hy(IPV) + Hz(IPW)
 
          F(IRHO,IX)  = 0.0_RP
          F(IRHOU,IX) = sqrt_mu * (2.0_RP * Hx(IRHOU) - 2.0_RP/3.0_RP * divV )
