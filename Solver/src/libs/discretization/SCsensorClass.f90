@@ -356,7 +356,12 @@ module SCsensorClass
          call sensor % TEestim % coarseSem % mesh % pAdapt_MPI(N, controlVariables)
       else
          call sensor % TEestim % coarseSem % mesh % pAdapt(N, controlVariables)
-      end if
+!     If this is an MPI simulation, we have to call the `pAdapt` routine that is specialized for parallel 
+!     simulations (see comments in Solver/src/libs/mesh/HexMesh.f90 - HexMesh_pAdapt)
+      if (MPI_Process % doMPIAction) then
+         call sensor % TEestim % coarseSem % mesh % pAdapt_MPI(N, controlVariables)
+      else
+         call sensor % TEestim % coarseSem % mesh % pAdapt(N, controlVariables)
       call sensor % TEestim % coarseSem % mesh % storage % PointStorage()
 !
 !     Update the SVV if active
