@@ -121,6 +121,7 @@ module EllipticBR2
 
       subroutine BR2_ComputeGradient( self , nEqn, nGradEqn, mesh , time , GetGradients, HO_Elements, element_mask, Level)
          use HexMeshClass
+         use RotaryFaceRotations
          use PhysicsStorage
          use Physics
          use MPI_Process_Info
@@ -231,6 +232,14 @@ module EllipticBR2
 !$omp end do 
          end if
 !
+!        Rotary periodic faces: rotate the gradient flux projected to side 2 back to its frame
+!
+         if (HOElements) then
+            call RotateBackRotaryFacesGradientFlux(mesh, size(mesh % HO_FacesInterior), mesh % HO_FacesInterior)
+         else
+            call RotateBackRotaryFacesGradientFlux(mesh, size(mesh % faces_interior), mesh % faces_interior)
+         end if
+!
 !        **********************
 !        Compute face integrals
 !        **********************
@@ -261,6 +270,7 @@ module EllipticBR2
             call mesh % GatherMPIFacesSolution(nEqn)
          end if
 !$omp end single
+         call RotateRotaryMPIFacesSolution(mesh)
 !
 !        *******************************
 !        Compute MPI interface solutions
@@ -293,6 +303,15 @@ module EllipticBR2
 !$omp end do
          end if
 #endif
+!
+!        Rotary periodic faces: rotate the gradients of side 2 into the frame of side 1. As in BR1, this
+!        is done last: the face integrals above add side 2's lifting (unStar, in side 2's frame) to them
+!        --------------------------------------------------------------------------------------------------
+         if (HOElements) then
+            call RotateRotaryFacesGradients(mesh, mesh % HO_Elements)
+         else
+            call RotateRotaryFacesGradients(mesh)
+         end if
 
       end subroutine BR2_ComputeGradient
 !

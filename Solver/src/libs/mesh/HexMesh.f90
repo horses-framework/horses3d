@@ -548,6 +548,10 @@ MODULE HexMeshClass
       INTEGER                    :: i,j,k,l
       integer                    :: zIDplus, zIDMinus, iFace, jFace
       character(len=LINE_LENGTH) :: associatedBname
+      real(kind=RP)              :: printAngle       ! Magnitude of the rotary angle, for the summary
+      integer                    :: ierr
+!
+      printAngle = 0.0_RP
 !
 !     --------------------------------------------
 !     Loop to find faces with the label "periodic"
@@ -571,6 +575,7 @@ MODULE HexMeshClass
 !        Reset the coordinate (changes when changing zones)
 !        --------------------------------------------------
          coord = 0
+         if (rotationParams % periodicEnabled) coord = RotationAxisIndex()
 !
 !        Get the marker of the associated zone
 !        -------------------------------------
@@ -672,10 +677,18 @@ slavecoord:             DO l = 1, 4
                      DO l = 1, 4
                         IF (.NOT.slave_matched(l)) THEN
                            x2 = self%nodes(self%faces(j)%nodeIDs(l))%x
-                           IF (useRelaxTol) THEN
-                               CALL CompareTwoNodesRelax(x1, x2, master_matched(k), coord, min_edge_length)
+                           IF (rotationParams % periodicEnabled) THEN
+                               IF (useRelaxTol) THEN
+                                  CALL CompareTwoNodesRevolRelax(x1, x2, master_matched(k), coord, rotationParams % center, min_edge_length)
+                               ELSE
+                                  CALL CompareTwoNodesRevol(x1, x2, master_matched(k), coord, rotationParams % center)
+                               END IF
                            ELSE
-                               CALL CompareTwoNodes(x1, x2, master_matched(k), coord)
+                               IF (useRelaxTol) THEN
+                                  CALL CompareTwoNodesRelax(x1, x2, master_matched(k), coord, min_edge_length)
+                               ELSE
+                                  CALL CompareTwoNodes(x1, x2, master_matched(k), coord)
+                               END IF
                            END IF
                            IF (master_matched(k)) THEN
                               slave_matched(l) = .TRUE.
@@ -694,6 +707,18 @@ slavecoord:             DO l = 1, 4
                   self % faces(i) % elementIDs(2)  = self % faces(j) % elementIDs(1)
                   self % faces(i) % elementSide(2) = self % faces(j) % elementSide(1)
                   self % faces(i) % FaceType       = HMESH_INTERIOR
+                  if (rotationParams % periodicEnabled) then
+!                    Angle that rotates face i (kept, side 1) onto face j (side 2), from the face centroids:
+!                    each pair keeps its own sign, and a centroid is never on the rotation axis
+                     x1 = 0.0_RP
+                     x2 = 0.0_RP
+                     do k = 1, 4
+                        x1 = x1 + 0.25_RP * self % nodes(self % faces(i) % nodeIDs(k)) % x
+                        x2 = x2 + 0.25_RP * self % nodes(self % faces(j) % nodeIDs(k)) % x
+                     end do
+                     self % faces(i) % rotaryAngle = SectorAngle(x1, x2)
+                     printAngle = abs(self % faces(i) % rotaryAngle)
+                  end if
                   self % elements(self % faces(i) % elementIDs(1)) % boundaryName(self % faces(i) % elementSide(1)) = emptyBCName
                   self % elements(self % faces(i) % elementIDs(2)) % boundaryName(self % faces(i) % elementSide(2)) = emptyBCName
 !
@@ -703,10 +728,18 @@ slavecoord:             DO l = 1, 4
                      x1 = self % nodes ( self % faces(i) % nodeIDs(k)) % x
                      do l = 1, 4
                         x2 = self % nodes ( self % faces(j) % nodeIDs(l) ) % x
-                        IF (useRelaxTol) THEN
-                            CALL CompareTwoNodesRelax(x1, x2, success, coord, min_edge_length)
+                        IF (rotationParams % periodicEnabled) THEN
+                            IF (useRelaxTol) THEN
+                               CALL CompareTwoNodesRevolRelax(x1, x2, success, coord, rotationParams % center, min_edge_length)
+                            ELSE
+                               CALL CompareTwoNodesRevol(x1, x2, success, coord, rotationParams % center)
+                            END IF
                         ELSE
-                            CALL CompareTwoNodes(x1, x2, success, coord)
+                            IF (useRelaxTol) THEN
+                               CALL CompareTwoNodesRelax(x1, x2, success, coord, min_edge_length)
+                            ELSE
+                               CALL CompareTwoNodes(x1, x2, success, coord)
+                            END IF
                         END IF
                         if ( success ) then
                            slaveNodeIDs(l) = self % faces(i) % nodeIDs(k)
@@ -732,6 +765,14 @@ slavecoord:             DO l = 1, 4
          end do               ! periodic+ zones
 
          if ( MPI_Process % isRoot .and. useRelaxTol) print *, "Success: when matching all periodic boundary conditions with relaxed comparison"
+         if ( MPI_Process % isRoot .and. rotationParams % periodicEnabled) then
+            write(STD_OUT,'(A,3(ES10.3,A),I0)') "Success: revolution periodic matching with center [", &
+                                                 rotationParams % center(1), ", ", &
+                                                 rotationParams % center(2), ", ", &
+                                                 rotationParams % center(3), "] and axis ", coord
+            write(STD_OUT,'(A,F8.3,A)') "         Periodic sector angle: ", &
+                                         printAngle * 180.0_RP / PI, " degrees"
+         end if
 
       END SUBROUTINE ConstructPeriodicFaces
 !
@@ -2649,6 +2690,11 @@ slavecoord:             DO l = 1, 4
             f % elementIDs(otherSide(eSide)) = HMESH_NONE   ! This makes sense since elementIDs are in local numbering...
             f % elementSide(eSide) = side
             f % elementSide(otherSide(eSide)) = partition % element_mpifaceSideOther(bFace)
+!
+!           Restore the rotary angle that was packed in
+!           GetPartitionBoundaryFaces and communicated via MPI.
+!           -----------------------------------------------------------------
+            f % rotaryAngle = partition % mpiface_rotaryAngle(bFace)
 
             if (eSide == RIGHT) f % nodeIDs = f % nodeIDs (invRot (:,f % rotation) )
             end associate
