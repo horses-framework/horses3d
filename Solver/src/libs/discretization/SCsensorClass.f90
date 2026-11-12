@@ -858,7 +858,8 @@ module SCsensorClass
          mTE = 0.0_RP
          do k = 0, ce % Nxyz(IZ) ; do j = 0, ce % Nxyz(IY) ; do i = 0, ce % Nxyz(IX)
 
-            call UserDefinedSourceTermNS(ce % geom % x, ce % storage % Q(:,i,j,k), t, S, &
+            S = 0.0_RP
+            call UserDefinedSourceTermNS(ce % geom % x(:,i,j,k), ce % storage % Q(:,i,j,k), t, S, &
                                          thermodynamics, dimensionless, refValues)
             wx = NodalStorage(ce % Nxyz(IX)) % w(i)
             wy = NodalStorage(ce % Nxyz(IY)) % w(j)
