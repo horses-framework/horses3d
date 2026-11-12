@@ -104,7 +104,12 @@ jobs:
       # UNCOMMENT TO USE CACHED IFORT
       #  if: (steps.cache-intel-compilers.outputs.cache-hit != 'true')
       #  run: sudo apt-get install intel-oneapi-compiler-fortran intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mpi intel-oneapi-mpi-devel intel-oneapi-mkl-devel ninja-build
-        run: sudo apt-get install intel-oneapi-compiler-fortran-2023.2.0 intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2023.2.0 intel-oneapi-mpi-2021.17 intel-oneapi-mpi-devel-2021.17 intel-oneapi-mkl-devel ninja-build
+        run: |
+          sudo apt-get install intel-oneapi-compiler-fortran-2023.2.0 intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2023.2.0 intel-oneapi-mpi-2021.17 intel-oneapi-mpi-devel-2021.17 intel-oneapi-mkl-devel ninja-build
+          # The 2023.2.0 compilers pull in the runtime-only intel-oneapi-mpi-2021.10.0, whose postinst
+          # may point mpi/latest (used by setvars.sh) at itself: it has no mpiifort/mpif90 wrappers
+          sudo ln -sfn 2021.17 /opt/intel/oneapi/mpi/latest
+          ls -l /opt/intel/oneapi/mpi
 
       # - name: cache-metis
       #   id: cache-metis
