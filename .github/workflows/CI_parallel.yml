@@ -104,7 +104,7 @@ jobs:
       # UNCOMMENT TO USE CACHED IFORT
       #  if: (steps.cache-intel-compilers.outputs.cache-hit != 'true')
       #  run: sudo apt-get install intel-oneapi-compiler-fortran intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mpi intel-oneapi-mpi-devel intel-oneapi-mkl-devel ninja-build
-        run: sudo apt-get install intel-oneapi-compiler-fortran-2023.2.0 intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2023.2.0 intel-oneapi-mpi-2021.14 intel-oneapi-mpi-devel-2021.14 intel-oneapi-mkl-devel ninja-build
+        run: sudo apt-get install intel-oneapi-compiler-fortran-2023.2.0 intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2023.2.0 intel-oneapi-mpi-2021.17 intel-oneapi-mpi-devel-2021.17 intel-oneapi-mkl-devel ninja-build
 
       # - name: cache-metis
       #   id: cache-metis
