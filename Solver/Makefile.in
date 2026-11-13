@@ -40,7 +40,7 @@ EXTLIB_INC =
 ########################################
 GNU_HPC_FLAGS= -cpp -fallow-argument-mismatch -std=legacy -ffree-line-length-0 -O3 -ftree-vectorize \
 		   -ftree-vectorizer-verbose=0 -fbackslash -D_has_Quad -march=znver3 -funroll-loops -fPIC
-GNU_RELEASE_FLAGS= -cpp -ffree-line-length-0 -O3 -ftree-vectorize  -ftree-vectorizer-verbose=0 \
+GNU_RELEASE_FLAGS= -cpp -ffree-line-length-0 -O3 -ftree-vectorize -ffp-contract=off -ftree-vectorizer-verbose=0 \
 		   -fbackslash -D_has_Quad -fPIC
 GNU_DEBUG_FLAGS=  -ffree-line-length-0 -cpp -O0 -frecursive -g -fcheck=all -Wno-unused-variable \
 		  -fbacktrace -fbounds-check -finit-real=snan -Wall \
