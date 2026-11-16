@@ -383,6 +383,23 @@ jobs:
           ./horses3d.mu mixedRK.control
         if: ('!cancelled()')
 
+#
+# 11) MLRK interface CFL
+# ----------------------------
+      - name: Build MultiphaseMLRK_InterfaceCFL
+        working-directory: ./Solver/test/Multiphase/MLRK_InterfaceCFL/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: ('!cancelled()')
+
+      - name: Run MultiphaseMLRK_InterfaceCFL
+        working-directory: ./Solver/test/Multiphase/MLRK_InterfaceCFL
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./horses3d.mu MLRK_InterfaceCFL.control
+        if: ('!cancelled()')
+
 ########################################################################
 #######                      INCOMPRESSIBLE                     ########
 ########################################################################

@@ -596,6 +596,9 @@ Module DGSEMClass
 !       Initialize MLRK library in the mesh 
 !       -----------------------------------
 	    call self % mesh % MLRK % construct(self % mesh, ML_nLevel)
+		if ( controlVariables % ContainsKey("mlrk interface tolerance") ) then
+			 self % mesh % MLRK % interfaceTol = controlVariables % doublePrecisionValueForKey("mlrk interface tolerance")
+		end if
 !       Compute CFL and Level
 !       ---------------------
 	    dt         = controlVariables % doublePrecisionValueForKey("dt")
@@ -1065,6 +1068,7 @@ Module DGSEMClass
 	  real(kind=RP)                 :: maxCFL, minCFL, maxCFLInterface
 	  real(kind=RP), allocatable    :: elementCFL(:), maxCFLInterfaceID(:)              
       logical                       :: isRootOnly	  
+      logical                       :: isInterface                      ! The element has at least one interface node
       type(NodalStorage_t), pointer :: spAxi_p, spAeta_p, spAzeta_p     ! Pointers to the nodal storage in every direction
       external                      :: ComputeEigenvaluesForState       ! Advective eigenvalue
 #if defined(INCNS) || defined(MULTIPHASE)
@@ -1093,6 +1097,7 @@ Module DGSEMClass
 
       do eID = 1, SIZE(self % mesh % elements)
 	     cfl = 0.0_RP
+	     isInterface = .false.
          N = self % mesh % elements(eID) % Nxyz
          spAxi_p => NodalStorage(N(1))
          spAeta_p => NodalStorage(N(2))
@@ -1165,12 +1170,14 @@ Module DGSEMClass
 			cfl = max( cfl, deltat * abs(lamcsi_a+lameta_a+lamzet_a)/abs(jac) ) 
 
 #ifdef MULTIPHASE
-			if ((Q(1).ge.0.0001_RP).or.(Q(1).ge.0.9999_RP)) then 
-				maxCFLInterfaceID (eID) = cfl
+			if ((Q(1).ge.self % mesh % MLRK % interfaceTol).and.(Q(1).le.1.0_RP-self % mesh % MLRK % interfaceTol)) then 
+				isInterface = .true.
 			end if 
 #endif			
 			
          end do ; end do ; end do
+		 
+		 if (isInterface) maxCFLInterfaceID(eID) = cfl
 		 
 		 self % mesh % elements(eID) % ML_CFL = cfl
 	     elementCFL(eID)=cfl 
