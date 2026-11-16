@@ -1583,7 +1583,7 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
       REAL(KIND=RP), DIMENSION(3) :: a = (/0.0_RP       , -5.0_RP /9.0_RP , -153.0_RP/128.0_RP/)
       REAL(KIND=RP), DIMENSION(4) :: b = (/0.0_RP       ,  1.0_RP /3.0_RP ,    3.0_RP/4.0_RP  ,     1.0_RP     /)
       REAL(KIND=RP), DIMENSION(3) :: c = (/1.0_RP/3.0_RP,  15.0_RP/16.0_RP,    8.0_RP/15.0_RP /)
-	  REAL(KIND=RP), DIMENSION(3) :: d = (/1.0_RP/3.0_RP,  5.0_RP/12.0_RP,    1.0_RP/4.0_RP /)        ! Temporal step of stages
+	  REAL(KIND=RP), DIMENSION(3) :: d        ! Temporal step of stages
 	  
 
 
@@ -1601,6 +1601,8 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
          updateQLowRK = .false.
       end if
 	  
+	  d = b(2:4) - b(1:3)		! Must match b: the levels' sub-steps are nested inside these stage lengths
+
 	  nLevel = mesh % MLRK % maxLevel
 	  allocate(k(nLevel), cL(nLevel), tk(nLevel), deltaTL(nLevel))
 	  
