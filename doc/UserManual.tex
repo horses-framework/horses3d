@@ -135,6 +135,7 @@ Notes on the GMSH format (*.msh) and general workflow using GMSH.
 \item Boundary information (*.bmesh)
 \item Partition file (*.pmesh)
 \item Polynomial order file (*.omesh)
+\item MLRK level file (*.lmesh), written by 'Multi Level RK3' runs (see Section~\ref{sec:mlrk})
 \item Monitor files (*.volume / *.surface / *.residuals)
 \end{itemize}
 
@@ -190,7 +191,7 @@ output interval   & \textit{INTEGER}: In steady-state, this keyword indicates th
 
 convergence tolerance & \textit{REAL}: Residual convergence tolerance for steady-state cases & \textbf{Mandatory\ keyword} \\ \hline
 
-partitioning  & \textit{CHARACTER}: Specifies the method for partitioning the mesh in MPI simulations. Options are: 'metis' (the code must have been linked to METIS at compilation time, see Chapter~\ref{sect:compiling}), or 'SFC' (to use a space-filling curve method, no special compilation is needed for this option). & 'metis' \\ \hline
+partitioning  & \textit{CHARACTER}: Specifies the method for partitioning the mesh in MPI simulations. Options are: 'metis' (the code must have been linked to METIS at compilation time, see Chapter~\ref{sect:compiling}), or 'SFC' (to use a space-filling curve method, no special compilation is needed for this option). The value is case-insensitive. & 'metis' \\ \hline
 
 partitioning with weights & \textit{LOGICAL}: Specifies if the method for partitioning the mesh in MPI simulations takes the local polynomial order as weights. Necessary for local polynomial refinement & .TRUE. \\ \hline
 
@@ -1064,7 +1065,7 @@ The main keywords to use it are shown in Table \ref{tab:explicitKey}.
 
 \textbf{simulation type} & \textit{CHARACTER}: Specifies if HORSES3D must perform a ’steady-state’ or a ’time-accurate’. If 'time-accurate' the solver switches to BDF integration and uses FAS as a pseudo problem solver. Compatible only with 'FAS'. & 'steady-state' \\ \hline
 
-explicit method & \textit{CHARACTER}: Select desired Runge-Kutta solver. Options are: 'Euler', 'RK3', 'RK5', 'RKOpt', 'SSPRK33',  'SSPRK43', 'EULER RK3', and MixedRK. The option 'EULER RK3' is a hybrid temporal scheme thought to be used with RL p-Adaptation and BR1 as viscous discretization. & RK3 \\ \hline
+explicit method & \textit{CHARACTER}: Select desired Runge-Kutta solver. Options are: 'Euler', 'RK3', 'RK5', 'RKOpt', 'SSPRK33',  'SSPRK43', 'EULER RK3', MixedRK and 'Multi Level RK3'. The option 'EULER RK3' is a hybrid temporal scheme thought to be used with RL p-Adaptation and BR1 as viscous discretization. For 'Multi Level RK3' see Section~\ref{sec:mlrk}. & RK3 \\ \hline
 
 rk order & \textit{INTEGER}: Order of Runge-Kutta method optimized for steady-state solver ('RKOpt'). Possible orders are from 2 to 7. & 2 \\ \hline
 
@@ -1072,7 +1073,66 @@ limit timestep & \textit{LOGICAL}: Activate the possitivity limiter of Zhang and
 
 limiter minimum & \textit{REAL}: Minimum value of density and pressure allowed by the limiter. & 1e-13 \\ \hline
 
+compute time derivative after timestep & \textit{LOGICAL}: Evaluate the time derivative again after each time step, so that the residuals and the monitors that use the time derivative or the gradients correspond to the new solution. Without it, they come from the last stage of the step. & .false. \\ \hline
+
 \end{longtable}
+
+\section{Multi-level RK3}\label{sec:mlrk}
+
+'Multi Level RK3' is a local time-stepping version of the low-storage 'RK3'. The elements are grouped into levels by their advective CFL number. Level 1 takes the global time step \texttt{dt}, and every RK3 stage of a level contains a complete RK3 step of the next level, so the elements of higher levels take smaller sub-steps. During the sub-steps of a level, only the elements of that level and higher (and their face neighbours) are evaluated. The keywords are shown in Table \ref{tab:mlrkKey}.
+
+\begin{longtable}{|p{4cm}|p{10cm}|p{2.2cm}|}
+\caption{Keywords for the multi-level RK3 method.} \label{tab:mlrkKey} \\
+\hline
+\multicolumn{1}{|c|}{\textbf{Keyword}} & \multicolumn{1}{c|}{\textbf{Description}} & \multicolumn{1}{c|}{\textbf{Default value}} \\ \hline
+\endfirsthead
+
+\caption{Keywords for the multi-level RK3 method - continued.} \\
+\hline
+\multicolumn{1}{|c|}{\textbf{Keyword}} & \multicolumn{1}{c|}{\textbf{Description}} & \multicolumn{1}{c|}{\textbf{Default value}} \\ \hline
+\endhead
+
+explicit method & \textit{CHARACTER}: 'Multi Level RK3' activates the method. & RK3 \\ \hline
+
+dt & \textit{REAL}: Global time step, taken by level 1. A fixed time step is required: with a CFL-based time step the global step is set by the smallest elements and the method brings no gain. & -- \\ \hline
+
+number of level & \textit{INTEGER}: Maximum number of levels. & 3 \\ \hline
+
+cfl cut-off & \textit{REAL}: CFL number that separates level 1 from level 2. The threshold of each following level is 2.5 times the previous one. The value is limited to the range [1e-4, 10]. & 0.5 \\ \hline
+
+relevel iteration & \textit{INTEGER}: The levels are assigned at the first time step and then every 'relevel iteration' steps. & 1000000000 \\ \hline
+
+optimized partition & \textit{LOGICAL}: MPI only. Builds a level-aware partition, so that every MPI rank owns a share of the elements of each level. Works with both 'metis' and 'SFC' partitioning. & .false. \\ \hline
+
+MLRK interface tolerance & \textit{REAL}: Multiphase only. A node with a concentration between this tolerance and one minus it belongs to the interface. Interface elements are placed in the highest level. & 1e-4 \\ \hline
+
+\end{longtable}
+
+How the levels are assigned:
+\begin{itemize}
+\item The advective CFL number of each element is computed with \texttt{dt} (viscous limits are not considered). An element is in level 1 if its CFL number is below 'cfl cut-off', in level 2 if it is below 2.5 times 'cfl cut-off', and so on. Elements above the last threshold go to the highest level, 'number of level'.
+\item Face neighbours of a higher-level element are raised so that neighbouring elements differ by at most one level.
+\item In multiphase simulations, the elements that contain the interface are placed in the highest level.
+\item The number of elements of each level is printed in the log under ``Update Multi-Level Local Timestepping''. If all the elements fall into level 1, the simulation stops: use a larger \texttt{dt} or a single-level method.
+\end{itemize}
+
+Notes:
+\begin{itemize}
+\item The evaluation restricted to a level is implemented in the Navier-Stokes (including Euler) and multiphase solvers. The other solvers accept the method, but evaluate the full time derivative at every sub-step, so there is no speed-up.
+\item As with 'RK3', the residuals and the monitors that use the time derivative or the gradients come from the last evaluation of each level. Set 'compute time derivative after timestep' to .true. to evaluate them after the step.
+\end{itemize}
+
+\subsection{Level file}
+
+At the first level assignment, the solver writes the level of every element to \texttt{./MESH/<solution file name>.lmesh}. The first line holds the number of elements, followed by one line per element, in global element order, with two integers:
+\begin{itemize}
+\item \texttt{MLevel}: the level the element is advanced with.
+\item \texttt{MLevelwN}: the level at which the element is needed, i.e. its own level or, for a neighbour of a higher-level element, that level. The level-aware partition uses this value.
+\end{itemize}
+The file can be added to the post-processing with \texttt{horses2plt} and the flag \texttt{-{}-mlrk-level-file=}, which exports the variables \texttt{mlrk\_level} and \texttt{mlrk\_level\_wn}:
+\begin{verbatim}
+horses2plt MESH/mesh.hmesh RESULTS/solution.hsol --mlrk-level-file=MESH/solution.lmesh
+\end{verbatim}
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -1881,6 +1941,10 @@ The options comprise following flags:
 
 -{}-partition-file= 	&
 			\textit{CHARACTER}: Specifies the path to the partition file (*.pmesh) to export the MPI ranks of the simulation. &
+							Not Present  \\ \hline
+
+-{}-mlrk-level-file= 	&
+			\textit{CHARACTER}: Specifies the path to the MLRK level file (*.lmesh), written once by multi-level RK runs, to export the level of each element (mlrk\_level) and the level including neighbours (mlrk\_level\_wn). &
 							Not Present  \\ \hline
 
 -{}-boundary-file= 	&

@@ -273,6 +273,9 @@
             use PhysicsStorage
             use FluidData
             use MonitorsClass
+#ifdef _HAS_MPI_
+            use mpi
+#endif
             IMPLICIT NONE
             class(HexMesh)                        :: mesh
             REAL(KIND=RP)                         :: time
@@ -297,13 +300,24 @@
 #if defined(NAVIERSTOKES)
 !           Keep T_END and DRHO equal to the values in UserDefinedSourceTermNS.
             real(kind=RP), parameter            :: T_END = 0.06_RP, DRHO = 0.1_RP
-            integer,       parameter            :: N_LEVELS = 4
+            integer,       parameter            :: N_LEVELS = 4, N_ELEMENTS = 512
             integer,       parameter            :: expectedCount(N_LEVELS) = [192, 128, 128, 64]
+            character(len=*), parameter         :: LEVEL_FILE = "./MESH/MLRK_FourLevels.lmesh"   ! written by the solver
             character(len=*), parameter         :: testName = "MLRK with 4 levels and a time-dependent source"
             type(FTAssertionsManager), pointer  :: sharedManager
             real(kind=RP)                       :: rhoExact, maxErr(N_LEVELS)
-            integer                             :: eID, lev, nElemLevel(N_LEVELS)
+            integer                             :: eID, lev, i, nElemLevel(N_LEVELS)
+            integer                             :: fID, nelemFile, nWrongFile, ierr
+            integer                             :: myRank, nRanks   ! MPI_Process is not shared with this library: ask MPI
+            integer, allocatable                :: fileLevels(:,:)
             character(len=64)                   :: msg
+
+            myRank = 0
+            nRanks = 1
+#ifdef _HAS_MPI_
+            call mpi_comm_rank(MPI_COMM_WORLD, myRank, ierr)
+            call mpi_comm_size(MPI_COMM_WORLD, nRanks, ierr)
+#endif
 
             rhoExact   = 1.0_RP + DRHO * (time / T_END)**3
             maxErr     = 0.0_RP
@@ -314,11 +328,42 @@
                maxErr(lev) = max(maxErr(lev), maxval(abs(mesh % elements(eID) % storage % Q(IRHO,:,:,:) - rhoExact)))
             end do
 
-            write(STD_OUT,'(A,ES24.16)') "Exact density at the final time: ", rhoExact
-            do lev = 1, N_LEVELS
-               write(STD_OUT,'(A,I2,A,I5,A,ES12.4)') "Level", lev, ": elements =", nElemLevel(lev), &
-                                                     ", max |rho - rho_exact| =", maxErr(lev)
+!           Level file: "MLevel MLevelwN" of every element, in global element order
+            open(newunit = fID, file = LEVEL_FILE, action = 'read', status = 'old')
+            read(fID,*) nelemFile
+            allocate(fileLevels(2, nelemFile))
+            do i = 1, nelemFile
+               read(fID,*) fileLevels(:, i)
             end do
+            close(fID)
+
+            nWrongFile = 0
+            do eID = 1, size(mesh % elements)
+               associate( e => mesh % elements(eID) )
+               if ( e % globID > nelemFile ) then
+                  nWrongFile = nWrongFile + 1
+               else if ( (fileLevels(1, e % globID) /= e % MLevel) .or. (fileLevels(2, e % globID) /= e % MLevelwN) ) then
+                  nWrongFile = nWrongFile + 1
+               end if
+               end associate
+            end do
+
+#ifdef _HAS_MPI_
+            if ( nRanks > 1 ) then
+               call mpi_allreduce(MPI_IN_PLACE, nElemLevel, N_LEVELS, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+               call mpi_allreduce(MPI_IN_PLACE, maxErr, N_LEVELS, MPI_DOUBLE_PRECISION, MPI_MAX, MPI_COMM_WORLD, ierr)
+               call mpi_allreduce(MPI_IN_PLACE, nWrongFile, 1, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+            end if
+#endif
+
+            if ( myRank == 0 ) then
+               write(STD_OUT,'(A,ES24.16)') "Exact density at the final time: ", rhoExact
+               do lev = 1, N_LEVELS
+                  write(STD_OUT,'(A,I2,A,I5,A,ES12.4)') "Level", lev, ": elements =", nElemLevel(lev), &
+                                                        ", max |rho - rho_exact| =", maxErr(lev)
+               end do
+               write(STD_OUT,'(A,I6,A,I6)') "Level file: elements =", nelemFile, ", elements whose levels differ =", nWrongFile
+            end if
 
             call initializeSharedAssertionsManager
             sharedManager => sharedAssertionsManager()
@@ -331,16 +376,25 @@
                write(msg,'(A,I2)') "Density error in level", lev
                call FTAssert(test = maxErr(lev) < 1.0e-11_RP, msg = trim(msg))
             end do
+            call FTAssertEqual(expectedValue = N_ELEMENTS, actualValue = nelemFile, msg = "Elements in the level file")
+            call FTAssertEqual(expectedValue = N_LEVELS, actualValue = maxval(fileLevels(1,:)), msg = "Highest MLevel in the level file")
+            call FTAssert(test = all(fileLevels(2,:) >= fileLevels(1,:)), msg = "MLevelwN >= MLevel in the level file")
+            call FTAssertEqual(expectedValue = 0, actualValue = nWrongFile, msg = "Level file matches the elements")
 
-            call sharedManager % summarizeAssertions(title = testName, iUnit = 6)
+            if ( myRank == 0 ) call sharedManager % summarizeAssertions(title = testName, iUnit = 6)
 
             if ( sharedManager % numberOfAssertionFailures() == 0 ) then
-               write(6,*) testName, " ... Passed"
+               if ( myRank == 0 ) write(6,*) testName, " ... Passed"
             else
-               write(6,*) testName, " ... Failed"
-               error stop 99
+               if ( myRank == 0 ) write(6,*) testName, " ... Failed"
             end if
-            write(6,*)
+            if ( myRank == 0 ) write(6,*)
+!           The root's report must be out before any rank stops: an error stop on one rank kills the others
+            flush(6)
+#ifdef _HAS_MPI_
+            if ( nRanks > 1 ) call mpi_barrier(MPI_COMM_WORLD, ierr)
+#endif
+            if ( sharedManager % numberOfAssertionFailures() /= 0 ) error stop 99
 
             call finalizeSharedAssertionsManager
             call detachSharedAssertionsManager
