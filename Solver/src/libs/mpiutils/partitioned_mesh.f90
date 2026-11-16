@@ -49,11 +49,13 @@ module PartitionedMeshClass
 
    contains
       subroutine Initialize_MPI_Partitions(partitioning)
+         use Utilities, only: toLower
          implicit none
          !-arguments----------------------------------------------------
          character(len=*), intent(in)  :: partitioning
          !-local-variables----------------------------------------------
          integer  :: domain
+         character(len=len(partitioning)) :: method
          !--------------------------------------------------------------
 !
 !        Create the set of MPI_Partitions in the root rank
@@ -77,11 +79,13 @@ module PartitionedMeshClass
 !            
 !           Partitioning method
 !           -------------------
-            select case (partitioning)
+            method = partitioning
+            call toLower(method)
+            select case (method)
 !     
 !              Space-filling curve partitioning
 !              --------------------------------
-               case ('SFC')
+               case ('sfc')
                   MPI_Partitioning = SFC_PARTITIONING
 !     
 !              METIS partitioning
