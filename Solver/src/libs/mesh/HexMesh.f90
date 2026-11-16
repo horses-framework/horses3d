@@ -6716,7 +6716,7 @@ call elementMPIList % destruct
 	real(kind=RP)    :: perLevel, cflLevel, dtRatio, cfl
 	real(kind=RP)    :: maxc, minc
 	real(kind=RP)    :: cfl_cutoff(self%nLevel-1)
-	integer, allocatable :: neighborID(:,:), neighborIDAll(:,:),counterOMP(:,:), counterOMPN(:,:)
+	integer, allocatable :: counterOMP(:,:), counterOMPN(:,:)
 !
 !     Initialize
 !     ------------------------------------------------------------
@@ -6724,9 +6724,6 @@ call elementMPIList % destruct
 	  self % CFL_CutOff = CFL_Cut
 	  self % MLIter = 0
 	
-	  allocate(neighborID(self%nLevel-2,mesh % no_of_allElements), neighborIDAll(self%nLevel-2,mesh % no_of_allElements))
-	  neighborID   = 0
-	  neighborIDAll= 0
 	  allocate(counterOMP(self%nLevel,mesh % no_of_elements), counterOMPN (self%nLevel,mesh % no_of_elements))
 	  counterOMP   = 0
 	  counterOMPN  = 0
@@ -6741,7 +6738,7 @@ call elementMPIList % destruct
 !
 !     Determine the level of each element
 !     ------------------------------------------------------------
-!$omp parallel shared(self,mesh,neighborID,neighborIDAll,CFL_Cut, dtRatio, counter, counterOMP, counterOMPN, maxCFLInterf, cfl_cutoff, Level_eID, Level_eID_wN) default(private)
+!$omp parallel shared(self,mesh,CFL_Cut, dtRatio, counter, counterOMP, counterOMPN, maxCFLInterf, cfl_cutoff, Level_eID, Level_eID_wN) default(private)
 !$omp do schedule(runtime)
       do eID = 1, SIZE(mesh % elements)
 		 ! Determine level from CFL cutoff and CFL percentile. Level <= max Level
