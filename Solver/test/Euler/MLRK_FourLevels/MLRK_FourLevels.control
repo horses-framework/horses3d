@@ -1,0 +1,55 @@
+!
+!  MLRK with 4 levels and a uniform, time-dependent mass source (issue 392).
+!  N=6 in the column x < 2*pi/8 puts it in level 4; neighbour promotion builds levels 3 and 2.
+!  The density must equal 1 + 0.1*(t/0.06)**3 in every element (checked in UserDefinedFinalize).
+!
+Flow equations           = "Euler"
+mesh file name           = "../../TestMeshes/TaylorGreen8.mesh"
+polynomial order file    = "orders.dat"
+discretization nodes     = Gauss-Lobatto
+riemann solver           = roe
+mach number              = 0.08
+AOA theta                = 0.0
+AOA phi                  = 0.0
+restart                  = .false.
+restart file name        = "RESULTS/MLRK_FourLevels.hsol"
+solution file name       = "RESULTS/MLRK_FourLevels.hsol"
+simulation type          = time-accurate
+explicit method          = multi level rk3
+number of level          = 4
+cfl cut-off              = 0.4
+dt                       = 6.0e-3
+number of time steps     = 10
+output interval          = 1
+number of plot points    = 2
+convergence tolerance    = 1.d-14
+
+#define boundary front
+  type = periodic
+  coupled boundary = back
+#end
+
+#define boundary back
+  type = periodic
+  coupled boundary = front
+#end
+
+#define boundary bottom
+  type = periodic
+  coupled boundary = top
+#end
+
+#define boundary top
+  type = periodic
+  coupled boundary = bottom
+#end
+
+#define boundary left
+  type = periodic
+  coupled boundary = right
+#end
+
+#define boundary right
+  type = periodic
+  coupled boundary = left
+#end

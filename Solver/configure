@@ -39,6 +39,7 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./Euler/UniformFlow \
             ./Euler/JFNK \
             ./Euler/TaylorGreenKEPEC \
+            ./Euler/MLRK_FourLevels \
             ./Euler/Cylinder_ErrorEstimation_pAdaptationRL \
             ./NavierStokes/Convergence \
             ./NavierStokes/Convergence_energy \
