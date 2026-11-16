@@ -373,6 +373,24 @@ jobs:
         if: '!cancelled()'
 
 #
+# 5c) MLRK with 4 levels and the level export, with MPI
+# -----------------------------------------------------
+
+      - name: Build MLRK_FourLevels
+        working-directory: ./Solver/test/Euler/MLRK_FourLevels/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: '!cancelled()'
+
+      - name: Run MLRK_FourLevels
+        working-directory: ./Solver/test/Euler/MLRK_FourLevels
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 4 ./horses3d.ns MLRK_FourLevels.control
+        if: '!cancelled()'
+
+#
 # 6) Vortex transport 2D with KEPEC
 # ---------------------------------
 

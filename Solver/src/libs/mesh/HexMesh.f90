@@ -67,6 +67,7 @@ MODULE HexMeshClass
 			procedure :: construct      => MultiLevel_RK_Construct
 			procedure :: update			=> MultiLevel_RK_Update
 	        procedure :: sendGlobalID   => MultiLevel_RK_SendGlobID
+			procedure :: exportLevels   => MultiLevel_RK_ExportLevels
 			procedure :: destruct       => MultiLevel_RK_Destruct
 	  end type MultiLevel_RK
       type HexMesh
@@ -7065,6 +7066,46 @@ call elementMPIList % destruct
 	end do 
 
    end subroutine MultiLevel_RK_SendGlobID
+!------------------------------------------------------------------------
+!  Export the level of each element: ./MESH/<fileName>.lmesh, with the number of elements
+!  followed by "MLevel MLevelwN" per element in global element order (read by horses2plt)
+!------------------------------------------------------------------------
+   subroutine MultiLevel_RK_ExportLevels(self, mesh, fileName)
+    use MPI_Process_Info
+	implicit none
+	!-arguments-----------------------------------------
+	class(MultiLevel_RK), target  , intent(in)      :: self
+	type (HexMesh)                , intent(in)      :: mesh
+	character(len=*)              , intent(in)      :: fileName
+	!-local variable-----------------------------------------
+	integer                    :: eID, fID, ierr
+	integer, allocatable       :: levels(:,:)
+	character(len=LINE_LENGTH) :: levelFileName
+
+	allocate(levels(2, mesh % no_of_allElements))
+	levels = 0
+	do eID = 1, mesh % no_of_elements
+		levels(:, mesh % elements(eID) % globID) = [mesh % elements(eID) % MLevel, mesh % elements(eID) % MLevelwN]
+	end do
+#ifdef _HAS_MPI_
+	if ( MPI_Process % doMPIAction ) then
+		call mpi_allreduce(MPI_IN_PLACE, levels, size(levels), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+	end if
+#endif
+
+	if ( MPI_Process % isRoot ) then
+		levelFileName = "./MESH/" // trim(removePath(getFileName(fileName))) // ".lmesh"
+		open(newunit = fID, file = trim(levelFileName), action = 'write')
+		write(fID,*) mesh % no_of_allElements
+		do eID = 1, mesh % no_of_allElements
+			write(fID,*) levels(:, eID)
+		end do
+		close(fID)
+	end if
+
+	deallocate(levels)
+
+   end subroutine MultiLevel_RK_ExportLevels
    
 !------------------------------------------------------------------------
 !  Destruct 
