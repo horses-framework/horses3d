@@ -9,7 +9,7 @@
 #include "Includes.h"
 Module DGSEMClass
    use SMConstants
-   use Utilities                 , only: sortDescendInt, sortAscendInt, sortAscend
+   use Utilities                 , only: sortAscend
    USE NodalStorageClass         , only: CurrentNodes, NodalStorage, NodalStorage_t
    use MeshTypes                 , only: HOPRMESH
    use ElementClass
@@ -569,7 +569,7 @@ Module DGSEMClass
 	  integer                            :: ierr, i, nElements
 	  integer                            :: globIDLevelPartition( self % mesh % no_of_allElements)
 	  integer                            :: globIDLevel( self % mesh % no_of_allElements)
-	  integer, allocatable               :: nElementLevelPartition(:), nElementLevel(:)
+	  integer, allocatable               :: nElementLevelPartition(:), nElementLevel(:), levelPos(:)
 	  integer                            :: eID_Order(self % mesh % no_of_allElements)
 !       ---------------------------------------------
 !       Read MLRK Setup - No time integration storage
@@ -618,13 +618,18 @@ Module DGSEMClass
 			call mpi_allreduce(nElementLevelPartition, nElementLevel, ML_nLevel, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
 		end if
 #endif
-!       Reorder the globIDLevel(level) and eID_Order(element ID)
-        eID_Order = [(i, i=1,self % mesh % no_of_allElements)]
-		call sortDescendInt(globIDLevel,eID_Order) ! Higher level first
-		call sortAscendInt(eID_Order(1:nElementLevel(ML_nLevel)))
-		do i=ML_nLevel-1,1,-1
-			call sortAscendInt(eID_Order(sum(nElementLevel(ML_nLevel:i+1))+1:sum(nElementLevel(ML_nLevel:i))))
-		end do 
+!       Order the global element IDs by level, level 1 first and IDs ascending within each level:
+!       the partitioners take nElementLevel(l) consecutive entries per level, starting from level 1
+		allocate(levelPos(ML_nLevel))
+		levelPos(1) = 1
+		do i = 2, ML_nLevel
+			levelPos(i) = levelPos(i-1) + nElementLevel(i-1)
+		end do
+		do i = 1, self % mesh % no_of_allElements
+			eID_Order(levelPos(globIDLevel(i))) = i
+			levelPos(globIDLevel(i)) = levelPos(globIDLevel(i)) + 1
+		end do
+		deallocate(levelPos)
 !       Destruct DGSEM Library and partitions
 !       -------------------------------------
         if (MPI_Process % isRoot) THEN
