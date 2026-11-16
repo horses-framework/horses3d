@@ -349,6 +349,13 @@ jobs:
           mpiexec -n 4 ./horses3d.ns MLRK_PartitionLevels_SFC.control
         if: '!cancelled()'
 
+      - name: Run MLRK_PartitionLevels (method name in mixed case)
+        working-directory: ./Solver/test/Euler/MLRK_PartitionLevels
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 4 ./horses3d.ns MLRK_PartitionLevels_MixedCase.control
+        if: '!cancelled()'
+
 #
 # 6) Vortex transport 2D with KEPEC
 # ---------------------------------
