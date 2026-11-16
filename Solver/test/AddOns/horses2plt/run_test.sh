@@ -6,6 +6,7 @@
 #     Nodes_3.hsol    : solution order 1 (same as the mesh)
 #     Nodes_3_P2.hsol : solution order 2, obtained with horsesConverter
 #                       (meshInterpolation of Nodes_3.hsol onto Nodes_3.hmesh)
+#     Nodes_3.lmesh   : MLRK levels (MLevel MLevelwN) of the 3 elements, for --mlrk-level-file
 #
 cd "$(dirname "$0")"
 TEST_DIR=$(pwd)
@@ -15,7 +16,7 @@ WORK=$TEST_DIR/RESULTS
 
 rm -rf "$WORK"
 mkdir -p "$WORK"
-cp "$FILES/Nodes_3.hmesh" "$FILES/Nodes_3.hsol" "$TEST_DIR/Nodes_3_P2.hsol" "$WORK"
+cp "$FILES/Nodes_3.hmesh" "$FILES/Nodes_3.hsol" "$TEST_DIR/Nodes_3_P2.hsol" "$TEST_DIR/Nodes_3.lmesh" "$WORK"
 
 failed=0
 
@@ -66,5 +67,6 @@ run_case SameOrder              Nodes_3.hsol
 run_case MeshOrderDiffers       Nodes_3_P2.hsol
 run_case LowerOrderHomogeneous  Nodes_3_P2.hsol --output-order=1
 run_case LowerOrderGauss        Nodes_3_P2.hsol --output-order=1 --output-basis=Gauss
+run_case MLRKLevels             Nodes_3.hsol --mlrk-level-file=Nodes_3.lmesh
 
 exit $failed

@@ -808,6 +808,7 @@
 					CALL DetermineCFL(sem, self % dt, globalMax, globalMin, maxCFLInterf)
 					call sem % mesh % MLRK % construct(sem % mesh, self % ML_nLevel) ! reconstruct nLevel  
 					CALL sem % mesh % MLRK % update (sem % mesh, self % ML_CFL_CutOff, globalMax, globalMin, maxCFLInterf)
+					if (self % ML_ReLevel) call sem % mesh % MLRK % exportLevels(sem % mesh, SolutionFileName) ! first level assignment only
 					self % ML_ReLevel = .false. 
 					self % ML_Counter = 0
 				end if 
