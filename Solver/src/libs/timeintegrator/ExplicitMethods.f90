@@ -1713,6 +1713,7 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 					end if 
 					
 					tk(locLevel)=tk(locLevel-1)+b(k(locLevel)+1) * deltaTL(locLevel)
+					tk(locLevel+1:nLevel)=tk(locLevel)			! Finer levels restart their RK3 step at this time
 					call ComputeTimeDerivative( mesh, particles, tk(locLevel), CTD_IGNORE_MODE, Level=locLevel) ! Update Qdot
 				end do 
 			end do 
