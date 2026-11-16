@@ -19,6 +19,8 @@
       use InterpolationMatrices     , only: Initialize_InterpolationMatrices, Finalize_InterpolationMatrices
       use ProblemFileFunctions
       use BoundaryConditions        , only: DestructBoundaryConditions
+      use ExplicitMethods           , only: ML_RK3_NAME
+      use Utilities                 , only: toLower
 #ifdef _HAS_MPI_
       use mpi
 #endif
@@ -35,6 +37,7 @@
       INTEGER                             :: ierr
       real(kind=RP)                       :: initial_time
       character(len=LINE_LENGTH)          :: solutionFileName
+      character(len=LINE_LENGTH)          :: explicitMethod
       integer, allocatable                :: Nx(:), Ny(:), Nz(:)
       integer                             :: Nmax
       procedure(UserDefinedStartup_f)     :: UserDefinedStartup
@@ -93,7 +96,9 @@
       call Initialize_InterpolationMatrices(Nmax)
 	  
 	  ! MPI Partition option for MLRK time integeration
-	  if ((MPI_Process % doMPIAction).and.(trim(controlVariables % stringValueForKey('explicit method', requestedLength = LINE_LENGTH)) == 'multi level rk3')) then
+	  explicitMethod = controlVariables % stringValueForKey('explicit method', requestedLength = LINE_LENGTH)
+	  call toLower(explicitMethod)
+	  if ((MPI_Process % doMPIAction).and.(trim(explicitMethod) == ML_RK3_NAME)) then
 		  
 		  isMLRK = .TRUE. ! The time integration is Multi-Level RK
 		  
