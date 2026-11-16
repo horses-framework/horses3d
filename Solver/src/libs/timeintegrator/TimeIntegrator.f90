@@ -282,6 +282,9 @@
 				self % ML_Counter = 0
 				
 				call sem % mesh % MLRK % construct(sem % mesh, self % ML_nLevel) ! construct nlevel  
+				if ( controlVariables % ContainsKey("mlrk interface tolerance") ) then
+				     sem % mesh % MLRK % interfaceTol = controlVariables % doublePrecisionValueForKey("mlrk interface tolerance")
+			    end if
 
             case default
                print*, "Explicit time integration method not implemented"
@@ -380,6 +383,9 @@
 			   write(STD_OUT,'(35X,A,A23,I14)')   "->" , "Update Iteration: ", self % ML_ReLevel_Iteration
 			   write(STD_OUT,'(35X,A,A23,A)')  "->" , "Cut-Off Level 1: ","CFL Cut-Off"
 			   write(STD_OUT,'(35X,A,A23,A)')  "->" , "Cut-Off Level N: ","CFL Cut-Off x 2.5^(N-1) "
+#if defined(MULTIPHASE)
+			   write(STD_OUT,'(35X,A,A23,ES10.3)') "->" , "Interface tolerance: ", sem % mesh % MLRK % interfaceTol
+#endif
             end select
 
             write(STD_OUT,'(30X,A,A28)',advance='no') "->" , "Stage limiter: "
