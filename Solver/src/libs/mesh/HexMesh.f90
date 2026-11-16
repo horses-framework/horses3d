@@ -49,6 +49,7 @@ MODULE HexMeshClass
 	     integer               :: nLevel 
 		 integer               :: maxLevel
 		 real(kind=RP)         :: CFL_CutOff
+		 real(kind=RP)         :: interfaceTol = 1.0e-4_RP   ! Multiphase: a node with interfaceTol <= c <= 1-interfaceTol is on the interface
 		 integer, allocatable  :: ML_GlobalLevel(:)        ! Number of Multi-Level Timestep Element - Global - in TimeIntegrator.f90 and DGSEMClass.f90
 		 integer, allocatable  :: ML_Level(:)              ! Number of Multi-Level Timestep Element - Partition 
 		 integer, allocatable  :: MLIter(:,:)              ! Number of ML Iteration - partition (L1 include L2 & L3, etc); size(nLevel, 6(eID, fID, fID_Inter, fID Bound, eID Seq, eID MPI)) 
@@ -6747,7 +6748,7 @@ call elementMPIList % destruct
 	     ! For multiphase, the interface elements have homogenous level, represented by the highest CFL along interface elements
 		 maxc = min(maxval(mesh % elements(eID) % storage % Q(1,:,:,:)),1.0_RP)
 		 minc = max(minval(mesh % elements(eID) % storage % Q(1,:,:,:)),0.0_RP)
-		 if ((maxc.gt.0.001).and.(minc.lt.0.999)) then
+		 if ((maxc.gt.self % interfaceTol).and.(minc.lt.1.0_RP-self % interfaceTol)) then
 			cfl = maxCFLInterf * 100
 		 end if 
 #endif		
