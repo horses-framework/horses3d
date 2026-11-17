@@ -69,6 +69,7 @@ Module SpongeClass  !
         use Headers
         use mainKeywordsModule
         use FileReadingUtilities, only: getFileName
+        use Utilities, only: toLower
         Implicit None
         type(sponge_t)                                          :: self
         type(HexMesh), intent(inout)                            :: mesh
@@ -106,6 +107,7 @@ Module SpongeClass  !
             end if
 
             self % shapeType(i) = trim(controlVariables % stringValueForKey(tmp, requestedLength = STRING_CONSTANT_LENGTH))
+            call toLower(self % shapeType(i))
             if(self % shapeType(i) == "cylindrical") then
                 if (useNumberedKeys) then
                     write(tmp, '("sponge radious ",I0)') i
