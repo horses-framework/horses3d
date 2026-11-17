@@ -95,16 +95,21 @@ jobs:
       # UNCOMMENT TO USE CACHED IFORT 
       #  if: (steps.cache-intel-compilers.outputs.cache-hit != 'true')
         run: |
-          wget https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-          sudo apt-key add GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB
-          sudo add-apt-repository "deb https://apt.repos.intel.com/oneapi all main"
+          # apt-key is gone from Ubuntu 26.04: use a keyring referenced by signed-by
+          wget -qO- https://apt.repos.intel.com/intel-gpg-keys/GPG-PUB-KEY-INTEL-SW-PRODUCTS.PUB | gpg --dearmor | sudo tee /usr/share/keyrings/oneapi-archive-keyring.gpg > /dev/null
+          echo "deb [signed-by=/usr/share/keyrings/oneapi-archive-keyring.gpg] https://apt.repos.intel.com/oneapi all main" | sudo tee /etc/apt/sources.list.d/oneAPI.list
           sudo apt-get update
 
       - name: Install Intel oneAPI
       # UNCOMMENT TO USE CACHED IFORT
       #  if: (steps.cache-intel-compilers.outputs.cache-hit != 'true')
       #  run: sudo apt-get install intel-oneapi-compiler-fortran intel-oneapi-compiler-dpcpp-cpp intel-oneapi-mpi intel-oneapi-mpi-devel intel-oneapi-mkl-devel ninja-build
-        run: sudo apt-get install intel-oneapi-compiler-fortran-2023.2.0 intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2023.2.0 intel-oneapi-mpi-2021.14 intel-oneapi-mpi-devel-2021.14 intel-oneapi-mkl-devel ninja-build
+        run: |
+          sudo apt-get install intel-oneapi-compiler-fortran-2023.2.0 intel-oneapi-compiler-dpcpp-cpp-and-cpp-classic-2023.2.0 intel-oneapi-mpi-2021.17 intel-oneapi-mpi-devel-2021.17 intel-oneapi-mkl-devel ninja-build
+          # The 2023.2.0 compilers pull in the runtime-only intel-oneapi-mpi-2021.10.0, whose postinst
+          # may point mpi/latest (used by setvars.sh) at itself: it has no mpiifort/mpif90 wrappers
+          sudo ln -sfn 2021.17 /opt/intel/oneapi/mpi/latest
+          ls -l /opt/intel/oneapi/mpi
 
       # - name: cache-metis
       #   id: cache-metis
@@ -117,6 +122,9 @@ jobs:
         # if: (steps.cache-metis.outputs.cache-hit != 'true')
         # wget "http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz" (OLD LINK TO METIS)
         if: (matrix.compiler == 'ifort') 
+        # CMake 4 (ubuntu-latest) rejects METIS 5.1.0's cmake_minimum_required(VERSION 2.8)
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: 3.5
         run: |
           source /opt/intel/oneapi/setvars.sh || true
           wget "https://src.fedoraproject.org/lookaside/pkgs/metis/metis-5.1.0.tar.gz/5465e67079419a69e0116de24fce58fe/metis-5.1.0.tar.gz" 
@@ -133,6 +141,9 @@ jobs:
       # if: (steps.cache-metis.outputs.cache-hit != 'true')
       # wget "http://glaros.dtc.umn.edu/gkhome/fetch/sw/metis/metis-5.1.0.tar.gz" (OLD LINK TO METIS)
         if: (matrix.compiler == 'gfortran') 
+        # CMake 4 (ubuntu-latest) rejects METIS 5.1.0's cmake_minimum_required(VERSION 2.8)
+        env:
+          CMAKE_POLICY_VERSION_MINIMUM: 3.5
         run: |
           wget "https://src.fedoraproject.org/lookaside/pkgs/metis/metis-5.1.0.tar.gz/5465e67079419a69e0116de24fce58fe/metis-5.1.0.tar.gz" 
           tar -xvf metis-5.1.0.tar.gz
