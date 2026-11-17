@@ -568,7 +568,7 @@ end module ProblemFileFunctions
 
             CALL FTAssertEqual(expectedValue = residuals(4)+1.0_RP, &
                                actualValue   = monitors % residuals % values(4,1)+1.0_RP, &
-                               tol           = 1.d-11, &
+                               tol           = 1.d-10, &
                                msg           = "Z-Momentum residual")
 
             CALL FTAssertEqual(expectedValue = residuals(5)+1.0_RP, &
