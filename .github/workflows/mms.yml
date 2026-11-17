@@ -141,7 +141,11 @@ jobs:
 
       - name: Merge, report and plot
         run: |
-          args=(--P $P --meshes $MESHES --merge runs/*/errors.csv)
+          # A single artifact is extracted into runs/ itself, several into runs/<name>/
+          shopt -s globstar nullglob
+          csvs=(runs/**/errors.csv)
+          if [ ${#csvs[@]} -eq 0 ]; then echo "::error::No errors.csv from the run jobs"; exit 1; fi
+          args=(--P $P --meshes $MESHES --merge "${csvs[@]}")
           if [ -n "$SET" ]; then args+=(--set "$SET"); fi
           python3 Solver/test/MMS/run.py "$CASE" "${args[@]}"
           python3 Solver/test/MMS/plot.py "$CASE"
