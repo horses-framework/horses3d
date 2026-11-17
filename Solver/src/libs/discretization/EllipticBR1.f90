@@ -185,7 +185,7 @@ module EllipticBR1
 !        ---------------
 !
          integer                :: i, j, k
-         integer                :: eID , fID , dimID , eqID, fIDs(6), iFace, iEl, locLevel, locLevelm1
+         integer                :: eID , fID , dimID , eqID, fIDs(6), iFace, iEl, locLevel
          logical                :: compute_element
          logical, allocatable   :: face_mask(:)
 
@@ -205,15 +205,14 @@ module EllipticBR1
 		
 		 if (present(Level)) then
             locLevel = Level
-			locLevelm1 = max(locLevel-1,1)
 !
 !        *******************************************
 !        Compute Riemann solvers of non-shared faces
 !        *******************************************
 !
 !$omp do schedule(runtime) private(fID)
-			 do iFace = 1, mesh % MLRK % MLIter(locLevelm1,3)
-				fID = mesh % MLRK % MLIter_fID_Interior(iFace)
+			 do iFace = 1, mesh % MLRK % MLIter(locLevel,11)
+				fID = mesh % MLRK % MLIter_fIDN_Interior(iFace)
 				compute_element = .true.
 				if (present(element_mask)) compute_element = face_mask(fID)
 				
@@ -224,8 +223,8 @@ module EllipticBR1
 !$omp end do nowait
 
 !$omp do schedule(runtime) private(fID)
-			 do iFace = 1, mesh % MLRK % MLIter(locLevelm1,4)
-				fID = mesh % MLRK %  MLIter_fID_Boundary(iFace)
+			 do iFace = 1, mesh % MLRK % MLIter(locLevel,12)
+				fID = mesh % MLRK % MLIter_fIDN_Boundary(iFace)
 				compute_element = .true.
 				if (present(element_mask)) compute_element = face_mask(fID)
 				
@@ -275,8 +274,8 @@ module EllipticBR1
          call RotateRotaryMPIFacesSolution(mesh)
 
 !$omp do schedule(runtime) private(fID)
-			 do iFace = 1, mesh % MLRK % MLIter(locLevelm1,7)
-				fID = mesh % MLRK % MLIter_fID_MPI(iFace)
+			 do iFace = 1, mesh % MLRK % MLIter(locLevel,13)
+				fID = mesh % MLRK % MLIter_fIDN_MPI(iFace)
 				call BR1_ComputeMPIFaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
 			 end do
 !$omp end do 
