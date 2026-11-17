@@ -1,6 +1,7 @@
 #include "Includes.h"
 MODULE HexMeshClass
-      use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax, sortDescendInt, sortAscendInt
+      use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax, &
+                                                  mergeSortDescendInt, mergeSortAscendInt
       use SMConstants
       USE MeshTypes
       USE NodeClass
@@ -6826,8 +6827,8 @@ call elementMPIList % destruct
 	  end do 
 	  Level_eID_wN_BUFF = Level_eID_wN
       ! Sort decending Level_eID (Large to small level) and Level_eID_wN (neighbour included)
-      call sortDescendInt(Level_eID,self % MLIter_eID) 
-	  call sortDescendInt(Level_eID_wN, self % MLIter_eIDN)
+      call mergeSortDescendInt(Level_eID,self % MLIter_eID)
+	  call mergeSortDescendInt(Level_eID_wN,self % MLIter_eIDN)
   
 	  do i = 1, self % nLevel
 		self % MLIter(i,1) = sum(counterOMP(i:self % nLevel,:))    ! Elements
@@ -6897,21 +6898,29 @@ call elementMPIList % destruct
 		self % MLIter(1:Level_eID(i),5) = self % MLIter(1:Level_eID(i),5)+1
 		self % MLIter(1:Level_eID_wN(i),9) = self % MLIter(1:Level_eID_wN(i),9)+1
 	  end do 
-	  ! Sort decending Level_eID (Large to small level)
-      call sortDescendInt(Level_eID(1:size(mesh % elements_sequential)),self % MLIter_eID_Seq) 
-	  call sortDescendInt(Level_eID_wN(1:size(mesh % elements_sequential)),self % MLIter_eIDN_Seq) 
-	 
-	  ! Sort eID, fID for better memory access
+	  ! The stable sort of MLIter_eID/eIDN already leaves each level in ascending eID, and elements_sequential is
+	  ! ascending, so filtering gives the same lists as sorting them
+	  call filterElements(self % MLIter_eID , .false., self % MLIter_eID_Seq)
+	  call filterElements(self % MLIter_eIDN, .false., self % MLIter_eIDN_Seq)
+
+	  ! Sort fID for better memory access. Each level's interior/boundary faces are the faces of that level's
+	  ! fID block, so they are filtered from the sorted list
 	  iterations = 0
 	  iterations(1:self%nLevel,:)=self % MLIter
 	  do i=self % nLevel, 1, -1
-		call sortAscendInt(self % MLIter_eID(iterations(i+1,1)+1:iterations(i,1)))
-		call sortAscendInt(self % MLIter_fID(iterations(i+1,2)+1:iterations(i,2)))
-		call sortAscendInt(self % MLIter_fID_Interior(iterations(i+1,3)+1:iterations(i,3)))
-		call sortAscendInt(self % MLIter_fID_Boundary(iterations(i+1,4)+1:iterations(i,4)))
-		call sortAscendInt(self % MLIter_eID_Seq(iterations(i+1,5)+1:iterations(i,5)))
-		call sortAscendInt(self % MLIter_eIDN(iterations(i+1,8)+1:iterations(i,8)))
-		call sortAscendInt(self % MLIter_eIDN_Seq(iterations(i+1,9)+1:iterations(i,9)))
+		call mergeSortAscendInt(self % MLIter_fID(iterations(i+1,2)+1:iterations(i,2)))
+	  end do
+	  nInterior = 0
+	  nBoundary = 0
+	  do i = 1, self % MLIter(1,2)
+		fID = self % MLIter_fID(i)
+		if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
+			nInterior = nInterior + 1
+			self % MLIter_fID_Interior(nInterior) = fID
+		elseif (mesh % faces(fID) % FaceType .eq. HMESH_BOUNDARY) then
+			nBoundary = nBoundary + 1
+			self % MLIter_fID_Boundary(nBoundary) = fID
+		end if
 	  end do
       self % ML_GlobalLevel = self % ML_Level
 	  
@@ -6926,9 +6935,8 @@ call elementMPIList % destruct
 			self % MLIter(1:Level_eID(i),6) = self % MLIter(1:Level_eID(i),6)+1
 			self % MLIter(1:Level_eID_wN(i),10) = self % MLIter(1:Level_eID_wN(i),10)+1
 		  end do 
-		  ! Sort decending Level_eID (Large to small level)
-		  call sortDescendInt(Level_eID(1:size(mesh % elements_mpi)),self % MLIter_eID_MPI) 
-		  call sortDescendInt(Level_eID_wN(1:size(mesh % elements_mpi)),self % MLIter_eIDN_MPI) 
+		  call filterElements(self % MLIter_eID , .true., self % MLIter_eID_MPI)
+		  call filterElements(self % MLIter_eIDN, .true., self % MLIter_eIDN_MPI)
           
           ! Global statistics level		  
           call mpi_allreduce(self % ML_Level(1:self%nLevel), self % ML_GlobalLevel(1:self%nLevel), self%nLevel, MPI_INT, MPI_SUM, &
@@ -6972,6 +6980,22 @@ call elementMPIList % destruct
 				write(STD_OUT,'(30X,A,A18,I4,A4,I10)') "->" , "Level ", i," : ",self%ML_GlobalLevel(i)
             end do 
 			write(STD_OUT,'(30X,A,A27,I4)') "->" , "Number of RK3 Level: " , self % maxLevel
+
+   contains
+
+   subroutine filterElements(sorted, shared, filtered)
+	integer, intent(in)  :: sorted(:)
+	logical, intent(in)  :: shared
+	integer, intent(out) :: filtered(:)
+	integer :: k, n
+	n = 0
+	do k = 1, size(sorted)
+		if (mesh % elements(sorted(k)) % hasSharedFaces .eqv. shared) then
+			n = n + 1
+			filtered(n) = sorted(k)
+		end if
+	end do
+   end subroutine filterElements
 
    end subroutine MultiLevel_RK_Update
 !------------------------------------------------------------------------
