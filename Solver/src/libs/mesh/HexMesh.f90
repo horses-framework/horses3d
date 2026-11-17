@@ -6711,8 +6711,8 @@ call elementMPIList % destruct
 	!-local variable-----------------------------------------
 	integer          :: eID, level, levelOld, i, j, fID, sideID
     integer          :: counter(1:self%nLevel), nInterior, nBoundary, nFace, nMPIface
-	integer          :: Level_eID(mesh % no_of_elements), Level_eID_wN(mesh % no_of_elements), Level_eID_wN_BUFF(mesh % no_of_elements)
-	integer          :: faceFlag(size(mesh % faces),2)
+	integer, allocatable :: Level_eID(:), Level_eID_wN(:), Level_eID_wN_BUFF(:)
+	integer, allocatable :: faceFlag(:,:)
 	integer          :: iterations(self%nLevel+1,10)
 	integer          :: ierr                     ! Error for MPI calls
 	real(kind=RP)    :: perLevel, cflLevel, dtRatio, cfl
@@ -6727,6 +6727,8 @@ call elementMPIList % destruct
 	  self % MLIter = 0
 	
 	  allocate(counterOMP(self%nLevel,mesh % no_of_elements), counterOMPN (self%nLevel,mesh % no_of_elements))
+	  allocate(Level_eID(mesh % no_of_elements), Level_eID_wN(mesh % no_of_elements), Level_eID_wN_BUFF(mesh % no_of_elements))
+	  allocate(faceFlag(size(mesh % faces),2))
 	  counterOMP   = 0
 	  counterOMPN  = 0
 	  Level_eID    = 0
