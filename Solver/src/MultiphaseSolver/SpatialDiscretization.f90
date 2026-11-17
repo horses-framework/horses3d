@@ -308,7 +308,7 @@ module SpatialDiscretization
 !
 #ifdef _HAS_MPI_
 !$omp single
-         call mesh % UpdateMPIFacesSolution(NCOMP)
+         call mesh % UpdateMPIFacesSolution(NCOMP, Level)
 !$omp end single
 #endif
 !
@@ -324,7 +324,7 @@ module SpatialDiscretization
 !
 #ifdef _HAS_MPI_
 !$omp single
-         call mesh % UpdateMPIFacesGradients(NCOMP)
+         call mesh % UpdateMPIFacesGradients(NCOMP, Level)
 !$omp end single
 #endif
 !
@@ -394,7 +394,7 @@ module SpatialDiscretization
 !
 #ifdef _HAS_MPI_
 !$omp single
-         call mesh % UpdateMPIFacesSolution(NCOMP)
+         call mesh % UpdateMPIFacesSolution(NCOMP, Level)
          call mesh % GatherMPIFacesSolution(NCOMP)
 !$omp end single
 #endif
@@ -465,7 +465,7 @@ module SpatialDiscretization
 !
 #ifdef _HAS_MPI_
 !$omp single
-         call mesh % UpdateMPIFacesSolution(NCONS)
+         call mesh % UpdateMPIFacesSolution(NCONS, Level)
          call mesh % GatherMPIFacesSolution(NCONS)
 !$omp end single
 #endif
@@ -540,7 +540,7 @@ module SpatialDiscretization
 !
 #ifdef _HAS_MPI_
 !$omp single
-         call mesh % UpdateMPIFacesGradients(NCONS)
+         call mesh % UpdateMPIFacesGradients(NCONS, Level)
 !$omp end single
 #endif
 !
@@ -594,7 +594,7 @@ module SpatialDiscretization
 #ifdef _HAS_MPI_
 !$omp single
          ! Not sure about the position of this w.r.t the MPI directly above
-         call mesh % UpdateMPIFacesGradients(NCONS)
+         call mesh % UpdateMPIFacesGradients(NCONS, Level)
          call mesh % GatherMPIFacesGradients(NCONS)
 !$omp end single
 #endif   
