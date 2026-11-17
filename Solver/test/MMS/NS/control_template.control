@@ -1,0 +1,61 @@
+!  MMS, compressible Navier-Stokes. run.py fills the mesh, the solution file and the order.
+!-------------------------- Configuration:-
+                          Mesh file name = {MESH_FILE}
+                      Solution file name = {SOLUTION_FILE}
+                                 Restart = .false.
+                       Restart file name = {SOLUTION_FILE}
+              Save gradients to solution = .false.
+!-------------------- Physical parameters:-
+                          Flow equations = "NS"
+                             Mach number = 0.3
+                         Reynolds number = 100000.0
+                               AOA theta = 0.0
+                                 AOA phi = 0.0
+!------------------------- Discretization:-
+                        Polynomial order = {P}
+                    Discretization nodes = Gauss-Lobatto
+                          Riemann solver = Matrix dissipation
+                 Inviscid discretization = Split-form
+                               Averaging = Chandrasekar
+                  Viscous discretization = BR1
+!----------------------- Time integration:-
+                        Time integration = Explicit
+                         Explicit method = RK3
+  Compute time derivative after timestep = .true.
+                         Simulation type = time-accurate
+                   Convergence tolerance = 1.0d-10
+                           Autosave mode = iteration
+                       Autosave interval = 999999999
+                                      dt = 1.0e-4
+                    Number of time steps = 1000
+                         Output interval = 1000
+!-------------------- Boundary conditions:-
+#define boundary Left
+   type = periodic
+   coupled boundary = Right
+#end
+
+#define boundary Right
+   type = periodic
+   coupled boundary = Left
+#end
+
+#define boundary Bottom
+   type = periodic
+   coupled boundary = Top
+#end
+
+#define boundary Top
+   type = periodic
+   coupled boundary = Bottom
+#end
+
+#define boundary Back
+   type = periodic
+   coupled boundary = Front
+#end
+
+#define boundary Front
+   type = periodic
+   coupled boundary = Back
+#end
