@@ -270,7 +270,7 @@ module SpatialDiscretization
 !
 #ifdef _HAS_MPI_
 !$omp single
-         call mesh % UpdateMPIFacesSolution(NCONS)
+         call mesh % UpdateMPIFacesSolution(NCONS, Level)
 !$omp end single
 #endif
 !
@@ -290,7 +290,7 @@ module SpatialDiscretization
 #ifdef _HAS_MPI_
 !$omp single
          if ( flowIsNavierStokes ) then
-            call mesh % UpdateMPIFacesGradients(NGRAD)
+            call mesh % UpdateMPIFacesGradients(NGRAD, Level)
          end if
 !$omp end single
 #endif

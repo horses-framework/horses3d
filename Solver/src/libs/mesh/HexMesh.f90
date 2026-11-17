@@ -67,6 +67,7 @@ MODULE HexMeshClass
 		 integer, allocatable  :: MLIter_fIDN_Interior(:)   ! Interior faces of the eIDN elements, highest level first (counts in MLIter(:,11))
 		 integer, allocatable  :: MLIter_fIDN_Boundary(:)   ! Boundary faces of the eIDN elements, highest level first (counts in MLIter(:,12))
 		 integer, allocatable  :: MLIter_fIDN_MPI(:)        ! MPI faces of the eIDN elements, highest level first (counts in MLIter(:,13))
+		 integer, allocatable  :: MPIfaceRemoteLevel(:,:)   ! (MLevel, MLevelwN) of the element across each MPI face, by fID
 		 contains
 			procedure :: construct      => MultiLevel_RK_Construct
 			procedure :: update			=> MultiLevel_RK_Update
@@ -98,6 +99,8 @@ MODULE HexMeshClass
          type(IBM_type)                            :: IBM
          type(Zone_t), dimension(:), allocatable   :: zones
 		 type(MultiLevel_RK)                       :: MLRK
+         integer                                   :: MPIfacesLevelQ = 0   ! MLRK level of the last solution exchange (0: all faces)
+         integer                                   :: MPIfacesLevelU = 0   ! MLRK level of the last gradient exchange (0: all faces)
          logical                                   :: child       = .FALSE.         ! Is this a (multigrid) child mesh? default .FALSE.
          logical                                   :: meshIs2D    = .FALSE.         ! Is this a 2D mesh? default .FALSE.
          integer                                   :: dir2D       = 0               ! If it is in fact a 2D mesh, dir 2D stores the global direction IX, IY or IZ
@@ -1202,12 +1205,13 @@ slavecoord:             DO l = 1, 4
 !     -----------------------------------------------------------------------
 !     Subroutine to update the MPIFaces solution Q (MPI Receive and MPI Send)
 !     -----------------------------------------------------------------------
-      subroutine HexMesh_UpdateMPIFacesSolution(self, nEqn)
+      subroutine HexMesh_UpdateMPIFacesSolution(self, nEqn, Level)
          use MPI_Face_Class
          implicit none
          !-arguments----------------------------------------------------------
          class(HexMesh)         :: self
          integer,    intent(in) :: nEqn
+         integer, intent(in), optional :: Level   ! MLRK level: only the faces used at this level are exchanged
 #ifdef _HAS_MPI_
          !-local-variables----------------------------------------------------
 		 integer :: k, domain, mpifID, fID, thisSide
@@ -1215,9 +1219,14 @@ slavecoord:             DO l = 1, 4
 		 integer, parameter :: otherSide(2) = (/2,1/)
 		 integer :: nShared, nreqs, idx_send
 		 integer, allocatable :: all_reqs(:)
+		 integer :: lvl
          !--------------------------------------------------------------------
 
          if ( .not. MPI_Process % doMPIAction ) return
+
+		 lvl = 0
+		 if ( present(Level) .and. allocated(self % MLRK % MPIfaceRemoteLevel) ) lvl = Level
+		 self % MPIfacesLevelQ = lvl
 		 
 		 nShared = self % MPIfaces % nDomainShared
 		 ! Return when no faces are shared
@@ -1263,6 +1272,7 @@ slavecoord:             DO l = 1, 4
             do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
                fID = MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+               if ( .not. MPIFaceInLevel(self, fID, thisSide, lvl, 2, .true.) ) cycle
                associate(f => self % faces(fID))
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   MPIfaces % faces(domain) % Qsend(counter:counter+nEqn-1) = f % storage(thisSide) % Q(1:nEqn,i,j)
@@ -1275,7 +1285,7 @@ slavecoord:             DO l = 1, 4
 !           Send solution
 !           -------------
 !
-            call MPIfaces % faces(domain) % SendQ(domain, nEqn, all_reqs(idx_send))
+            call MPIfaces % faces(domain) % SendQ(domain, nEqn, all_reqs(idx_send), counter-1)
 			idx_send = idx_send + 1
          end do
 !
@@ -1295,12 +1305,13 @@ slavecoord:             DO l = 1, 4
 !     ---------------------------------------------------------------------------
 !     Subroutine to update the MPIFaces solution gradQ (MPI Receive and MPI Send)
 !     ---------------------------------------------------------------------------
-      subroutine HexMesh_UpdateMPIFacesGradients(self, nEqn)
+      subroutine HexMesh_UpdateMPIFacesGradients(self, nEqn, Level)
          use MPI_Face_Class
          implicit none
          !-arguments----------------------------------------------------------
          class(HexMesh)      :: self
          integer, intent(in) :: nEqn
+         integer, intent(in), optional :: Level   ! MLRK level: only the faces used at this level are exchanged
 #ifdef _HAS_MPI_
          !-local-variables----------------------------------------------------
 		 integer :: k, domain, mpifID, fID, thisSide
@@ -1308,9 +1319,14 @@ slavecoord:             DO l = 1, 4
 		 integer, parameter :: otherSide(2) = (/2,1/)
 		 integer :: nShared, nreqs, idx_send, token
 		 integer, allocatable :: all_reqs(:)
+		 integer :: lvl
          !--------------------------------------------------------------------
 
          if ( .not. MPI_Process % doMPIAction ) return
+
+		 lvl = 0
+		 if ( present(Level) .and. allocated(self % MLRK % MPIfaceRemoteLevel) ) lvl = Level
+		 self % MPIfacesLevelU = lvl
 		 
 		 nShared = self % MPIfaces % nDomainShared
 		 ! Return when no faces are shared
@@ -1360,6 +1376,7 @@ slavecoord:             DO l = 1, 4
             do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
                fID = MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+               if ( .not. MPIFaceInLevel(self, fID, thisSide, lvl, 1, .true.) ) cycle
                associate(f => self % faces(fID))
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   MPIfaces % faces(domain) % U_xyzsend(counter:counter+nEqn-1) = f % storage(thisSide) % U_x(1:nEqn,i,j)
@@ -1382,7 +1399,7 @@ slavecoord:             DO l = 1, 4
 !           Send gradients
 !           -------------
 !
-            call MPIfaces % faces(domain) % SendU_xyz(domain, nEqn, all_reqs(idx_send))
+            call MPIfaces % faces(domain) % SendU_xyz(domain, nEqn, all_reqs(idx_send), counter-1)
 			idx_send = idx_send + 1
          end do
 !
@@ -1620,6 +1637,7 @@ slavecoord:             DO l = 1, 4
             do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
                fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+               if ( .not. MPIFaceInLevel(self, fID, thisSide, self % MPIfacesLevelQ, 2, .false.) ) cycle
                associate(f => self % faces(fID))
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   f % storage(otherSide(thisSide)) % Q(1:nEqn,i,j) = self % MPIfaces % faces(domain) % Qrecv(counter:counter+nEqn-1)
@@ -1663,6 +1681,7 @@ slavecoord:             DO l = 1, 4
             do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
                fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+               if ( .not. MPIFaceInLevel(self, fID, thisSide, self % MPIfacesLevelU, 1, .false.) ) cycle
                associate(f => self % faces(fID))
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   f % storage(otherSide(thisSide)) % U_x(1:nEqn,i,j) = self % MPIfaces % faces(domain) % U_xyzrecv(counter:counter+nEqn-1)
@@ -1683,6 +1702,31 @@ slavecoord:             DO l = 1, 4
          end do
 #endif
       end subroutine HexMesh_GatherMPIFacesGradients
+!
+!     An MPI face is exchanged at MLRK level L when the receiving element has MLevel (which = 1, gradients) or
+!     MLevelwN (which = 2, solution) >= L: only those elements use the values across the face at level L
+!
+      logical function MPIFaceInLevel(self, fID, thisSide, level, which, remote)
+         implicit none
+         class(HexMesh), intent(in) :: self
+         integer,        intent(in) :: fID, thisSide, level, which
+         logical,        intent(in) :: remote   ! .true.: receiver is the other rank (sending)
+         integer :: eID, lev
+
+         MPIFaceInLevel = .true.
+         if ( level <= 1 ) return
+         if ( remote ) then
+            lev = self % MLRK % MPIfaceRemoteLevel(which, fID)
+         else
+            eID = self % faces(fID) % elementIDs(thisSide)
+            if ( which == 1 ) then
+               lev = self % elements(eID) % MLevel
+            else
+               lev = self % elements(eID) % MLevelwN
+            end if
+         end if
+         MPIFaceInLevel = (lev >= level)
+      end function MPIFaceInLevel
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -6694,10 +6738,12 @@ call elementMPIList % destruct
 		 if( allocated(self % MLIter_fID_MPI) ) deallocate(self % MLIter_fID_MPI)
 		 if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
 		 if( allocated(self % MLIter_fIDN_MPI) ) deallocate(self % MLIter_fIDN_MPI)
+		 if( allocated(self % MPIfaceRemoteLevel) ) deallocate(self % MPIfaceRemoteLevel)
          allocate(self % MLIter_eID_MPI(size(mesh % elements_mpi)))
 		 allocate(self % MLIter_fID_MPI(size(mesh % faces_mpi)))
 		 allocate(self % MLIter_eIDN_MPI(size(mesh % elements_mpi)))
 		 allocate(self % MLIter_fIDN_MPI(size(mesh % faces_mpi)))
+		 allocate(self % MPIfaceRemoteLevel(2, size(mesh % faces)))
 		 self % MLIter(1,6)           = size(mesh % elements_mpi)
 		 self % MLIter(1,7)           = size(mesh % faces_mpi)
 		 self % MLIter(1,10)          = size(mesh % elements_mpi)
@@ -6706,6 +6752,7 @@ call elementMPIList % destruct
 		 self % MLIter_fID_MPI        = mesh % faces_mpi
 		 self % MLIter_eIDN_MPI       = mesh % elements_mpi
 		 self % MLIter_fIDN_MPI       = mesh % faces_mpi
+		 self % MPIfaceRemoteLevel    = 0
       end if
 #endif
 
@@ -6908,6 +6955,7 @@ call elementMPIList % destruct
 		  call filterElements(self % MLIter_eID , .true., self % MLIter_eID_MPI)
 		  call filterElements(self % MLIter_eIDN, .true., self % MLIter_eIDN_MPI)
 		  call faceListsByLevelwN(mesh % faces_mpi, self % MLIter_fIDN_MPI, 13)
+		  call MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
           
           ! Global statistics level		  
           call mpi_allreduce(self % ML_Level(1:self%nLevel), self % ML_GlobalLevel(1:self%nLevel), self%nLevel, MPI_INT, MPI_SUM, &
@@ -6996,6 +7044,57 @@ call elementMPIList % destruct
 
    end subroutine MultiLevel_RK_Update
 !------------------------------------------------------------------------
+!  Levels of the elements across the MPI faces, used to exchange only the faces needed at each level
+!------------------------------------------------------------------------
+   subroutine MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
+	implicit none
+	type(MultiLevel_RK), intent(inout) :: self
+	type(HexMesh)                      :: mesh
+#ifdef _HAS_MPI_
+	type levelBuffer_t
+		integer, allocatable :: send(:), recv(:)
+	end type levelBuffer_t
+	integer :: k, domain, mpifID, fID, eID, nFaces, nShared, ierr
+	integer, allocatable :: reqs(:)
+	type(levelBuffer_t), allocatable :: buffers(:)
+
+	if ( .not. (MPI_Process % doMPIAction .and. mesh % MPIfaces % constructed) ) return
+	if ( .not. allocated(self % MPIfaceRemoteLevel) ) return
+	nShared = mesh % MPIfaces % nDomainShared
+	if ( nShared <= 0 ) return
+
+	allocate(buffers(nShared), reqs(2*nShared))
+	reqs = MPI_REQUEST_NULL
+	do k = 1, nShared
+		domain = mesh % MPIfaces % listDomain(k)
+		nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
+		allocate(buffers(k) % send(2*nFaces), buffers(k) % recv(2*nFaces))
+		if ( nFaces > 0 ) then
+			call mpi_irecv(buffers(k) % recv, 2*nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(k), ierr)
+		end if
+	end do
+	do k = 1, nShared
+		domain = mesh % MPIfaces % listDomain(k)
+		nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
+		if ( nFaces <= 0 ) cycle
+		do mpifID = 1, nFaces
+			fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
+			eID = mesh % faces(fID) % elementIDs(mesh % MPIfaces % faces(domain) % elementSide(mpifID))
+			buffers(k) % send(2*mpifID-1:2*mpifID) = [mesh % elements(eID) % MLevel, mesh % elements(eID) % MLevelwN]
+		end do
+		call mpi_isend(buffers(k) % send, 2*nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(nShared+k), ierr)
+	end do
+	call mpi_waitall(2*nShared, reqs, MPI_STATUSES_IGNORE, ierr)
+	do k = 1, nShared
+		domain = mesh % MPIfaces % listDomain(k)
+		do mpifID = 1, mesh % MPIfaces % faces(domain) % no_of_faces
+			fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
+			self % MPIfaceRemoteLevel(:,fID) = buffers(k) % recv(2*mpifID-1:2*mpifID)
+		end do
+	end do
+#endif
+   end subroutine MultiLevel_RK_ExchangeRemoteLevels
+!------------------------------------------------------------------------
 !  Update 
 !------------------------------------------------------------------------
    subroutine MultiLevel_RK_CheckNeighbour(self, mesh, level, Level_eID, Level_eID_wN, counterOMP, counterOMPN)
@@ -7009,60 +7108,19 @@ call elementMPIList % destruct
 	integer              , intent(inout)   :: counterOMP(self % nLevel, mesh % no_of_elements)
 	integer              , intent(inout)   :: counterOMPN(self % nLevel, mesh % no_of_elements)
 	
-	type levelBuffer_t
-		integer, allocatable :: send(:), recv(:)
-	end type levelBuffer_t
-
-	integer              :: eID, i, fID, nb, k, domain, mpifID, nFaces, nShared
-	integer              :: ierr  
-	logical              :: hasNeighbourAtLevel
-	integer, allocatable :: levelOld(:), remoteLevel(:), reqs(:)
-	type(levelBuffer_t), allocatable :: buffers(:)
+	integer              :: eID, i, fID, nb
+	logical              :: hasNeighbourAtLevel, haveRemote
+	integer, allocatable :: levelOld(:)
 
 !   Levels at the start of this pass, and the level of the element across each MPI face
-	allocate(levelOld(mesh % no_of_elements), remoteLevel(size(mesh % faces)))
+	allocate(levelOld(mesh % no_of_elements))
 	do eID = 1, mesh % no_of_elements
 		levelOld(eID) = mesh % elements(eID) % MLevel
 	end do
-	remoteLevel = 0
+	call MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
+	haveRemote = allocated(self % MPIfaceRemoteLevel)
 
-#ifdef _HAS_MPI_
-	if ( MPI_Process % doMPIAction .and. mesh % MPIfaces % constructed ) then
-		nShared = mesh % MPIfaces % nDomainShared
-		if ( nShared > 0 ) then
-			allocate(buffers(nShared), reqs(2*nShared))
-			reqs = MPI_REQUEST_NULL
-			do k = 1, nShared
-				domain = mesh % MPIfaces % listDomain(k)
-				nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
-				allocate(buffers(k) % send(nFaces), buffers(k) % recv(nFaces))
-				if ( nFaces > 0 ) then
-					call mpi_irecv(buffers(k) % recv, nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(k), ierr)
-				end if
-			end do
-			do k = 1, nShared
-				domain = mesh % MPIfaces % listDomain(k)
-				nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
-				if ( nFaces <= 0 ) cycle
-				do mpifID = 1, nFaces
-					fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
-					buffers(k) % send(mpifID) = levelOld(maxval(mesh % faces(fID) % elementIDs))
-				end do
-				call mpi_isend(buffers(k) % send, nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(nShared+k), ierr)
-			end do
-			call mpi_waitall(2*nShared, reqs, MPI_STATUSES_IGNORE, ierr)
-			do k = 1, nShared
-				domain = mesh % MPIfaces % listDomain(k)
-				do mpifID = 1, mesh % MPIfaces % faces(domain) % no_of_faces
-					remoteLevel(mesh % MPIfaces % faces(domain) % faceIDs(mpifID)) = buffers(k) % recv(mpifID)
-				end do
-			end do
-			deallocate(buffers, reqs)
-		end if
-	end if
-#endif
-
-!$omp parallel shared(self,mesh,levelOld,remoteLevel, counterOMP, counterOMPN, Level_eID, Level_eID_wN, level) default(private)
+!$omp parallel shared(self,mesh,levelOld,haveRemote, counterOMP, counterOMPN, Level_eID, Level_eID_wN, level) default(private)
 !$omp do schedule(runtime)	  
 	 ! Neighbouring elements of elements with level N will have at least level N-1
       do eID =1, SIZE(mesh % elements)
@@ -7071,7 +7129,9 @@ call elementMPIList % destruct
 			do i = 1, 6
 				fID = mesh % elements(eID) % faceIDs(i)
 				if ( mesh % faces(fID) % faceType .eq. HMESH_MPI ) then
-					if ( remoteLevel(fID) .eq. level ) hasNeighbourAtLevel = .true.
+					if ( haveRemote ) then
+						if ( self % MPIfaceRemoteLevel(1,fID) .eq. level ) hasNeighbourAtLevel = .true.
+					end if
 				else
 					if ( mesh % faces(fID) % elementIDs(1) .eq. eID ) then
 						nb = mesh % faces(fID) % elementIDs(2)    ! 0 (HMESH_NONE) on boundary faces
@@ -7190,6 +7250,7 @@ call elementMPIList % destruct
     if( allocated(self % MLIter_fID_MPI)  ) deallocate(self % MLIter_fID_MPI)
     if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
     if( allocated(self % MLIter_fIDN_MPI) ) deallocate(self % MLIter_fIDN_MPI)
+    if( allocated(self % MPIfaceRemoteLevel) ) deallocate(self % MPIfaceRemoteLevel)
 	
    end subroutine MultiLevel_RK_Destruct
 !

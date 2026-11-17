@@ -200,19 +200,22 @@ module MPI_Face_Class
 !     ---------------------------------
 !     Subroutine to send the variable Q
 !     ---------------------------------
-      subroutine MPI_Face_SendQ(self, domain, nEqn, req)
+      subroutine MPI_Face_SendQ(self, domain, nEqn, req, count)
          implicit none
          class(MPI_Face_t)      :: self
          integer, intent(in)    :: domain
          integer, intent(in)    :: nEqn
          integer, intent(out)   :: req
+         integer, intent(in), optional :: count   ! number of values to send (default: all faces)
          !-local-variables-----------------------------------------
-         integer  :: ierr
+         integer  :: ierr, n
          !---------------------------------------------------------
 #ifdef _HAS_MPI_
          req = MPI_REQUEST_NULL
          if ( self % no_of_faces .gt. 0 ) then
-            call mpi_isend(self % Qsend, nEqn * self % nDOFs, MPI_DOUBLE_PRECISION, domain-1, DEFAULT_TAG, &
+            n = nEqn * self % nDOFs
+            if ( present(count) ) n = count
+            call mpi_isend(self % Qsend, n, MPI_DOUBLE_PRECISION, domain-1, DEFAULT_TAG, &
                            MPI_COMM_WORLD, req, ierr)
          end if
 #endif
@@ -245,19 +248,22 @@ module MPI_Face_Class
 !     -------------------------------------
 !     Subroutine to send the variable gradQ
 !     -------------------------------------
-      subroutine MPI_Face_SendU_xyz(self, domain, nEqn, req)
+      subroutine MPI_Face_SendU_xyz(self, domain, nEqn, req, count)
          implicit none
          class(MPI_Face_t)      :: self
          integer, intent(in)    :: domain
          integer, intent(in)    :: nEqn
 		 integer, intent(out)   :: req
+         integer, intent(in), optional :: count   ! number of values to send (default: all faces)
          !-local-variables-----------------------------------------
-         integer  :: ierr
+         integer  :: ierr, n
          !---------------------------------------------------------
 #ifdef _HAS_MPI_
 		 req = MPI_REQUEST_NULL
          if ( self % no_of_faces .gt. 0 ) then
-            call mpi_isend(self % U_xyzsend, nEqn * NDIM * self % nDOFs, MPI_DOUBLE_PRECISION, domain-1, &
+            n = nEqn * NDIM * self % nDOFs
+            if ( present(count) ) n = count
+            call mpi_isend(self % U_xyzsend, n, MPI_DOUBLE_PRECISION, domain-1, &
                            DEFAULT_TAG, MPI_COMM_WORLD, req, ierr)
          end if
 #endif
