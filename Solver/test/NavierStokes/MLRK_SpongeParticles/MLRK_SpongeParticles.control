@@ -1,0 +1,81 @@
+!
+!  MLRK with a sponge and Lagrangian particles (roadmap 3.5): the sponge and particle sources are only computed
+!  for the elements of the level being evaluated. Taylor-Green vortex on the MLRK_FourLevels mesh and orders
+!  (N=6 in the column x < 2*pi/8, levels 4 to 1 by neighbour promotion). The sponge (y > 4) covers elements of
+!  every level, and there is one particle in a column of each level. The checks are in UserDefinedFinalize.
+!
+Flow equations           = "NS"
+mesh file name           = "../../TestMeshes/TaylorGreen8.mesh"
+polynomial order file    = "orders.dat"
+discretization nodes     = Gauss-Lobatto
+riemann solver           = roe
+mach number              = 0.08
+reynolds number          = 1600.0
+prandtl number           = 0.72
+AOA theta                = 0.0
+AOA phi                  = 0.0
+restart                  = .false.
+restart file name        = "RESULTS/MLRK_SpongeParticles.hsol"
+solution file name       = "RESULTS/MLRK_SpongeParticles.hsol"
+simulation type          = time-accurate
+explicit method          = multi level rk3
+number of level          = 4
+cfl cut-off              = 0.4
+dt                       = 6.0e-3
+number of time steps     = 10
+output interval          = 1
+number of plot points    = 2
+convergence tolerance    = 1.d-14
+!
+!  Sponge: damps towards the initial condition for y > 4 (ramp width 1)
+!
+use sponge               = .true.
+sponge shape             = "cartesian"
+sponge axis              = [0.0,1.0,0.0]
+sponge start position    = [0.0,4.0,0.0]
+sponge ramp width        = 1.0
+sponge amplitude         = 10.0
+!
+!  Particles: one in a column of each level (particles.txt)
+!
+lagrangian particles     = .true.
+high order particles source term = .false.
+number of particles      = 4
+particles per parcel     = 1
+injection                = .false.
+particles file           = "particles.txt"
+vel and temp from file   = .false.
+stokes number            = 0.0468652
+Froude number            = 0.319275
+Gravity direction        = [0,0,-1]
+Gamma                    = 1.0
+phi_m                    = 0.05
+Radiation source         = 0.0
+minimum box              = [0.0,0.0,0.0]
+maximum box              = [6.2831853071795862,6.2831853071795862,6.2831853071795862]
+bc box                   = [2,2,2]
+
+#define boundary front
+  type = periodic
+  coupled boundary = back
+#end
+#define boundary back
+  type = periodic
+  coupled boundary = front
+#end
+#define boundary bottom
+  type = periodic
+  coupled boundary = top
+#end
+#define boundary top
+  type = periodic
+  coupled boundary = bottom
+#end
+#define boundary left
+  type = periodic
+  coupled boundary = right
+#end
+#define boundary right
+  type = periodic
+  coupled boundary = left
+#end

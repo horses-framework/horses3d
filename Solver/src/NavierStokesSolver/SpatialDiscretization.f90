@@ -938,7 +938,7 @@ module SpatialDiscretization
             end do
 !$omp end do
             ! for the sponge, loops are in the internal subroutine as values are precalculated
-            call addSourceSponge(sponge,mesh)
+            call addSourceSponge(sponge,mesh,Level=locLevel)
             call ForcesFarm(farm, mesh, t, Level=locLevel)
 !
 !           Add Particles source
@@ -959,8 +959,10 @@ module SpatialDiscretization
 
                      associate ( eID => particles % particle(i) % eID )
 
-                     call particles % AddSource(i, mesh % elements( eID ), &
-                        t, thermodynamics, dimensionless, refValues)
+                     if ( mesh % elements(eID) % MLevel >= locLevel ) then
+                        call particles % AddSource(i, mesh % elements( eID ), &
+                           t, thermodynamics, dimensionless, refValues)
+                     end if
 
                      ! If this is uncommented, private(j) should be added to openmp.
                         !this commented section permits the computation of source term in neighbor elements
