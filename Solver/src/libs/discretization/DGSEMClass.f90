@@ -9,7 +9,6 @@
 #include "Includes.h"
 Module DGSEMClass
    use SMConstants
-   use Utilities                 , only: sortAscend
    USE NodalStorageClass         , only: CurrentNodes, NodalStorage, NodalStorage_t
    use MeshTypes                 , only: HOPRMESH
    use ElementClass
@@ -1190,7 +1189,6 @@ Module DGSEMClass
 !$omp end do
 !$omp end parallel
 
-	  call sortAscend(elementCFL)
 	  maxCFL             = maxval(elementCFL)
 	  minCFL             = minval(elementCFL)
 	  maxCFLInterface    = maxval(maxCFLInterfaceID)
