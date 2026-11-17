@@ -951,7 +951,7 @@ module SpatialDiscretization
 
 !for the sponge, loops are in the internal subroutine as values are precalculated
 !The scale with sqrtRho is done in the subroutines, not done againg here
-         call addSourceSponge(sponge,mesh)
+         call addSourceSponge(sponge,mesh,Level=locLevel)
          call ForcesFarm(farm, mesh, t, Level=locLevel)
 
 ! Add all the source terms

@@ -889,6 +889,24 @@ jobs:
         if: '!cancelled()'
 
 #
+# 39) MLRK with sponge and particles
+# --------------------------------------------
+
+      - name: Build MLRK_SpongeParticles
+        working-directory: ./Solver/test/NavierStokes/MLRK_SpongeParticles/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: '!cancelled()'
+
+      - name: Run MLRK_SpongeParticles
+        working-directory: ./Solver/test/NavierStokes/MLRK_SpongeParticles
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./horses3d.ns MLRK_SpongeParticles.control
+        if: '!cancelled()'
+
+#
 # CHECK CODE COVERAGE
 # -------------------------
 
