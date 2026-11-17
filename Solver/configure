@@ -130,7 +130,8 @@ COMPONENTS_TEST_CASES="FacePatches \
  		       HexMesh \
 		       HexMappings \
  		       MeshConsistency \
-		       NodalStorage"
+		       NodalStorage \
+		       Sorting"
 			   
 ADDONS="./AddOns/horsesConverter/MappingResult \
         ./AddOns/horsesConverter/HorsesMesh2OF \

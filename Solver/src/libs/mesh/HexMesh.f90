@@ -1,6 +1,7 @@
 #include "Includes.h"
 MODULE HexMeshClass
-      use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax, sortDescendInt, sortAscendInt
+      use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax, &
+                                                  mergeSortDescendInt, mergeSortAscendInt
       use SMConstants
       USE MeshTypes
       USE NodeClass
@@ -6711,8 +6712,8 @@ call elementMPIList % destruct
 	!-local variable-----------------------------------------
 	integer          :: eID, level, levelOld, i, j, fID, sideID
     integer          :: counter(1:self%nLevel), nInterior, nBoundary, nFace, nMPIface
-	integer          :: Level_eID(mesh % no_of_elements), Level_eID_wN(mesh % no_of_elements), Level_eID_wN_BUFF(mesh % no_of_elements)
-	integer          :: faceFlag(size(mesh % faces),2)
+	integer, allocatable :: Level_eID(:), Level_eID_wN(:), Level_eID_wN_BUFF(:)
+	integer, allocatable :: faceFlag(:,:)
 	integer          :: iterations(self%nLevel+1,10)
 	integer          :: ierr                     ! Error for MPI calls
 	real(kind=RP)    :: perLevel, cflLevel, dtRatio, cfl
@@ -6727,6 +6728,8 @@ call elementMPIList % destruct
 	  self % MLIter = 0
 	
 	  allocate(counterOMP(self%nLevel,mesh % no_of_elements), counterOMPN (self%nLevel,mesh % no_of_elements))
+	  allocate(Level_eID(mesh % no_of_elements), Level_eID_wN(mesh % no_of_elements), Level_eID_wN_BUFF(mesh % no_of_elements))
+	  allocate(faceFlag(size(mesh % faces),2))
 	  counterOMP   = 0
 	  counterOMPN  = 0
 	  Level_eID    = 0
@@ -6776,8 +6779,8 @@ call elementMPIList % destruct
 	  end do 
 	  Level_eID_wN_BUFF = Level_eID_wN
       ! Sort decending Level_eID (Large to small level) and Level_eID_wN (neighbour included)
-      call sortDescendInt(Level_eID,self % MLIter_eID) 
-	  call sortDescendInt(Level_eID_wN, self % MLIter_eIDN)
+      call mergeSortDescendInt(Level_eID,self % MLIter_eID)
+	  call mergeSortDescendInt(Level_eID_wN,self % MLIter_eIDN)
   
 	  do i = 1, self % nLevel
 		self % MLIter(i,1) = sum(counterOMP(i:self % nLevel,:))    ! Elements
@@ -6847,21 +6850,29 @@ call elementMPIList % destruct
 		self % MLIter(1:Level_eID(i),5) = self % MLIter(1:Level_eID(i),5)+1
 		self % MLIter(1:Level_eID_wN(i),9) = self % MLIter(1:Level_eID_wN(i),9)+1
 	  end do 
-	  ! Sort decending Level_eID (Large to small level)
-      call sortDescendInt(Level_eID(1:size(mesh % elements_sequential)),self % MLIter_eID_Seq) 
-	  call sortDescendInt(Level_eID_wN(1:size(mesh % elements_sequential)),self % MLIter_eIDN_Seq) 
-	 
-	  ! Sort eID, fID for better memory access
+	  ! The stable sort of MLIter_eID/eIDN already leaves each level in ascending eID, and elements_sequential is
+	  ! ascending, so filtering gives the same lists as sorting them
+	  call filterElements(self % MLIter_eID , .false., self % MLIter_eID_Seq)
+	  call filterElements(self % MLIter_eIDN, .false., self % MLIter_eIDN_Seq)
+
+	  ! Sort fID for better memory access. Each level's interior/boundary faces are the faces of that level's
+	  ! fID block, so they are filtered from the sorted list
 	  iterations = 0
 	  iterations(1:self%nLevel,:)=self % MLIter
 	  do i=self % nLevel, 1, -1
-		call sortAscendInt(self % MLIter_eID(iterations(i+1,1)+1:iterations(i,1)))
-		call sortAscendInt(self % MLIter_fID(iterations(i+1,2)+1:iterations(i,2)))
-		call sortAscendInt(self % MLIter_fID_Interior(iterations(i+1,3)+1:iterations(i,3)))
-		call sortAscendInt(self % MLIter_fID_Boundary(iterations(i+1,4)+1:iterations(i,4)))
-		call sortAscendInt(self % MLIter_eID_Seq(iterations(i+1,5)+1:iterations(i,5)))
-		call sortAscendInt(self % MLIter_eIDN(iterations(i+1,8)+1:iterations(i,8)))
-		call sortAscendInt(self % MLIter_eIDN_Seq(iterations(i+1,9)+1:iterations(i,9)))
+		call mergeSortAscendInt(self % MLIter_fID(iterations(i+1,2)+1:iterations(i,2)))
+	  end do
+	  nInterior = 0
+	  nBoundary = 0
+	  do i = 1, self % MLIter(1,2)
+		fID = self % MLIter_fID(i)
+		if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
+			nInterior = nInterior + 1
+			self % MLIter_fID_Interior(nInterior) = fID
+		elseif (mesh % faces(fID) % FaceType .eq. HMESH_BOUNDARY) then
+			nBoundary = nBoundary + 1
+			self % MLIter_fID_Boundary(nBoundary) = fID
+		end if
 	  end do
       self % ML_GlobalLevel = self % ML_Level
 	  
@@ -6876,9 +6887,8 @@ call elementMPIList % destruct
 			self % MLIter(1:Level_eID(i),6) = self % MLIter(1:Level_eID(i),6)+1
 			self % MLIter(1:Level_eID_wN(i),10) = self % MLIter(1:Level_eID_wN(i),10)+1
 		  end do 
-		  ! Sort decending Level_eID (Large to small level)
-		  call sortDescendInt(Level_eID(1:size(mesh % elements_mpi)),self % MLIter_eID_MPI) 
-		  call sortDescendInt(Level_eID_wN(1:size(mesh % elements_mpi)),self % MLIter_eIDN_MPI) 
+		  call filterElements(self % MLIter_eID , .true., self % MLIter_eID_MPI)
+		  call filterElements(self % MLIter_eIDN, .true., self % MLIter_eIDN_MPI)
           
           ! Global statistics level		  
           call mpi_allreduce(self % ML_Level(1:self%nLevel), self % ML_GlobalLevel(1:self%nLevel), self%nLevel, MPI_INT, MPI_SUM, &
@@ -6923,6 +6933,22 @@ call elementMPIList % destruct
             end do 
 			write(STD_OUT,'(30X,A,A27,I4)') "->" , "Number of RK3 Level: " , self % maxLevel
 
+   contains
+
+   subroutine filterElements(sorted, shared, filtered)
+	integer, intent(in)  :: sorted(:)
+	logical, intent(in)  :: shared
+	integer, intent(out) :: filtered(:)
+	integer :: k, n
+	n = 0
+	do k = 1, size(sorted)
+		if (mesh % elements(sorted(k)) % hasSharedFaces .eqv. shared) then
+			n = n + 1
+			filtered(n) = sorted(k)
+		end if
+	end do
+   end subroutine filterElements
+
    end subroutine MultiLevel_RK_Update
 !------------------------------------------------------------------------
 !  Update 
@@ -6938,48 +6964,82 @@ call elementMPIList % destruct
 	integer              , intent(inout)   :: counterOMP(self % nLevel, mesh % no_of_elements)
 	integer              , intent(inout)   :: counterOMPN(self % nLevel, mesh % no_of_elements)
 	
-	integer              :: eID, i, j
+	type levelBuffer_t
+		integer, allocatable :: send(:), recv(:)
+	end type levelBuffer_t
+
+	integer              :: eID, i, fID, nb, k, domain, mpifID, nFaces, nShared
 	integer              :: ierr  
-	integer, allocatable :: neighborID(:), neighborIDAll(:)
+	logical              :: hasNeighbourAtLevel
+	integer, allocatable :: levelOld(:), remoteLevel(:), reqs(:)
+	type(levelBuffer_t), allocatable :: buffers(:)
 
-	allocate(neighborID(mesh % no_of_allElements), neighborIDAll(mesh % no_of_allElements))
-	neighborID = 0
-	neighborIDAll = 0
-	  
-!$omp parallel shared(self,mesh,neighborID,neighborIDAll, counterOMP, counterOMPN, level, Level_eID, Level_eID_wN) default(private)
-!$omp do schedule(runtime)
-	 do eID =1, size(mesh % elements)
-	     associate(element => mesh % elements(eID))
-	     ! Flag neighboring elements of elements with level equal to the level N that being assesed	
-		 if (element % MLevel .eq. level) then
-			do i =1, 6
-				if ((element % Connection(i) % globID .gt. 0).and.(element % Connection(i) % globID .lt. mesh % no_of_allElements+1)) then
-					neighborID(element % Connection(i) % globID) = neighborID(element % Connection(i) % globID) +1
-			    end if 
-			end do 
-		 end if 
-		 end associate
-	 end do 
-!$omp end do
-!$omp end parallel
+!   Levels at the start of this pass, and the level of the element across each MPI face
+	allocate(levelOld(mesh % no_of_elements), remoteLevel(size(mesh % faces)))
+	do eID = 1, mesh % no_of_elements
+		levelOld(eID) = mesh % elements(eID) % MLevel
+	end do
+	remoteLevel = 0
 
-	  neighborIDAll = neighborID
-!     Combine information on neighboring elements with other MPI
 #ifdef _HAS_MPI_
-      if ( MPI_Process % doMPIAction ) then
-          ! Gather all the neigboring element of level 3 (globalID)
-          call mpi_allreduce(neighborID, neighborIDAll, mesh % no_of_allElements, MPI_INT, MPI_SUM, &
-                            MPI_COMM_WORLD, ierr)
-      end if
+	if ( MPI_Process % doMPIAction .and. mesh % MPIfaces % constructed ) then
+		nShared = mesh % MPIfaces % nDomainShared
+		if ( nShared > 0 ) then
+			allocate(buffers(nShared), reqs(2*nShared))
+			reqs = MPI_REQUEST_NULL
+			do k = 1, nShared
+				domain = mesh % MPIfaces % listDomain(k)
+				nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
+				allocate(buffers(k) % send(nFaces), buffers(k) % recv(nFaces))
+				if ( nFaces > 0 ) then
+					call mpi_irecv(buffers(k) % recv, nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(k), ierr)
+				end if
+			end do
+			do k = 1, nShared
+				domain = mesh % MPIfaces % listDomain(k)
+				nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
+				if ( nFaces <= 0 ) cycle
+				do mpifID = 1, nFaces
+					fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
+					buffers(k) % send(mpifID) = levelOld(maxval(mesh % faces(fID) % elementIDs))
+				end do
+				call mpi_isend(buffers(k) % send, nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(nShared+k), ierr)
+			end do
+			call mpi_waitall(2*nShared, reqs, MPI_STATUSES_IGNORE, ierr)
+			do k = 1, nShared
+				domain = mesh % MPIfaces % listDomain(k)
+				do mpifID = 1, mesh % MPIfaces % faces(domain) % no_of_faces
+					remoteLevel(mesh % MPIfaces % faces(domain) % faceIDs(mpifID)) = buffers(k) % recv(mpifID)
+				end do
+			end do
+			deallocate(buffers, reqs)
+		end if
+	end if
 #endif
-      deallocate(neighborID)
-!$omp parallel shared(self,mesh,neighborIDAll, counterOMP, counterOMPN, Level_eID, Level_eID_wN, level) default(private)
+
+!$omp parallel shared(self,mesh,levelOld,remoteLevel, counterOMP, counterOMPN, Level_eID, Level_eID_wN, level) default(private)
 !$omp do schedule(runtime)	  
 	 ! Neighbouring elements of elements with level N will have at least level N-1
       do eID =1, SIZE(mesh % elements)
-	    associate(element => mesh % elements(eID))
-		if (element % MLevel.lt.(level)) then
-			if (neighborIDAll(element % globID).gt.0) then
+		if (levelOld(eID).lt.(level)) then
+			hasNeighbourAtLevel = .false.
+			do i = 1, 6
+				fID = mesh % elements(eID) % faceIDs(i)
+				if ( mesh % faces(fID) % faceType .eq. HMESH_MPI ) then
+					if ( remoteLevel(fID) .eq. level ) hasNeighbourAtLevel = .true.
+				else
+					if ( mesh % faces(fID) % elementIDs(1) .eq. eID ) then
+						nb = mesh % faces(fID) % elementIDs(2)    ! 0 (HMESH_NONE) on boundary faces
+					else
+						nb = mesh % faces(fID) % elementIDs(1)
+					end if
+					if ( nb .gt. 0 ) then
+						if ( levelOld(nb) .eq. level ) hasNeighbourAtLevel = .true.
+					end if
+				end if
+			end do
+			if (hasNeighbourAtLevel) then
+				associate(element => mesh % elements(eID))
 				element % MLevel = level-1
 				counterOMP (:,eID) = 0
 				counterOMP (level-1,eID) = 1
@@ -6988,9 +7048,9 @@ call elementMPIList % destruct
 				Level_eID(eID) = element % MLevel
 				counterOMPN (:,eID)= 0
 				counterOMPN (level,eID) = 1
+				end associate
 			end if 
 		end if 
-		end associate
 	  end do 
 !$omp end do
 !$omp end parallel

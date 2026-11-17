@@ -20,6 +20,7 @@ module Utilities
    private
    public   AlmostEqual, UnusedUnit, SolveThreeEquationLinearSystem, GreatestCommonDivisor, outer_product, AlmostEqualRelax
    public   toLower, Qsort, QsortWithFriend, BubblesortWithFriend, my_findloc, sortAscend, sortDescendInt, sortAscendInt
+   public   mergeSortDescendInt, mergeSortAscendInt
    public   logarithmicMean, dot_product
    public   LeastSquaresLinRegression, reindexIntegerList, combine_partitions, log_mem
    
@@ -583,6 +584,91 @@ pure subroutine sortDescendInt(A,B)
     end do
 
 end subroutine sortDescendInt
+!
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+! Stable bottom-up merge sorts, O(n log n). Same results as sortDescendInt / sortAscendInt (bubble sorts, O(n^2)).
+!///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+!
+pure subroutine mergeSortDescendInt(A,B)
+!   Sorts A in descending order and applies the same permutation to B. Equal keys keep their order.
+    implicit none
+    !--------------------------------------
+    integer, intent(inout) :: A(:)
+    integer, intent(inout) :: B(size(A))
+    !--------------------------------------
+    integer              :: n, width, lo, mid, hi, i, j, k
+    integer, allocatable :: tA(:), tB(:)
+    logical              :: takeLeft
+    !--------------------------------------
+
+    n = size(A)
+    if (n < 2) return
+    allocate(tA(n), tB(n))
+
+    width = 1
+    do while (width < n)
+        do lo = 1, n, 2*width
+            mid = min(lo + width - 1, n)
+            hi  = min(lo + 2*width - 1, n)
+            i = lo
+            j = mid + 1
+            do k = lo, hi
+!               Separate tests: Fortran does not short-circuit, and A(i) / A(j) may be out of range
+                takeLeft = (j > hi)
+                if ( (i <= mid) .and. (.not. takeLeft) ) takeLeft = (A(i) >= A(j))
+                if ( i > mid ) takeLeft = .false.
+                if ( takeLeft ) then
+                    tA(k) = A(i) ; tB(k) = B(i) ; i = i + 1
+                else
+                    tA(k) = A(j) ; tB(k) = B(j) ; j = j + 1
+                end if
+            end do
+        end do
+        A = tA
+        B = tB
+        width = 2*width
+    end do
+
+end subroutine mergeSortDescendInt
+
+pure subroutine mergeSortAscendInt(A)
+    implicit none
+    !--------------------------------------
+    integer, intent(inout) :: A(:)
+    !--------------------------------------
+    integer              :: n, width, lo, mid, hi, i, j, k
+    integer, allocatable :: tA(:)
+    logical              :: takeLeft
+    !--------------------------------------
+
+    n = size(A)
+    if (n < 2) return
+    allocate(tA(n))
+
+    width = 1
+    do while (width < n)
+        do lo = 1, n, 2*width
+            mid = min(lo + width - 1, n)
+            hi  = min(lo + 2*width - 1, n)
+            i = lo
+            j = mid + 1
+            do k = lo, hi
+!               Separate tests: Fortran does not short-circuit, and A(i) / A(j) may be out of range
+                takeLeft = (j > hi)
+                if ( (i <= mid) .and. (.not. takeLeft) ) takeLeft = (A(i) <= A(j))
+                if ( i > mid ) takeLeft = .false.
+                if ( takeLeft ) then
+                    tA(k) = A(i) ; i = i + 1
+                else
+                    tA(k) = A(j) ; j = j + 1
+                end if
+            end do
+        end do
+        A = tA
+        width = 2*width
+    end do
+
+end subroutine mergeSortAscendInt
 !
 !///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 ! Subroutine to reindexIntegerList as such it is compactly renumbered from 0 to totalNodes-1 (for METIS operation in MLRK reconstruct)

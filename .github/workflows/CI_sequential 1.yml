@@ -233,6 +233,24 @@ jobs:
           ./bin/NodalStorage
         if: '!cancelled()'
 
+#
+# 6b) SORTING TEST
+# ----------------
+
+      - name: Build Sorting
+        working-directory: ./Solver/test/Components/Sorting
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: '!cancelled()'
+
+      - name: Run Sorting
+        working-directory: ./Solver/test/Components/Sorting
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./bin/Sorting
+        if: '!cancelled()'
+
 ########################################################################
 #######                         EULER                           ########
 ########################################################################
