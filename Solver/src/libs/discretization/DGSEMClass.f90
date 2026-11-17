@@ -579,10 +579,9 @@ Module DGSEMClass
 	  real(kind=RP)                      :: ML_CFL_CutOff, dt, globalMax, globalMin, maxCFLInterf
 	  integer                            :: ML_nLevel
 	  integer                            :: ierr, i, nElements
-	  integer                            :: globIDLevelPartition( self % mesh % no_of_allElements)
-	  integer                            :: globIDLevel( self % mesh % no_of_allElements)
+	  integer, allocatable               :: globIDLevelPartition(:), globIDLevel(:)
 	  integer, allocatable               :: nElementLevelPartition(:), nElementLevel(:), levelPos(:)
-	  integer                            :: eID_Order(self % mesh % no_of_allElements)
+	  integer, allocatable               :: eID_Order(:)
 !       ---------------------------------------------
 !       Read MLRK Setup - No time integration storage
 !       ---------------------------------------------
@@ -599,6 +598,8 @@ Module DGSEMClass
 		end if
 		
 		allocate(nElementLevelPartition(ML_nLevel), nElementLevel(ML_nLevel))
+		allocate(globIDLevelPartition(self % mesh % no_of_allElements), globIDLevel(self % mesh % no_of_allElements))
+		allocate(eID_Order(self % mesh % no_of_allElements))
 		nElementLevelPartition = 0
 		nElementLevel          = 0 
 		globIDLevelPartition   = 0
@@ -666,6 +667,7 @@ Module DGSEMClass
 	 
 	   if (allocated(nElementLevelPartition)) deallocate(nElementLevelPartition)
 	   if (allocated(nElementLevel)) deallocate(nElementLevel)
+	   deallocate(globIDLevelPartition, globIDLevel, eID_Order)
 	   
       END SUBROUTINE ReConstructDGSemMLRK		
 	  
