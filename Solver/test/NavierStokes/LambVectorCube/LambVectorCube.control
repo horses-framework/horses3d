@@ -1,0 +1,69 @@
+Flow equations        = "NS"
+mesh file name        = "../../TestMeshes/TaylorGreen8.mesh"
+
+restart file name     = "RESULTS/LambVectorCube.rst"
+solution file name    = "RESULTS/LambVectorCube.rst"
+restart               = .false.
+
+Discretization nodes = "Gauss"
+
+Polynomial order      = 5
+
+simulation type = "time-accurate"
+final time = 0.100001
+dt = 0.005
+Number of time steps  = 10000
+
+Output Interval       = 1
+Number of plot points = 2
+Convergence tolerance = 1.d-10
+
+!cfl                   = 0.4
+!dcfl                  = 0.4
+mach number           = 0.08
+Reynolds number       = 1600.0
+
+riemann solver        = "Roe"
+
+AOA theta             = 0.0
+AOA phi               = 0.0
+
+!autosave mode = "time"
+!autosave interval = 0.1
+
+save Lamb vector = .true.
+save Lamb vector mode = "time"
+save Lamb vector interval = 0.1
+save Lamb vector divergence = .true.
+lamb vector cube = [0.0, 2.0, -1.0, 1.5, 0.5, 3.0]
+
+
+#define boundary front
+  type = periodic
+  coupled boundary = back
+#end
+
+#define boundary bottom
+   type = periodic
+   coupled boundary = top
+#end
+
+#define boundary top
+   type = periodic
+   coupled boundary = bottom
+#end
+
+#define boundary back
+   type = periodic
+   coupled boundary = front
+#end
+
+#define boundary left
+   type = periodic
+   coupled boundary = right
+#end
+
+#define boundary right
+   type = periodic
+   coupled boundary = left
+#end

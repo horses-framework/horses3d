@@ -831,7 +831,13 @@ end module MMS
 
             
             CALL sharedManager % summarizeAssertions(title = testName,iUnit = 6)
-   
+            IF ( sharedManager % numberOfAssertionFailures() == 0 )     THEN
+               WRITE(6,*) testName, " ... Passed"
+            ELSE
+               WRITE(6,*) testName, " ... Failed"
+               error stop 99
+            END IF
+
             WRITE(6,*)
             
             CALL finalizeSharedAssertionsManager

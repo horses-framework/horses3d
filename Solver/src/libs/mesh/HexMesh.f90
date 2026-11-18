@@ -3908,7 +3908,7 @@ slavecoord:             DO l = 1, 4
             end associate
          end do
          global_dofs_offset = 0
-         all_elements_inside = 0
+         all_elements_inside = size(elementsInside)
          n_elements_before = 0
          if ( MPI_Process % doMPIAction ) then
 #ifdef _HAS_MPI_
@@ -3968,6 +3968,8 @@ slavecoord:             DO l = 1, 4
             associate( e => self % elements(elementsInside(eID)) )
                pos = POS_INIT_DATA + n_elements_before*5_AddrInt*SIZEOF_INT + 1_AddrInt*global_dofs_offset*NDIM*SIZEOF_RP
                posDiv = POS_INIT_DATA + n_elements_before*5_AddrInt*SIZEOF_INT + 1_AddrInt*global_dofs_offset*SIZEOF_RP
+               n_elements_before  = n_elements_before + 1
+               global_dofs_offset = global_dofs_offset + product(e % Nxyz + 1)
 
                ! Write the Lamb vector
 #ifdef ACOUSTIC
