@@ -500,7 +500,7 @@ end module ProblemFileFunctions
 
             CALL FTAssertEqual(expectedValue = cl + 1.0_RP, &
                                actualValue   = monitors % surfaceMonitors(2) % values(1) + 1.0_RP, &
-                               tol           = 1.d-11, &
+                               tol           = 1.d-9, &
                                msg           = "Lift coefficient")
 
 

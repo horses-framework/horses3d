@@ -770,8 +770,10 @@ slavecoord:             DO l = 1, 4
                                                  rotationParams % center(1), ", ", &
                                                  rotationParams % center(2), ", ", &
                                                  rotationParams % center(3), "] and axis ", coord
-            write(STD_OUT,'(A,F8.3,A)') "         Periodic sector angle: ", &
-                                         printAngle * 180.0_RP / PI, " degrees"
+            if (printAngle > 0.0_RP) then
+               write(STD_OUT,'(A,F8.3,A)') "         Periodic sector angle: ", &
+                                            printAngle * 180.0_RP / PI, " degrees"
+            end if
          end if
 
       END SUBROUTINE ConstructPeriodicFaces
