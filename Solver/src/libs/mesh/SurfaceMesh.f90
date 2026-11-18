@@ -1455,6 +1455,7 @@ Module SurfaceMesh
     Subroutine getU_tauInSurfaces(surfaces, mesh)
         use BoundaryConditions
         use Physics
+        use fluiddata
         implicit none
         type(SurfaceMesh_t)                                     :: surfaces
         type(HexMesh), intent(inout)                            :: mesh
@@ -1462,10 +1463,19 @@ Module SurfaceMesh
         !local variables
         integer                                                 :: surfID, faceID, i, j, meshFaceID
         real(kind=RP)                                           :: u_tau_t1, u_tau_t2
+        real(kind=RP)                                           :: qq, u, v, w
+        real(kind=RP), dimension(NDIM)                          :: freestream_dir
 
 
         if (.not. surfaces % active) return
         if (.not. surfaces % saveUt) return
+
+        u  = cos(refValues % AoAtheta * PI / 180.0_RP)*cos(refValues % AoAphi * PI / 180.0_RP)
+        v  = sin(refValues % AoAtheta * PI / 180.0_RP)*cos(refValues % AoAphi * PI / 180.0_RP)
+        w  = sin(refValues % AoAphi * PI / 180.0_RP)
+
+        freestream_dir = [u,v,w]
+
         do surfID = 1, surfaces % numberOfSurfaces
             if (.not. surfaces % surfaceActive(surfID)) cycle
             if ( (surfaces % surfaceTypes(surfID) .ne. SURFACE_TYPE_BC) .or. &
@@ -1484,9 +1494,7 @@ Module SurfaceMesh
                            tangent_2 => mesh % faces(meshFaceID) % geom % t2, &
                            u_tau => mesh % faces(meshFaceID) % storage(1) % u_tau_NS )
                     do j=0,mesh % faces(meshFaceID) % Nf(2)   ; do i = 0, mesh % faces(meshFaceID) % Nf(1)
-                        call getFrictionVelocity(Q(:,i,j),U_x(:,i,j),U_y(:,i,j),U_z(:,i,j),normal(:,i,j),tangent_1(:,i,j),u_tau_t1)
-                        call getFrictionVelocity(Q(:,i,j),U_x(:,i,j),U_y(:,i,j),U_z(:,i,j),normal(:,i,j),tangent_2(:,i,j),u_tau_t2)
-                        u_tau(i,j) = sqrt(u_tau_t1**2+u_tau_t2**2)
+                        call getFrictionVelocity(Q(:,i,j),U_x(:,i,j),U_y(:,i,j),U_z(:,i,j),normal(:,i,j),tangent_1(:,i,j),tangent_2(:,i,j), freestream_dir, u_tau(i,j))
                     end do             ; end do
                 end associate
 
