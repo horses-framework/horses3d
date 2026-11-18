@@ -141,6 +141,7 @@
       SUBROUTINE ConstructPhysicsStorage_NSSA( controlVariables, Lref, timeref, success )
       USE FTValueDictionaryClass
       USE Physics_NSSAKeywordsModule
+      use mainKeywordsModule, only: saveLambVectorKey, saveLambVectorDivergenceKey
       use Utilities, only: toLower, almostEqual
 !
 !     ---------
@@ -373,6 +374,15 @@
             flowIsNavierStokes = .true.
             computeGradients = .true.
 
+         end if
+      end if
+
+      ! If Lamb vector is requested, computeGradient should be enabled
+      if (controlVariables % logicalValueForKey(saveLambVectorKey) .or. &
+          controlVariables % logicalValueForKey(saveLambVectorDivergenceKey)) then
+         if (.not. computeGradients) then
+            print *, trim(COMPUTE_GRADIENTS_KEY), " should be enabled to compute the Lamb vector."
+            error stop
          end if
       end if
 !
