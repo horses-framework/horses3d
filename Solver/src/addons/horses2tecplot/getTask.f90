@@ -222,6 +222,7 @@ module getTask
                 read(fID, '(A)') solutionNames(i)
                 solutionTypes(i) = getSolutionFileType(solutionNames(i))
             end do 
+            close(fID, status="delete")
          end if
 !
 !        Select the output file type
