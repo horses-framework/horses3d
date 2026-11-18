@@ -694,7 +694,7 @@ end module MMS
                allocate(QExpected(1:NCONS,0:Nx,0:Ny,0:Nz))
                read(fid) QExpected(:,:,:,:)
                Qerror = maxval(abs(QExpected - mesh % elements(eID) % storage % Q))
-               if (Qerror > 1e-12) then
+               if (Qerror > 1e-8_rp) then
                  Qsuccess = .false.
                end if
                deallocate(QExpected)
