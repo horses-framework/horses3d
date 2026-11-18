@@ -52,3 +52,7 @@ The file can be added to the post-processing with `horses2plt` (see [Post-proces
 ```
 horses2plt MESH/mesh.hmesh RESULTS/solution.hsol --mlrk-level-file=MESH/solution.lmesh
 ```
+The levels can also be added to a mesh-only conversion (without a solution file):
+```
+horses2plt MESH/mesh.hmesh --mlrk-level-file=MESH/solution.lmesh
+```

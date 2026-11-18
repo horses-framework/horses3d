@@ -185,6 +185,12 @@ module Storage
          if (hasMPIranks) then
                call readPartitionFile(self)
          end if
+
+!        Read MLRK levels (if present)
+!        -----------------------------
+         if (hasMLRKLevels) then
+               call readMLRKLevelFile(self)
+         end if
 !
 !        Describe the mesh
 !        -----------------
