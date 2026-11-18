@@ -28,6 +28,7 @@ The main keywords to use it are shown in the table below
 | relevel iteration        | *INTEGER*: The levels are assigned at the first time step and then every 'relevel iteration' steps.                                                                                                         | 1000000000    |
 | optimized partition      | *LOGICAL*: MPI only. Builds a level-aware partition, so that every MPI rank owns a share of the elements of each level. Works with both 'metis' and 'SFC' partitioning.                                     | .false.       |
 | MLRK interface tolerance | *REAL*: Multiphase only. A node with a concentration between this tolerance and one minus it belongs to the interface. Interface elements are placed in the highest level.                                  | 1e-4          |
+| MLRK user-defined levels | *LOGICAL*: Take the level of each element from `e % MLevel` as set by the user in `UserDefinedFinalSetup` (ProblemFile), instead of from the CFL number. The neighbour rule (at most one level difference) still applies. | .false.       |
 
 How the levels are assigned:
 

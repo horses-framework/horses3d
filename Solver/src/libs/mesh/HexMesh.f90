@@ -51,6 +51,7 @@ MODULE HexMeshClass
 		 integer               :: maxLevel
 		 real(kind=RP)         :: CFL_CutOff
 		 real(kind=RP)         :: interfaceTol = 1.0e-4_RP   ! Multiphase: a node with interfaceTol <= c <= 1-interfaceTol is on the interface
+		 logical               :: userLevels = .false.       ! Levels assigned by the user (e % MLevel set in the ProblemFile) instead of from the CFL
 		 integer, allocatable  :: ML_GlobalLevel(:)        ! Number of Multi-Level Timestep Element - Global - in TimeIntegrator.f90 and DGSEMClass.f90
 		 integer, allocatable  :: ML_Level(:)              ! Number of Multi-Level Timestep Element - Partition 
 		 integer, allocatable  :: MLIter(:,:)              ! Number of ML Iteration - partition (L1 include L2 & L3, etc); size(nLevel, 13); columns 11-13: faces of the eIDN elements (interior, boundary, MPI) 
@@ -6826,6 +6827,7 @@ call elementMPIList % destruct
 				exit
 			end if 
 		 end do 
+		 if (self % userLevels) level = min(max(mesh % elements(eID) % MLevel, 1), self % nLevel)
 		 counterOMP(level,eID) = 1
 		 mesh % elements(eID) % MLevel   = level
 		 mesh % elements(eID) % MLevelwN = level

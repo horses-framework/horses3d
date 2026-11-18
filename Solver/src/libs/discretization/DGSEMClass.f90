@@ -599,6 +599,9 @@ Module DGSEMClass
 		if ( controlVariables % ContainsKey("mlrk interface tolerance") ) then
 			 self % mesh % MLRK % interfaceTol = controlVariables % doublePrecisionValueForKey("mlrk interface tolerance")
 		end if
+		if ( controlVariables % ContainsKey("mlrk user-defined levels") ) then
+			 self % mesh % MLRK % userLevels = controlVariables % logicalValueForKey("mlrk user-defined levels")
+		end if
 !       Compute CFL and Level
 !       ---------------------
 	    dt         = controlVariables % doublePrecisionValueForKey("dt")

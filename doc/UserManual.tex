@@ -1106,6 +1106,8 @@ optimized partition & \textit{LOGICAL}: MPI only. Builds a level-aware partition
 
 MLRK interface tolerance & \textit{REAL}: Multiphase only. A node with a concentration between this tolerance and one minus it belongs to the interface. Interface elements are placed in the highest level. & 1e-4 \\ \hline
 
+MLRK user-defined levels & \textit{LOGICAL}: Take the level of each element from \texttt{e \% MLevel} as set by the user in \texttt{UserDefinedFinalSetup} (ProblemFile), instead of from the CFL number. The neighbour rule (at most one level difference) still applies. & .false. \\ \hline
+
 \end{longtable}
 
 How the levels are assigned:
