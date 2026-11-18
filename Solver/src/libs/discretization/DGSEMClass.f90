@@ -275,8 +275,9 @@ Module DGSEMClass
          end if
 !
 !        Read the mesh by the root rank to perform the partitioning
+!        (we skip this step if the mesh is partitioned with a space-filling curve: SFC_PARTITIONING)
 !        ----------------------------------------------------------
-         if ( MPI_Process % doMPIRootAction ) then
+         if ( MPI_Process % doMPIRootAction) then ! .and. MPI_Partitioning /= SFC_PARTITIONING
 !
 !           Construct the "full" mesh
 !           -------------------------
@@ -296,23 +297,24 @@ Module DGSEMClass
                call UserDefinedInitialCondition(self % mesh, FLUID_DATA_VARS)
             end if
 			
-			if (.not.isReconstruct) then 
+			   if (.not.isReconstruct) then 
 !
 !               Perform the partitioning
 !               ------------------------
-				call PerformMeshPartitioning  (self % mesh, MPI_Process % nProcs, mpi_allPartitions, useWeightsPartition, controlVariables)
+				   call PerformMeshPartitioning  (self % mesh, self % mesh % no_of_elements, MPI_Process % nProcs, mpi_allPartitions, useWeightsPartition, &
+                                              Nx, Ny, Nz, controlVariables)
 !
 !               Send the partitions
 !               -------------------
-				call SendPartitionsMPI( MeshFileType(self % mesh % meshFileName) == HOPRMESH )
-			else
-				call PerformMeshPartitioning (self % mesh, MPI_Process % nProcs, mpi_allPartitions, useWeightsPartition, controlVariables, &
-											 eID_Order=eID_Order, nElementLevel=nElementLevel)
+               call SendPartitionsMPI( MeshFileType(self % mesh % meshFileName) == HOPRMESH )
+            else
+               call PerformMeshPartitioning (self % mesh, self % mesh % no_of_elements, MPI_Process % nProcs, mpi_allPartitions, useWeightsPartition, &        
+                                             Nx, Ny, Nz, controlVariables, eID_Order=eID_Order, nElementLevel=nElementLevel)
 !
 !               Send the partitions
 !               -------------------
-				call SendPartitionsMPI( MeshFileType(self % mesh % meshFileName) == HOPRMESH )
-			end if 
+				   call SendPartitionsMPI( MeshFileType(self % mesh % meshFileName) == HOPRMESH )
+			   end if 
 !
 !           Destruct the full mesh
 !           ----------------------
