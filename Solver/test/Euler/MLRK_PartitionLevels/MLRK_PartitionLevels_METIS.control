@@ -19,6 +19,7 @@ simulation type          = time-accurate
 explicit method          = multi level rk3
 optimized partition      = .true.
 ! partitioning: METIS (default)
+partitioning with weights = .false.
 number of level          = 2
 cfl cut-off              = 0.4
 dt                       = 2.0e-3
