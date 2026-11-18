@@ -17,3 +17,4 @@ This is a (possibly incomplete) list of the people who has contributed to HORSES
 - David Huergo  
 - Oliver Browne  
 - Moritz Kompenhans
+- Hatem Kessasra  

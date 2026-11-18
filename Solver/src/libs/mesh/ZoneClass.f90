@@ -22,7 +22,7 @@ module ZoneClass
       contains
          procedure   :: Initialize       => Zone_Initialize
          procedure   :: copy             => Zone_Assign
-		 procedure   :: destruct         => Zone_Destruct
+		   procedure   :: destruct         => Zone_Destruct
          generic     :: assignment(=)    => copy
          procedure   :: CreateFictitious => Zone_CreateFictitious
    end type Zone_t

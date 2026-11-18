@@ -1,0 +1,58 @@
+/* Control file for the implicit Navier-Stokes solver */
+Flow equations        = "NS"
+mesh file name        = "MESH/Mortar_Zeta+.h5"
+Polynomial order      = 2 ! T2
+Number of time steps  = 1000
+Output Interval       = 100 ! for explicit
+autosave mode         = "iteration"
+autosave interval     = 1000
+
+Convergence tolerance = 1.d-10
+cfl                   = 0.05d0
+dcfl                  = 0.05d0
+mach number            = 0.4d0
+Reynolds number        = 20000.0d0
+
+discretization nodes  = Gauss 
+
+solution file name    = "RESULTS/MMS.hsol"
+save gradients with solution = .true.
+restart               = .false.
+restart file name     = "RESULTS/TMMS.hsol"
+riemann solver         = "lax-friedrichs"
+viscous discretization = "BR1"
+manufactured solution  = 3D
+final time            = 40.d0
+simulation type       = steady-state
+time integration      = explicit
+multigrid levels      = 3
+delta n = 1
+mg sweeps exact = [1,1,1]
+mg preconditioner = LTS ! for all runge kutta explicit
+
+!-------------------------------------------------------------
+! Inflow
+!-------------------------------------------------------------
+#define boundary back
+  type = user-defined
+#end
+
+#define boundary front
+  type = user-defined
+#end
+
+#define boundary bottom
+  type = user-defined
+#end
+
+#define boundary top
+  type = user-defined
+#end
+
+#define boundary left
+  type = user-defined
+#end
+
+#define boundary right
+  type = user-defined
+#end

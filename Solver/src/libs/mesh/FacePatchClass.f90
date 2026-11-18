@@ -95,13 +95,14 @@
       self % noOfKnots(1) = SIZE(uKnots)
       self % noOfKnots(2) = SIZE(vKnots)
 !      
-      ALLOCATE( self % points(3, self % noOfKnots(1), self % noOfKnots(2)) )
-      ALLOCATE( self % uKnots(self % noOfKnots(1)) )
-      ALLOCATE( self % vKnots(self % noOfKnots(2)) )
-      allocate( self % wbu(self % noOfKnots(1)) )
-      allocate( self % wbv(self % noOfKnots(2)) )
-      allocate( self % Du(self % noOfKnots(1), self % noOfKnots(1)) )
-      allocate( self % Dv(self % noOfKnots(2), self % noOfKnots(2)) )
+      !write(*,*) 'constructing face patch (allocating points)'
+      if (.NOT. ALLOCATED(self % points)) ALLOCATE( self % points(3, self % noOfKnots(1), self % noOfKnots(2)) )
+      if (.NOT. ALLOCATED(self % uKnots)) ALLOCATE( self % uKnots(self % noOfKnots(1)) )
+      if (.NOT. ALLOCATED(self % vKnots)) ALLOCATE( self % vKnots(self % noOfKnots(2)) )
+      if (.NOT. ALLOCATED(self % wbu))    allocate( self % wbu(self % noOfKnots(1)) )
+      if (.NOT. ALLOCATED(self % wbv))    allocate( self % wbv(self % noOfKnots(2)) )
+      if (.NOT. ALLOCATED(self % Du))     allocate( self % Du(self % noOfKnots(1), self % noOfKnots(1)) )
+      if (.NOT. ALLOCATED(self % Dv))     allocate( self % Dv(self % noOfKnots(2), self % noOfKnots(2)) )
 !
 !     -------------------------
 !     Save the points and knots
@@ -141,10 +142,11 @@
       IF ( ALLOCATED( self % points ) )   DEALLOCATE( self % points )
       IF ( ALLOCATED( self % uKnots ) )   DEALLOCATE( self % uKnots )
       IF ( ALLOCATED( self % vKnots ) )   DEALLOCATE( self % vKnots )
-      safedeallocate( self % wbu )
-      safedeallocate( self % wbv )
-      safedeallocate( self % Du )
-      safedeallocate( self % Dv )
+      if (allocated(self%wbu)) deallocate(self%wbu)
+      if (allocated(self%wbv)) deallocate(self%wbv)
+      if (allocated(self%Du))  deallocate(self%Du)
+      if (allocated(self%Dv))  deallocate(self%Dv)
+      
       self % noOfKnots = 0
 !
       END SUBROUTINE DestructFacePatch
@@ -259,6 +261,7 @@
       call InterpolatingPolynomialVector(u(2), self % noOfKnots(2)-1, self % vKnots, self % wbv, l_j)
 
       p = 0.0_RP
+
       DO j = 1, self % noOfKnots(2)
          do i = 1, self % noOfKnots(1)
             p = p + self % points(:,i,j) * l_i(i) * l_j(j)
