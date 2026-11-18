@@ -1155,7 +1155,7 @@ How the levels are assigned:
 
 Notes:
 \begin{itemize}
-\item The evaluation restricted to a level is implemented in the Navier-Stokes (including Euler) and multiphase solvers. The other solvers accept the method, but evaluate the full time derivative at every sub-step, so there is no speed-up.
+\item The method is only available for the Navier-Stokes (including Euler) and multiphase solvers. The other solvers (RANS, incompressible Navier-Stokes, Cahn-Hilliard, acoustics) stop with an error if it is selected.
 \item As with 'RK3', the residuals and the monitors that use the time derivative or the gradients come from the last evaluation of each level. Set 'compute time derivative after timestep' to .true. to evaluate them after the step.
 \end{itemize}
 
