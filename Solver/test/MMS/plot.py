@@ -5,7 +5,7 @@ Plot <case>/errors.csv into <case>/convergence.png.
     python3 plot.py CASE
 
 Left: error vs sqrt(NDOF) per mesh. Centre: error vs h = 1/N per P, with the
-least-squares slope (theory P+1). Right: error vs P per mesh.
+least-squares slope (README.md explains the expected orders). Right: error vs P per mesh.
 """
 import csv
 import sys
@@ -68,7 +68,7 @@ def main(case):
         if len(ns) > 1:
             slope, icpt = np.polyfit(np.log(h), np.log(e), 1)
             hf = np.geomspace(h.min()/1.2, h.max()*1.2, 20)
-            ax_h.plot(hf, np.exp(icpt)*hf**slope, "-", color=col, label=f"$p={P}$: {slope:.2f} (theory {P + 1})")
+            ax_h.plot(hf, np.exp(icpt)*hf**slope, "-", color=col, label=f"$p={P}$: {slope:.2f}")
 
     for ax in (ax_dof, ax_h, ax_p):
         ax.legend(fontsize=9)

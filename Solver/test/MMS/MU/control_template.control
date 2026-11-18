@@ -33,7 +33,7 @@
                            Autosave mode = iteration
                        Autosave interval = 999999999
                                       dt = 1.0e-7
-                    Number of time steps = 1000
+                    Number of time steps = 200
                          Output interval = 1000
 !-------------------- Boundary conditions:-
 #define boundary Left

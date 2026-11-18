@@ -2,11 +2,12 @@
 """
 MMS convergence test for HORSES3D.
 
-    python3 run.py CASE [--P 3 4 5 6] [--meshes 4 8 16] [--set "Reynolds number = 100"] [--check]
+    python3 run.py CASE [--P 3 4] [--meshes 4 8] [--set "Reynolds number = 100"] [--check]
 
 Generates and builds <case>/SETUP/ProblemFile.f90, then runs the solver for
 every mesh and P with <case>/control_template.control, where run.py fills the
-mesh, the solution file and the polynomial order. --set changes or adds any
+mesh, the solution file and the polynomial order. Without --P or --meshes it
+uses the orders and meshes of the case in sweeps.json. --set changes or adds any
 other key of the control file (repeat it, or separate pairs with ';').
 The L2 errors go to <case>/errors.csv and the orders of convergence between
 consecutive meshes are printed. Pairs already run with the same solver,
@@ -26,6 +27,7 @@ environment (e.g. COMPILER=gfortran ENABLE_THREADS=NO) and Solver/make.inc.
 import argparse
 import csv
 import hashlib
+import json
 import math
 import os
 import subprocess
@@ -37,6 +39,7 @@ from pathlib import Path
 import generate
 
 HERE = Path(__file__).resolve().parent
+SWEEPS = json.loads((HERE / "sweeps.json").read_text())    # default orders and meshes of each case
 MESH_DIR = HERE / "MESH"
 MESH_GENERATOR = ("https://raw.githubusercontent.com/horses-framework/horses3d-meshes/"
                   "9fae9c071aeb5bb272fb2a40c835359e9f463015/cartesian-box/generate_cartesian_box_mesh.py")
@@ -207,8 +210,8 @@ def check(case_dir, rows, overridden):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("case", choices=[c for c in generate.CASES if (HERE / c).is_dir()])   # cases of this repository
-    ap.add_argument("--P", type=int, nargs="+", default=[3, 4, 5, 6], help="polynomial orders (default 3 4 5 6)")
-    ap.add_argument("--meshes", type=int, nargs="+", default=[4, 8, 16], help="elements per side (default 4 8 16)")
+    ap.add_argument("--P", type=int, nargs="+", help="polynomial orders (default: those of the case in sweeps.json)")
+    ap.add_argument("--meshes", type=int, nargs="+", help="elements per side (default: those of the case in sweeps.json)")
     ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
                     help="change a key of the control file; several pairs can be separated by ';'")
     ap.add_argument("--home", type=Path, default=HERE.parents[1], help="HORSES3D Solver directory")
@@ -217,6 +220,9 @@ def main():
     ap.add_argument("--merge", nargs="+", type=Path, metavar="CSV",
                     help="do not run: merge these errors.csv files (e.g. of parallel jobs) into <case>/errors.csv and report")
     args = ap.parse_args()
+    sweep = SWEEPS.get(args.case, SWEEPS["default"])
+    args.P = args.P or sweep["P"]
+    args.meshes = args.meshes or sweep["meshes"]
 
     overrides = [tuple(s.strip() for s in pair.split("=", 1)) for item in args.set for pair in item.split(";") if pair.strip()]
     if any(len(o) != 2 for o in overrides):

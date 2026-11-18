@@ -5,12 +5,14 @@ Write <case>/SETUP/ProblemFile.f90 for an MMS case.
     python3 generate.py NS|Euler|NSSA|iNS|MU|CAA
 
 Each case defines a manufactured solution, periodic on [-1,1]^3, and the
-equations the solver discretises. The source term is the residual of the
-manufactured solution, dq/dt + div F - S, emitted as it is, without symbolic
-simplification. The physical parameters are read from the solver at run time,
-except that NS and NSSA assume the default Sutherland constants, NSSA the
-default Spalart-Allmaras constants, and MU per-fluid sound speeds
-("fluid 1/2 sound speed square").
+equations the solver discretises. The solutions are at full amplitude from t = 0,
+with a variable density (or concentration) and a velocity that is neither
+divergence-free nor irrotational, so that every term of the equations is active
+from the first step. The source term is the residual of the manufactured
+solution, dq/dt + div F - S, emitted without symbolic simplification, with its
+common subexpressions as temporaries. The physical parameters are read from the
+solver at run time, except that NS and NSSA assume the default Sutherland
+constants and NSSA the default Spalart-Allmaras constants.
 """
 import sys
 from pathlib import Path
@@ -35,7 +37,7 @@ def lap(f):
 
 
 def cells(f, w=-2):
-    """Cellular velocity field times f(t), divergence-free for w = -2."""
+    """Cellular velocity field times f(t): divergence-free for w = -2, irrotational for w = 1."""
     return [sp.sin(pi*x)*sp.cos(pi*y)*sp.cos(pi*z)*f,
             sp.cos(pi*x)*sp.sin(pi*y)*sp.cos(pi*z)*f,
             w*sp.cos(pi*x)*sp.cos(pi*y)*sp.sin(pi*z)*f]
@@ -106,35 +108,36 @@ def compressible(rho, u, v, w, p, viscous=True, theta=None):
     return q, residual(q, F, S), names, COMPRESSIBLE
 
 
-# Smooth field at full amplitude for Euler and NSSA. The velocity has the vorticity of
-# (sin(pi z), cos(pi z), 0) plus a smaller 3D part, so |omega| > 0.
-CELLS = cells(1)
-SUSTAINED = dict(rho=1 + 0.2*sp.sin(pi*x)*sp.cos(pi*y)*sp.sin(pi*z)*sp.cos(t),
-                 u=0.3*sp.cos(t)*(sp.sin(pi*z) + 0.1*CELLS[0]),
-                 v=0.3*sp.cos(t)*(sp.cos(pi*z) + 0.1*CELLS[1]),
-                 w=0.3*sp.cos(t)*(0.1*CELLS[2]),
-                 p=1 + 0.1*SSS*sp.cos(t))
+# Flow field of NS, Euler, NSSA, iNS and MU, at full amplitude from t = 0: the shear
+# (sin(pi z), cos(pi z), 0) keeps |omega| > 0 for Spalart-Allmaras, the divergence-free
+# cells make the vorticity vary and the irrotational cells compress the flow.
+FLOW = dict(rho=1 + 0.2*sp.sin(pi*x)*sp.cos(pi*y)*sp.sin(pi*z)*sp.cos(t),
+            u=sp.cos(t)*(0.3*sp.sin(pi*z) + 0.03*cells(1)[0] + 0.15*cells(1, w=1)[0]),
+            v=sp.cos(t)*(0.3*sp.cos(pi*z) + 0.03*cells(1)[1] + 0.15*cells(1, w=1)[1]),
+            w=sp.cos(t)*(0.03*cells(1)[2] + 0.15*cells(1, w=1)[2]),
+            p=1 + 0.1*SSS*sp.cos(t))
+VELOCITY = [FLOW["u"], FLOW["v"], FLOW["w"]]
 
 
 def navier_stokes():
-    return compressible(sp.Integer(1), *cells(sp.sin(t)), 1 + 0.1*SSS*sp.cos(t))
+    return compressible(**FLOW)
 
 
 def euler():
-    return compressible(**SUSTAINED, viscous=False)
+    return compressible(**FLOW, viscous=False)
 
 
 def spalart_allmaras():
     theta = 1 + 0.5*sp.cos(pi*x)*sp.cos(pi*y)*sp.cos(pi*z)*sp.cos(t)
-    return compressible(**SUSTAINED, theta=theta)
+    return compressible(**FLOW, theta=theta)
 
 
 def incompressible():
-    """Artificial compressibility: dp/dt + rho0 c0^2 div(u) = 0, with rho = 1."""
+    """Artificial compressibility: dp/dt + rho0 c0^2 div(u) = 0, variable density."""
     mu, c0_sq = sp.symbols("mu c0_sq")
-    V, p = cells(sp.sin(t)), 1 + 0.1*SSS*sp.cos(t)
-    q = [sp.Integer(1), *V, p]
-    F = [V, *momentum_flux(1, V, p, stress(mu, V, 0)), [c0_sq*a for a in V]]
+    rho, V, p = FLOW["rho"], VELOCITY, FLOW["p"]
+    q = [rho, *[rho*a for a in V], p]
+    F = [[rho*a for a in V], *momentum_flux(rho, V, p, stress(mu, V, 0)), [c0_sq*a for a in V]]
     params = {"mu": "dimensionless_ % mu(1)", "c0_sq": "thermodynamics_ % rho0c02"}
     return q, residual(q, F), ["INSRHO", "INSRHOU", "INSRHOV", "INSRHOW", "INSP"], params
 
@@ -142,10 +145,10 @@ def incompressible():
 def multiphase():
     """Cahn-Hilliard + incompressible NS with artificial compressibility, two fluids."""
     rho_1, rho_2, eta_1, eta_2, cs_1, cs_2, M0, sigma, eps = sp.symbols("rho_1 rho_2 eta_1 eta_2 cs_1 cs_2 M0 sigma eps")
-    # cos(t) so the field starts at full amplitude: the explicit time step is
-    # limited by Cahn-Hilliard (~h^4) and the runs only reach t ~ 1e-4.
-    c = half*(1 + sp.cos(pi*x)*sp.cos(pi*y)*sp.cos(pi*z)*sp.cos(t))
-    V, p = cells(sp.cos(t)), SSS*sp.sin(t)
+    # The explicit time step is limited by Cahn-Hilliard (~h^4), so the runs are short and
+    # every field must be at full amplitude from t = 0. c stays in [0.1, 0.9].
+    c = half*(1 + 0.8*sp.cos(pi*x)*sp.cos(pi*y)*sp.cos(pi*z)*sp.cos(t))
+    V, p = VELOCITY, FLOW["p"]
     # Mixture density, viscosity and sound speed as in the solver
     rho = c*rho_1 + (1 - c)*rho_2
     sqrho = sp.sqrt(rho)
@@ -172,7 +175,7 @@ def multiphase():
 def acoustics():
     """APE-4 perturbations on the uniform base flow of the control file (no Lamb vector)."""
     rho0, u0, v0, w0, c0_sq = sp.symbols("rho0 u0 v0 w0 c0_sq")
-    V, p = cells(sp.cos(t), w=1), SSS*sp.sin(t)
+    V, p = cells(sp.cos(t), w=1), SSS*sp.cos(t)
     phi = u0*V[0] + v0*V[1] + w0*V[2] + p/rho0
     q = [sp.Integer(0), *V, p]
     F = [[0, 0, 0], [phi, 0, 0], [0, phi, 0], [0, 0, phi], [rho0*c0_sq*a + b*p for a, b in zip(V, [u0, v0, w0])]]
@@ -193,14 +196,17 @@ MACROS = {"ns": "NAVIERSTOKES", "nssa": "SPALARTALMARAS", "ins": "INCNS", "mu": 
 
 
 def routine(array, names, exprs, params):
-    """Body of MMS_State or MMS_Source: the parameters used, then one assignment per variable."""
+    """Body of MMS_State or MMS_Source: the parameters used, the common subexpressions as
+    temporaries, then one assignment per variable."""
     exprs = [sp.sympify(e) for e in exprs]
     used = sorted({s.name for e in exprs for s in e.free_symbols} & params.keys())
-    lines = [f"real(kind=RP) :: {', '.join(used)}"] if used else []
+    temps, exprs = sp.cse(exprs, symbols=sp.numbered_symbols("cse"))
+    declared = used + [s.name for s, _ in temps]
+    lines = [f"real(kind=RP) :: {', '.join(declared[i:i + 10])}" for i in range(0, len(declared), 10)]
     lines += [f"{name} = {params[name]}" for name in used]
     fortran_names = {pi: sp.Symbol("PI"), x: sp.Symbol("x(1)"), y: sp.Symbol("x(2)"), z: sp.Symbol("x(3)")}
-    for name, e in zip(names, exprs):
-        lines += sp.fcode(e.subs(fortran_names), assign_to=f"{array}({name})", source_format="free",
+    for target, e in [(s.name, e) for s, e in temps] + [(f"{array}({n})", e) for n, e in zip(names, exprs)]:
+        lines += sp.fcode(e.subs(fortran_names), assign_to=target, source_format="free",
                           standard=95, contract=False).splitlines()
     return "\n".join("         " + l for l in lines)
 

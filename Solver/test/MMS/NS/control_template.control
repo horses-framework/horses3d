@@ -8,7 +8,7 @@
 !-------------------- Physical parameters:-
                           Flow equations = "NS"
                              Mach number = 0.3
-                         Reynolds number = 100000.0
+                         Reynolds number = 10.0
                                AOA theta = 0.0
                                  AOA phi = 0.0
 !------------------------- Discretization:-
@@ -27,7 +27,7 @@
                            Autosave mode = iteration
                        Autosave interval = 999999999
                                       dt = 1.0e-4
-                    Number of time steps = 1000
+                    Number of time steps = 200
                          Output interval = 1000
 !-------------------- Boundary conditions:-
 #define boundary Left

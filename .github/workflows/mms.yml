@@ -13,11 +13,11 @@ on:
         options: [all, NS, Euler, NSSA, iNS, MU, CAA]
         default: all
       P:
-        description: Polynomial orders
-        default: "3 4 5 6"
+        description: Polynomial orders; empty for the orders of each case in Solver/test/MMS/sweeps.json
+        default: ""
       meshes:
-        description: Elements per side of the cube meshes
-        default: "4 8 16"
+        description: Elements per side of the cube meshes; empty for those of each case in sweeps.json
+        default: ""
       set:
         description: Control file changes for every selected case, e.g. "Reynolds number = 100; Riemann solver = Roe" with case NS
         default: ""
@@ -37,28 +37,41 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       cases: ${{ steps.lists.outputs.cases }}
-      orders: ${{ steps.lists.outputs.orders }}
-      P: ${{ steps.lists.outputs.P }}
-      meshes: ${{ steps.lists.outputs.meshes }}
+      jobs: ${{ steps.lists.outputs.jobs }}
+      sweeps: ${{ steps.lists.outputs.sweeps }}
     steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: Solver/test/MMS/sweeps.json
+          sparse-checkout-cone-mode: false
+
       - id: lists
         env:
           CASE: ${{ inputs.case }}
           P: ${{ inputs.P }}
           MESHES: ${{ inputs.meshes }}
         run: |
-          # Orders and meshes separated by spaces or commas
+          # Orders and meshes separated by spaces or commas; empty for the defaults of each case
           set -f
           P=$(echo ${P//,/ }); MESHES=$(echo ${MESHES//,/ })
-          if [ -z "$P" ] || [ -z "$MESHES" ]; then echo "::error::P and meshes cannot be empty"; exit 1; fi
           for n in $P $MESHES; do
             [[ $n =~ ^[1-9][0-9]*$ ]] || { echo "::error::P and meshes must be positive integers, not '$n'"; exit 1; }
           done
           if [ "$CASE" = all ]; then cases="NS Euler NSSA iNS MU CAA"; else cases="$CASE"; fi
-          echo "cases=$(printf '"%s",' $cases | sed 's/^/[/; s/,$/]/')" >> "$GITHUB_OUTPUT"
-          echo "orders=$(printf '%s,' $P | sed 's/^/[/; s/,$/]/')" >> "$GITHUB_OUTPUT"
-          echo "P=$P" >> "$GITHUB_OUTPUT"
-          echo "meshes=$MESHES" >> "$GITHUB_OUTPUT"
+          # One run job per case and order, and the orders and meshes of each case
+          python3 - $cases >> "$GITHUB_OUTPUT" <<'EOF'
+          import json, os, sys
+          defaults = json.load(open("Solver/test/MMS/sweeps.json"))
+          cases = sys.argv[1:]
+          sweeps = {}
+          for c in cases:
+              d = defaults.get(c, defaults["default"])
+              sweeps[c] = {"P": os.environ["P"] or " ".join(map(str, d["P"])),
+                           "meshes": os.environ["MESHES"] or " ".join(map(str, d["meshes"]))}
+          print("cases=" + json.dumps(cases))
+          print("jobs=" + json.dumps([{"case": c, "P": int(p)} for c in cases for p in sweeps[c]["P"].split()]))
+          print("sweeps=" + json.dumps(sweeps))
+          EOF
 
   run:
     name: MMS ${{ matrix.case }} P=${{ matrix.P }}
@@ -67,12 +80,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        case: ${{ fromJSON(needs.setup.outputs.cases) }}
-        P: ${{ fromJSON(needs.setup.outputs.orders) }}
+        include: ${{ fromJSON(needs.setup.outputs.jobs) }}
     env:
       CASE: ${{ matrix.case }}
       ORDER: ${{ matrix.P }}
-      MESHES: ${{ needs.setup.outputs.meshes }}
+      MESHES: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].meshes }}
       CHECK: ${{ inputs.check }}
       OMP_NUM_THREADS: 4
     steps:
@@ -122,8 +134,8 @@ jobs:
         case: ${{ fromJSON(needs.setup.outputs.cases) }}
     env:
       CASE: ${{ matrix.case }}
-      P: ${{ needs.setup.outputs.P }}
-      MESHES: ${{ needs.setup.outputs.meshes }}
+      P: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].P }}
+      MESHES: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].meshes }}
     steps:
       - uses: actions/checkout@v7
 
