@@ -2,7 +2,7 @@ module MMS
    use SMConstants
    use SolutionFile
    implicit none
-   public evalManufacturedSolution, compareLambVector
+   public evalManufacturedSolution, compareLambVector, compareLambVectorDivergence
 
    contains
       pure subroutine evalManufacturedSolution(x, y, z, t, res)
@@ -156,6 +156,55 @@ module MMS
          end do
 
       end subroutine compareLambVectorStats
+
+      pure function evalLambVectorDivergence(x, y, z, t) result(res)
+         use SMConstants
+         implicit none
+         real(rp), intent(in)  :: x, y, z, t
+         real(rp)              :: res
+!
+!        The Lamb vector depends only on x+y+z, and Lx+Ly+Lz = -2 exp(-2t) cos(2(x+y+z))
+!
+         res = 4.0_rp*exp(-2.0_rp*t)*sin(2.0_rp*(x+y+z))
+      end function
+
+      subroutine compareLambVectorDivergence(Nelem, elements, t, maxError)
+         use SMConstants
+         use ElementClass
+         implicit none
+         integer,       intent(in)  :: Nelem
+         type(Element), intent(in)  :: elements(Nelem)
+         real(rp),      intent(in)  :: t
+         real(rp),      intent(out) :: maxError
+
+         integer               :: eID, i, j, k, Nx, Ny, Nz, fid
+         integer(AddrInt)      :: pos
+         real(rp)              :: x(NDIM)
+         real(rp), allocatable :: divL_h(:,:,:,:)
+
+         maxError = 0.0_rp
+         open(newunit=fid, file="RESULTS/TGV_0000000020.divLamb.hsol", status="old", action="read", &
+            form="unformatted" , access="stream")
+
+         do eID = 1, Nelem
+            Nx = elements(eID) % Nxyz(1)
+            Ny = elements(eID) % Nxyz(2)
+            Nz = elements(eID) % Nxyz(3)
+
+            allocate(divL_h(1,0:Nx,0:Ny,0:Nz))
+            pos = POS_INIT_DATA + elements(eID) % globID*5_AddrInt*SIZEOF_INT + 1_AddrInt*elements(eID) % offsetIO*SIZEOF_RP
+            read(fid, pos=pos) divL_h
+
+            do k = 0, Nz ; do j = 0, Ny ; do i = 0, Nx
+               x = elements(eID) % geom % x(:,i,j,k)
+               maxError = max(maxError, abs(divL_h(1,i,j,k) - evalLambVectorDivergence(x(1),x(2),x(3),t)))
+            end do       ; end do       ; end do
+            deallocate(divL_h)
+         end do
+
+         close(fid)
+
+      end subroutine compareLambVectorDivergence
 end module MMS
 !
 !////////////////////////////////////////////////////////////////////////
@@ -773,6 +822,12 @@ end module MMS
             CALL FTAssertEqual(expectedValue = .true., &
                                actualValue   = Qsuccess, &
                                msg           = "Error when comparing the Lamb vector stats.")
+
+            call compareLambVectorDivergence(SIZE(mesh % elements), mesh % elements, 0.1_rp, Qerror)
+            print *, "Max. pointwise error of div(Lamb vector): ", Qerror
+            CALL FTAssertEqual(expectedValue = .true., &
+                               actualValue   = Qerror < 0.05_RP, &
+                               msg           = "Error when comparing the divergence of the Lamb vector.")
 
             
             CALL sharedManager % summarizeAssertions(title = testName,iUnit = 6)

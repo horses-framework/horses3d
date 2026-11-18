@@ -35,6 +35,7 @@ save Lamb vector = .true.
 save Lamb vector mode = "time"
 save Lamb vector interval = 0.1
 save lamb vector stats = .true.
+save Lamb vector divergence = .true.
 
 #define statistics
    starting iteration = 1
