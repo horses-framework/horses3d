@@ -3675,7 +3675,7 @@ slavecoord:             DO l = 1, 4
 
       subroutine HexMesh_SaveLambVector(self, iter, time, name, controlVariables)
          use PhysicsStorage, only: LambVectorCubeKey
-         use mainKeywordsModule, only: saveLambVectorDivergenceKey
+         use mainKeywordsModule, only: saveLambVectorKey, saveLambVectorDivergenceKey
          use SolutionFile
          use MPI_Process_Info
          use MappedGeometryClass, only: vCross, ComputeVorticity
@@ -3689,12 +3689,15 @@ slavecoord:             DO l = 1, 4
 
          ! Local variables
          real(rp) :: cubeCoords(6) ! [x0, x1, y0, y1, z0, z1]
-         logical  :: saveDivergence
+         logical  :: saveLamb, saveDivergence
 
+         saveLamb       = .true.
          saveDivergence = .false.
          if ( present(controlVariables) ) then
+            saveLamb       = controlVariables % logicalValueForKey(saveLambVectorKey)
             saveDivergence = controlVariables % logicalValueForKey(saveLambVectorDivergenceKey)
          end if
+         if ( .not. (saveLamb .or. saveDivergence) ) return
 
          if ( present(controlVariables) .and. controlVariables % containsKey(LambVectorCubeKey)) then
             ! Read cube coordinates
@@ -3705,14 +3708,14 @@ slavecoord:             DO l = 1, 4
                print *, "[x0, x1, y0, y1, z0, z1] is expected."
                error stop
             end if
-            call HexMesh_SaveLambVector_subregion(self, iter, time, name, cubeCoords, saveDivergence)
+            call HexMesh_SaveLambVector_subregion(self, iter, time, name, cubeCoords, saveLamb, saveDivergence)
          else
-            call HexMesh_SaveLambVector_all(self, iter, time, name, saveDivergence)
+            call HexMesh_SaveLambVector_all(self, iter, time, name, saveLamb, saveDivergence)
          end if
 
       end subroutine HexMesh_SaveLambVector
 
-      subroutine HexMesh_SaveLambVector_all(self, iter, time, name, saveDivergence)
+      subroutine HexMesh_SaveLambVector_all(self, iter, time, name, saveLamb, saveDivergence)
          use SolutionFile
          use MPI_Process_Info
          use MappedGeometryClass, only: vCross, ComputeVorticity
@@ -3731,7 +3734,7 @@ slavecoord:             DO l = 1, 4
          integer,             intent(in)        :: iter
          real(kind=RP),       intent(in)        :: time
          character(len=*),    intent(in)        :: name
-         logical,             intent(in)        :: saveDivergence
+         logical,             intent(in)        :: saveLamb, saveDivergence
 !
 !        ---------------
 !        Local variables
@@ -3776,9 +3779,12 @@ slavecoord:             DO l = 1, 4
 !        Create new file
 !        ---------------
          ! filename = trim(getFileName(name)) // ".Lamb.hsol"
-         WRITE(filename,'(2A,I10.10,A)')  TRIM(getFileName(name)),'_',iter,'.Lamb.hsol'
-         call CreateNewSolutionFile(trim(filename), SOLUTION_FILE, self % nodeType, &
-                                    self % no_of_allElements, iter, time, refs)
+         if (saveLamb) then
+            WRITE(filename,'(2A,I10.10,A)')  TRIM(getFileName(name)),'_',iter,'.Lamb.hsol'
+            call CreateNewSolutionFile(trim(filename), SOLUTION_FILE, self % nodeType, &
+                                       self % no_of_allElements, iter, time, refs)
+            fID = putSolutionFileInWriteDataMode(trim(filename))
+         end if
          if (saveDivergence) then
             WRITE(fileNameDiv,'(2A,I10.10,A)')  TRIM(getFileName(name)),'_',iter,'.divLamb.hsol'
             call CreateNewSolutionFile(trim(fileNameDiv), SOLUTION_FILE, self % nodeType, &
@@ -3788,13 +3794,12 @@ slavecoord:             DO l = 1, 4
 !
 !        Write arrays
 !        ------------
-         fID = putSolutionFileInWriteDataMode(trim(filename))
          do eID = 1, self % no_of_elements
             associate( e => self % elements(eID) )
                pos = POS_INIT_DATA + (e % globID-1)*5_AddrInt*SIZEOF_INT + 1_AddrInt*NDIM*e % offsetIO*SIZEOF_RP
                posDiv = POS_INIT_DATA + (e % globID-1)*5_AddrInt*SIZEOF_INT + 1_AddrInt*e % offsetIO*SIZEOF_RP
 #ifdef ACOUSTIC
-               call writeArray(fid, e % storage % Lamb, position=pos)
+               if (saveLamb) call writeArray(fid, e % storage % Lamb, position=pos)
                if (saveDivergence) then
                   allocate(divLamb(1, 0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3)))
                   call ComputeLambVectorDivergence(e, e % storage % Lamb, divLamb)
@@ -3822,7 +3827,7 @@ slavecoord:             DO l = 1, 4
                   Q(:,i,j,k) = LambVector
                end do                  ; end do                   ; end do
 
-               call writeArray(fid, Q, position=pos)
+               if (saveLamb) call writeArray(fid, Q, position=pos)
 
                if (saveDivergence) then
                   allocate(divLamb(1, 0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3)))
@@ -3835,11 +3840,13 @@ slavecoord:             DO l = 1, 4
 #endif
             end associate
          end do
-         close(fid)
 !
-!        Close the file
-!        --------------
-         call SealSolutionFile(trim(filename))
+!        Close the files
+!        ---------------
+         if (saveLamb) then
+            close(fid)
+            call SealSolutionFile(trim(filename))
+         end if
 
          if (saveDivergence) then
             close(fidDiv)
@@ -3848,7 +3855,7 @@ slavecoord:             DO l = 1, 4
 
       end subroutine HexMesh_SaveLambVector_all
 
-      subroutine HexMesh_SaveLambVector_subregion(self, iter, time, name, cubeCoords, saveDivergence)
+      subroutine HexMesh_SaveLambVector_subregion(self, iter, time, name, cubeCoords, saveLamb, saveDivergence)
          use SolutionFile
          use MPI_Process_Info
          use MappedGeometryClass, only: vCross, ComputeVorticity
@@ -3868,7 +3875,7 @@ slavecoord:             DO l = 1, 4
          real(kind=RP),       intent(in)        :: time
          character(len=*),    intent(in)        :: name
          real(rp),            intent(in)        :: cubeCoords(6) ! [x0, x1, y0, y1, z0, z1]
-         logical,             intent(in)        :: saveDivergence
+         logical,             intent(in)        :: saveLamb, saveDivergence
 
 !
 !        ---------------
@@ -3943,9 +3950,12 @@ slavecoord:             DO l = 1, 4
          refs = 0.0_RP
 #endif
          ! Create new file
-         WRITE(filename,'(2A,I10.10,A)')  TRIM(getFileName(name)),'_',iter,'.Lamb.hsol'
-         call CreateNewSolutionFile(trim(filename), SOLUTION_FILE, self % nodeType, &
-                                    all_elements_inside, iter, time, refs)
+         if (saveLamb) then
+            WRITE(filename,'(2A,I10.10,A)')  TRIM(getFileName(name)),'_',iter,'.Lamb.hsol'
+            call CreateNewSolutionFile(trim(filename), SOLUTION_FILE, self % nodeType, &
+                                       all_elements_inside, iter, time, refs)
+            fID = putSolutionFileInWriteDataMode(trim(filename))
+         end if
          if (saveDivergence) then
             WRITE(fileNameDiv,'(2A,I10.10,A)')  TRIM(getFileName(name)),'_',iter,'.divLamb.hsol'
             call CreateNewSolutionFile(trim(fileNameDiv), SOLUTION_FILE, self % nodeType, &
@@ -3954,7 +3964,6 @@ slavecoord:             DO l = 1, 4
          end if
 
          ! Write array to file
-         fID = putSolutionFileInWriteDataMode(trim(filename))
          do eID = 1, size(elementsInside)
             associate( e => self % elements(elementsInside(eID)) )
                pos = POS_INIT_DATA + n_elements_before*5_AddrInt*SIZEOF_INT + 1_AddrInt*global_dofs_offset*NDIM*SIZEOF_RP
@@ -3963,7 +3972,7 @@ slavecoord:             DO l = 1, 4
                ! Write the Lamb vector
 #ifdef ACOUSTIC
                ! Already computed for acoustics
-               call writeArray(fid, e % storage % Lamb, position=pos)
+               if (saveLamb) call writeArray(fid, e % storage % Lamb, position=pos)
                if (saveDivergence) then
                   allocate(divLamb(1, 0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3)))
                   call ComputeLambVectorDivergence(e, e % storage % Lamb, divLamb)
@@ -3991,7 +4000,7 @@ slavecoord:             DO l = 1, 4
                   Q(:,i,j,k) = LambVector
                end do                  ; end do                   ; end do
 
-               call writeArray(fid, Q, position=pos)
+               if (saveLamb) call writeArray(fid, Q, position=pos)
                if (saveDivergence) then
                   allocate(divLamb(1, 0:e % Nxyz(1), 0:e % Nxyz(2), 0:e % Nxyz(3)))
                   call ComputeLambVectorDivergence(e, Q, divLamb)
@@ -4002,9 +4011,11 @@ slavecoord:             DO l = 1, 4
 #endif
             end associate
          end do
-         ! Close the file
-         close(fid)
-         call SealSolutionFile(trim(filename))
+         ! Close the files
+         if (saveLamb) then
+            close(fid)
+            call SealSolutionFile(trim(filename))
+         end if
 
          if (saveDivergence) then
             close(fidDiv)
