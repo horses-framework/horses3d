@@ -259,6 +259,15 @@
                self % RKStep => TakeMixedRKStep
                self % RKStep_key = MIXED_RK_KEY
 			case(ML_RK3_NAME)
+#if !((defined(NAVIERSTOKES) && !defined(SPALARTALMARAS)) || defined(MULTIPHASE))
+!               Only the NS (and Euler) and multiphase solvers restrict the time derivative to a level
+				if ( MPI_Process % isRoot ) then
+					write(STD_OUT,'(A)') "Error: 'multi level rk3' is only available for the Navier-Stokes (and Euler) " // &
+					                     "and multiphase solvers. Use another explicit method."
+				end if
+				errorMessage(STD_OUT)
+				error stop
+#endif
 				if ( controlVariables % ContainsKey("cfl cut-off") ) then
 				     self % ML_CFL_CutOff = controlVariables % doublePrecisionValueForKey("cfl cut-off")
 					 self % ML_CFL_CutOff = min(max(self % ML_CFL_CutOff,0.0001_RP),10.0_RP)
