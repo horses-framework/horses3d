@@ -7,6 +7,7 @@
 #     Nodes_3_P2.hsol : solution order 2, obtained with horsesConverter
 #                       (meshInterpolation of Nodes_3.hsol onto Nodes_3.hmesh)
 #     Nodes_3.lmesh   : MLRK levels (MLevel MLevelwN) of the 3 elements, for --mlrk-level-file
+#  The MLRKLevelsMesh* cases convert the mesh only (no solution file).
 #
 cd "$(dirname "$0")"
 TEST_DIR=$(pwd)
@@ -63,10 +64,31 @@ run_case() {
    fi
 }
 
+#  run_mesh_case <name> [horses2plt flags...]: mesh-only conversion (no solution file)
+run_mesh_case() {
+   local name=$1
+   shift
+   echo "--- $name"
+   if ! (cd "$WORK" && "$HORSES2PLT" Nodes_3.hmesh "$@" > "$name.log" 2>&1); then
+      echo "   FAILED: horses2plt exited with an error (see RESULTS/$name.log)"
+      failed=1
+      return
+   fi
+   mv "$WORK/Nodes_3.tec" "$WORK/$name.tec"
+   if compare "$TEST_DIR/reference/$name.tec" "$WORK/$name.tec"; then
+      echo "   PASSED"
+   else
+      echo "   FAILED: output differs from reference/$name.tec"
+      failed=1
+   fi
+}
+
 run_case SameOrder              Nodes_3.hsol
 run_case MeshOrderDiffers       Nodes_3_P2.hsol
 run_case LowerOrderHomogeneous  Nodes_3_P2.hsol --output-order=1
 run_case LowerOrderGauss        Nodes_3_P2.hsol --output-order=1 --output-basis=Gauss
 run_case MLRKLevels             Nodes_3.hsol --mlrk-level-file=Nodes_3.lmesh
+run_mesh_case MLRKLevelsMesh    --mlrk-level-file=Nodes_3.lmesh
+run_mesh_case MLRKLevelsMeshFE  --mlrk-level-file=Nodes_3.lmesh --output-mode=FE
 
 exit $failed
