@@ -32,7 +32,8 @@ LIBOBJS_NS = 	./build_ns/ConnectivityClass.o \
 		./build_ns/Read_HDF5Mesh_HOPR.o \
 		./build_ns/Read_SpecMesh.o \
 		./build_ns/Read_GMSH.o \
-		./build_ns/ReadMeshFile.o
+		./build_ns/ReadMeshFile.o \
+		./build_ns/RotaryFaceRotations.o
 
 LIBOBJS_NSSA = 	./build_nssa/ConnectivityClass.o \
 		./build_nssa/MeshTypes.o \
@@ -58,7 +59,8 @@ LIBOBJS_NSSA = 	./build_nssa/ConnectivityClass.o \
 		./build_nssa/Read_HDF5Mesh_HOPR.o \
 		./build_nssa/Read_SpecMesh.o \
 		./build_nssa/Read_GMSH.o \
-		./build_nssa/ReadMeshFile.o
+		./build_nssa/ReadMeshFile.o \
+		./build_nssa/RotaryFaceRotations.o
 
 LIBOBJS_iNS = 	./build_ins/ConnectivityClass.o \
 		./build_ins/MeshTypes.o \
@@ -84,7 +86,8 @@ LIBOBJS_iNS = 	./build_ins/ConnectivityClass.o \
 		./build_ins/Read_HDF5Mesh_HOPR.o \
 		./build_ins/Read_SpecMesh.o \
 		./build_ins/Read_GMSH.o \
-		./build_ins/ReadMeshFile.o
+		./build_ins/ReadMeshFile.o \
+		./build_ins/RotaryFaceRotations.o
 
 
 LIBOBJS_CH = 	./build_ch/ConnectivityClass.o \
@@ -111,7 +114,8 @@ LIBOBJS_CH = 	./build_ch/ConnectivityClass.o \
 		./build_ch/Read_HDF5Mesh_HOPR.o \
 		./build_ch/Read_SpecMesh.o \
 		./build_ch/Read_GMSH.o \
-		./build_ch/ReadMeshFile.o
+		./build_ch/ReadMeshFile.o \
+		./build_ch/RotaryFaceRotations.o
 
 LIBOBJS_MU =  ./build_mu/ConnectivityClass.o \
 		./build_mu/MeshTypes.o \
@@ -137,7 +141,8 @@ LIBOBJS_MU =  ./build_mu/ConnectivityClass.o \
 		./build_mu/Read_HDF5Mesh_HOPR.o \
 		./build_mu/Read_SpecMesh.o \
 		./build_mu/Read_GMSH.o \
-		./build_mu/ReadMeshFile.o
+		./build_mu/ReadMeshFile.o \
+		./build_mu/RotaryFaceRotations.o
 
 LIBOBJS_CAA =  ./build_caa/ConnectivityClass.o \
 		./build_caa/MeshTypes.o \
@@ -163,7 +168,8 @@ LIBOBJS_CAA =  ./build_caa/ConnectivityClass.o \
 		./build_caa/Read_HDF5Mesh_HOPR.o \
 		./build_caa/Read_SpecMesh.o \
 		./build_caa/Read_GMSH.o \
-		./build_caa/ReadMeshFile.o
+		./build_caa/ReadMeshFile.o \
+		./build_caa/RotaryFaceRotations.o
 
 LIB = mesh
 

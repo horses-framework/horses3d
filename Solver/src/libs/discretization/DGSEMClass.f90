@@ -110,6 +110,7 @@ Module DGSEMClass
       use MeshPartitioning
       use SurfaceMesh, only: surfacesMesh
       use FileReadingUtilities, only: getFileExtension
+      use RotationData, only: InitializeRotationFromControl, rotationParams
 
       IMPLICIT NONE
 !
@@ -258,6 +259,18 @@ Module DGSEMClass
 
       useRelaxPeriodic = controlVariables % logicalValueForKey("periodic relative tolerance")
       useWeightsPartition = controlVariables % getValueOrDefault("partitioning with weights", .true.)
+
+      ! Initialize rotation parameters from control variables
+      call InitializeRotationFromControl(controlVariables)
+
+#if !defined(NAVIERSTOKES) || defined(SPALARTALMARAS)
+      if (rotationParams % periodicEnabled) then
+         if (MPI_Process % isRoot) then
+            write(STD_OUT,'(A)') "ERROR: periodic revolution BCs are only supported in Navier-Stokes solver"
+         end if
+         error stop
+      end if
+#endif
 !
 !     **********************************************************
 !     *                  MPI PREPROCESSING                     *

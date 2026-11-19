@@ -1,0 +1,83 @@
+Flow equations        = "NS"
+mesh file name        = "MESH/RotaryPeriodic.msh"
+Polynomial order      = 2
+Number of time steps  = 100
+Output Interval       = 10
+Number of plot points = 5
+Convergence tolerance = 1.d-10
+cfl                   = 0.3
+dcfl                  = 0.3
+mach number           = 0.3
+Reynolds number       = 10.0
+AOA theta             = 0.0
+AOA phi               = 90.0
+solution file name    = "RESULTS/RotaryPeriodic.hsol"
+save gradients with solution = .true.
+restart               = .false.
+restart file name     = "RESULTS/RotaryPeriodic_0000100000.hsol"
+riemann solver        = roe
+Discretization nodes  = Gauss-Lobatto
+
+simulation type       = time-accurate
+autosave mode         = "iteration"
+autosave interval     = 100
+
+!! Periodic (no SRF - just geometry matching)
+periodic enabled      = .true.
+rotation axis         = [1.0,0.0,0.0]
+rotation center       = [0.0,0.0,0.0]
+!periodic relative tolerance = .true.
+
+#define boundary inflow
+  type = FreeSlipWall
+#end
+
+#define boundary outflow
+  type = FreeSlipWall
+#end
+
+#define boundary top
+  type = FreeSlipWall
+#end
+
+#define boundary bottom
+  type = FreeSlipWall
+#end
+
+#define boundary sideb
+  type = Periodic
+  coupled boundary = sidea
+#end
+
+#define boundary sidea
+  type = Periodic
+  coupled boundary = sideb
+#end
+
+#define surface monitor 1
+   Name = cyl-drag
+   Marker = inflow
+   Variable = drag
+   Direction = [0.0,0.0,1.0]
+   Reference surface = 1.0	
+#end
+
+#define surface monitor 2
+   Name = cyl-lift
+   Marker = inflow
+   Variable = lift
+   Direction = [1.0,0.0,0.0]
+   Reference surface = 1.0
+#end
+
+#define probe 1
+   Name = probe_u
+   Position = [0.0,10.9999,0.0]
+   Variable = u
+#end
+
+#define probe 2
+   Name = probe_p
+   Position = [0.0,10.9999,0.0]
+   Variable = pressure
+#end
