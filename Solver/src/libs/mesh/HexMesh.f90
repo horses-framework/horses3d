@@ -65,35 +65,37 @@ MODULE HexMeshClass
       integer, parameter :: ML_FIDN_BOUNDARY = 12   ! MLIter_fIDN_Boundary
       integer, parameter :: ML_FIDN_MPI      = 13   ! MLIter_fIDN_MPI
       integer, parameter :: ML_NCOLUMNS      = 13
-	  type MultiLevel_RK
-	     integer               :: nLevel 
-		 integer               :: maxLevel
-		 real(kind=RP)         :: CFL_CutOff
-		 real(kind=RP)         :: interfaceTol = 1.0e-4_RP   ! Multiphase: a node with interfaceTol <= c <= 1-interfaceTol is on the interface
-		 integer, allocatable  :: ML_GlobalLevel(:)        ! Number of Multi-Level Timestep Element - Global - in TimeIntegrator.f90 and DGSEMClass.f90
-		 integer, allocatable  :: ML_Level(:)              ! Number of Multi-Level Timestep Element - Partition 
-		 integer, allocatable  :: MLIter(:,:)              ! Cumulative counts per level of the lists below; size (nLevel, ML_NCOLUMNS), columns ML_*
-		 integer, allocatable  :: MLIter_eID(:)            ! Sorted Element ID from nLevel to Level 1 (eID) size is (mesh%element)
-		 integer, allocatable  :: MLIter_fID(:)            ! Element ID for each level iteration (fID) size is (mesh% faces)
-		 integer, allocatable  :: MLIter_fID_Interior(:)   ! Interior Face ID for each level iteration (fID) size is (mesh%faces_interior)
-		 integer, allocatable  :: MLIter_fID_Boundary(:)   ! Boundary Face ID for each level 1 iteration (fID) size is (mesh%faces_boundary)
-		 integer, allocatable  :: MLIter_fID_MPI(:)        ! MPI Face ID for each level 1 iteration (fID) size is (mesh%faces_mpi)
-		 integer, allocatable  :: MLIter_eID_Seq(:)        ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
-		 integer, allocatable  :: MLIter_eID_MPI(:)        ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
-		 integer, allocatable  :: MLIter_eIDN(:)            ! Sorted Element ID from nLevel to Level 1 (eID) size is (mesh%element)
-		 integer, allocatable  :: MLIter_eIDN_Seq(:)        ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
-		 integer, allocatable  :: MLIter_eIDN_MPI(:)        ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
-		 integer, allocatable  :: MLIter_fIDN_Interior(:)   ! Interior faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_INTERIOR))
-		 integer, allocatable  :: MLIter_fIDN_Boundary(:)   ! Boundary faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_BOUNDARY))
-		 integer, allocatable  :: MLIter_fIDN_MPI(:)        ! MPI faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_MPI))
-		 integer, allocatable  :: MPIfaceRemoteLevel(:,:)   ! (MLevel, MLevelwN) of the element across each MPI face, by fID
-		 contains
-			procedure :: construct      => MultiLevel_RK_Construct
-			procedure :: update			=> MultiLevel_RK_Update
-	        procedure :: sendGlobalID   => MultiLevel_RK_SendGlobID
-			procedure :: exportLevels   => MultiLevel_RK_ExportLevels
-			procedure :: destruct       => MultiLevel_RK_Destruct
-	  end type MultiLevel_RK
+      type MultiLevel_RK
+         integer               :: nLevel
+         integer               :: maxLevel
+         real(kind=RP)         :: CFL_CutOff
+         real(kind=RP)         :: interfaceTol = 1.0e-4_RP   ! Multiphase: a node with interfaceTol <= c <= 1-interfaceTol is on the interface
+         integer, allocatable  :: ML_GlobalLevel(:)          ! Number of Multi-Level Timestep Element - Global - in TimeIntegrator.f90 and DGSEMClass.f90
+         integer, allocatable  :: ML_Level(:)                ! Number of Multi-Level Timestep Element - Partition
+         integer, allocatable  :: MLIter(:,:)                ! Cumulative counts per level of the lists below; size (nLevel, ML_NCOLUMNS), columns ML_*
+         integer, allocatable  :: MLIter_eID(:)              ! Sorted Element ID from nLevel to Level 1 (eID) size is (mesh%element)
+         integer, allocatable  :: MLIter_fID(:)              ! Element ID for each level iteration (fID) size is (mesh% faces)
+         integer, allocatable  :: MLIter_fID_Interior(:)     ! Interior Face ID for each level iteration (fID) size is (mesh%faces_interior)
+         integer, allocatable  :: MLIter_fID_Boundary(:)     ! Boundary Face ID for each level 1 iteration (fID) size is (mesh%faces_boundary)
+         integer, allocatable  :: MLIter_fID_MPI(:)          ! MPI Face ID for each level 1 iteration (fID) size is (mesh%faces_mpi)
+         integer, allocatable  :: MLIter_eID_Seq(:)          ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
+         integer, allocatable  :: MLIter_eID_MPI(:)          ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
+         integer, allocatable  :: MLIter_eIDN(:)             ! Sorted Element ID from nLevel to Level 1 (eID) size is (mesh%element)
+         integer, allocatable  :: MLIter_eIDN_Seq(:)         ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
+         integer, allocatable  :: MLIter_eIDN_MPI(:)         ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
+         integer, allocatable  :: MLIter_fIDN_Interior(:)    ! Interior faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_INTERIOR))
+         integer, allocatable  :: MLIter_fIDN_Boundary(:)    ! Boundary faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_BOUNDARY))
+         integer, allocatable  :: MLIter_fIDN_MPI(:)         ! MPI faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_MPI))
+         integer, allocatable  :: MPIfaceRemoteLevel(:,:)    ! (MLevel, MLevelwN) of the element across each MPI face, by fID
+         contains
+            procedure :: construct      => MultiLevel_RK_Construct
+            procedure :: update         => MultiLevel_RK_Update
+            procedure :: sendGlobalID   => MultiLevel_RK_SendGlobID
+            procedure :: exportLevels   => MultiLevel_RK_ExportLevels
+            procedure :: destruct       => MultiLevel_RK_Destruct
+      end type MultiLevel_RK
+      
+      
       type HexMesh
          integer                                   :: numberOfFaces
          integer                                   :: nodeType
@@ -117,7 +119,7 @@ MODULE HexMeshClass
          type(MPI_FacesSet_t)                      :: MPIfaces
          type(IBM_type)                            :: IBM
          type(Zone_t), dimension(:), allocatable   :: zones
-		 type(MultiLevel_RK)                       :: MLRK
+         type(MultiLevel_RK)                       :: MLRK
          integer                                   :: MPIfacesLevelQ = 0   ! MLRK level of the last solution exchange (0: all faces)
          integer                                   :: MPIfacesLevelU = 0   ! MLRK level of the last gradient exchange (0: all faces)
          logical                                   :: child       = .FALSE.         ! Is this a (multigrid) child mesh? default .FALSE.
@@ -6744,380 +6746,380 @@ call elementMPIList % destruct
 !  level: ProlongSolutionToFaces, ProlongGradientsToFaces, UpdateMPIFaces*/GatherMPIFaces* (MPIFaceInLevel).
 !////////////////////////////////////////////////////////////////////////
 !------------------------------------------------------------------------
-!  Construct 
+!  Construct
 !------------------------------------------------------------------------
    subroutine MultiLevel_RK_Construct(self, mesh, nLevel)
-	implicit none
-	!-arguments-----------------------------------------
-	class(MultiLevel_RK), target  , intent(inout)   :: self
-	type (HexMesh)                                  :: mesh 
-	integer                       , intent(in)      :: nLevel
-	
-	!-local variable-----------------------------------------
-	integer     :: i
-    
-	!-deallocate-----------------------------------------
-	if( allocated(self % ML_GlobalLevel) ) deallocate(self % ML_GlobalLevel)
-	if( allocated(self % ML_Level))        deallocate(self % ML_Level)
-	if( allocated(self % MLIter) )         deallocate(self % MLIter)
-	if( allocated(self % MLIter_eID) )     deallocate(self % MLIter_eID)
-	if( allocated(self % MLIter_fID) )     deallocate(self % MLIter_fID)
-	if( allocated(self % MLIter_fID_Interior))  deallocate(self % MLIter_fID_Interior)
-	if( allocated(self % MLIter_fID_Boundary) ) deallocate(self % MLIter_fID_Boundary)
-	if( allocated(self % MLIter_fID_MPI) ) deallocate(self % MLIter_fID_MPI)
-	if( allocated(self % MLIter_eID_Seq) ) deallocate(self % MLIter_eID_Seq)
-	if( allocated(self % MLIter_eIDN) ) deallocate(self % MLIter_eIDN)
-	if( allocated(self % MLIter_eIDN_Seq) ) deallocate(self % MLIter_eIDN_Seq)
-	if( allocated(self % MLIter_fIDN_Interior) ) deallocate(self % MLIter_fIDN_Interior)
-	if( allocated(self % MLIter_fIDN_Boundary) ) deallocate(self % MLIter_fIDN_Boundary)
+      implicit none
+      !-arguments-----------------------------------------
+      class(MultiLevel_RK), target  , intent(inout)   :: self
+      type (HexMesh)                                  :: mesh
+      integer                       , intent(in)      :: nLevel
 
-	!-allocate-----------------------------------------  
-    allocate(self % ML_GlobalLevel(nLevel), self % ML_Level(nLevel), self % MLIter(nLevel,ML_NCOLUMNS))
-    allocate(self % MLIter_eID(mesh % no_of_elements))
-	allocate(self % MLIter_fID(mesh % no_of_faces))  ! Each face has 2 sides, except boundaries
-	allocate(self % MLIter_fID_Interior(size(mesh % faces_interior)))
-	allocate(self % MLIter_fID_Boundary(size(mesh % faces_boundary)))  
-	allocate(self % MLIter_eID_Seq(size(mesh % elements_sequential)))
-	allocate(self % MLIter_eIDN(mesh % no_of_elements))
-	allocate(self % MLIter_eIDN_Seq(size(mesh % elements_sequential)))
-	allocate(self % MLIter_fIDN_Interior(size(mesh % faces_interior)))
-	allocate(self % MLIter_fIDN_Boundary(size(mesh % faces_boundary)))
-	
-   
-    !Initial default value - all Level 1
-	self % nLevel         = nLevel
-	self % maxLevel       = nLevel
-	self % CFL_CutOff     = 0.5_RP
-	self % ML_GlobalLevel = mesh % no_of_allElements
-	self % ML_Level       = mesh % no_of_elements
-	self % MLIter         = 0
-	self % MLIter(1,ML_EID)    = mesh % no_of_elements
-	self % MLIter(1,ML_FID)    = size(mesh % faces)
-	self % MLIter(1,ML_FID_INTERIOR)    = size(mesh % faces_interior)
-	self % MLIter(1,ML_FID_BOUNDARY)    = size(mesh % faces_boundary)
-	self % MLIter(1,ML_EID_SEQ)    = size(mesh % elements_sequential)
-	self % MLIter(1,ML_EIDN)    = mesh % no_of_elements
-	self % MLIter(1,ML_EIDN_SEQ)    = size(mesh % elements_sequential)
-	self % MLIter(1,ML_FIDN_INTERIOR)   = size(mesh % faces_interior)
-	self % MLIter(1,ML_FIDN_BOUNDARY)   = size(mesh % faces_boundary)
-	self % MLIter_eID (:) = [(i, i=1,size(mesh % elements))]
-	self % MLIter_fID (:) = [(i, i=1,size(mesh % faces))]
-	self % MLIter_fID_Interior       = mesh % faces_interior
-	self % MLIter_fID_Boundary       = mesh % faces_boundary
-	self % MLIter_eID_Seq            = mesh % elements_sequential
-	self % MLIter_eIDN (:) = [(i, i=1,size(mesh % elements))]
-	self % MLIter_eIDN_Seq            = mesh % elements_sequential
-	self % MLIter_fIDN_Interior       = mesh % faces_interior
-	self % MLIter_fIDN_Boundary       = mesh % faces_boundary
-	
+      !-local variable-----------------------------------------
+      integer     :: i
+
+      !-deallocate-----------------------------------------
+      if( allocated(self % ML_GlobalLevel) ) deallocate(self % ML_GlobalLevel)
+      if( allocated(self % ML_Level))        deallocate(self % ML_Level)
+      if( allocated(self % MLIter) )         deallocate(self % MLIter)
+      if( allocated(self % MLIter_eID) )     deallocate(self % MLIter_eID)
+      if( allocated(self % MLIter_fID) )     deallocate(self % MLIter_fID)
+      if( allocated(self % MLIter_fID_Interior))  deallocate(self % MLIter_fID_Interior)
+      if( allocated(self % MLIter_fID_Boundary) ) deallocate(self % MLIter_fID_Boundary)
+      if( allocated(self % MLIter_fID_MPI) ) deallocate(self % MLIter_fID_MPI)
+      if( allocated(self % MLIter_eID_Seq) ) deallocate(self % MLIter_eID_Seq)
+      if( allocated(self % MLIter_eIDN) ) deallocate(self % MLIter_eIDN)
+      if( allocated(self % MLIter_eIDN_Seq) ) deallocate(self % MLIter_eIDN_Seq)
+      if( allocated(self % MLIter_fIDN_Interior) ) deallocate(self % MLIter_fIDN_Interior)
+      if( allocated(self % MLIter_fIDN_Boundary) ) deallocate(self % MLIter_fIDN_Boundary)
+
+      !-allocate-----------------------------------------
+      allocate(self % ML_GlobalLevel(nLevel), self % ML_Level(nLevel), self % MLIter(nLevel,ML_NCOLUMNS))
+      allocate(self % MLIter_eID(mesh % no_of_elements))
+      allocate(self % MLIter_fID(mesh % no_of_faces))  ! Each face has 2 sides, except boundaries
+      allocate(self % MLIter_fID_Interior(size(mesh % faces_interior)))
+      allocate(self % MLIter_fID_Boundary(size(mesh % faces_boundary)))
+      allocate(self % MLIter_eID_Seq(size(mesh % elements_sequential)))
+      allocate(self % MLIter_eIDN(mesh % no_of_elements))
+      allocate(self % MLIter_eIDN_Seq(size(mesh % elements_sequential)))
+      allocate(self % MLIter_fIDN_Interior(size(mesh % faces_interior)))
+      allocate(self % MLIter_fIDN_Boundary(size(mesh % faces_boundary)))
+
+
+      !Initial default value - all Level 1
+      self % nLevel         = nLevel
+      self % maxLevel       = nLevel
+      self % CFL_CutOff     = 0.5_RP
+      self % ML_GlobalLevel = mesh % no_of_allElements
+      self % ML_Level       = mesh % no_of_elements
+      self % MLIter         = 0
+      self % MLIter(1,ML_EID)    = mesh % no_of_elements
+      self % MLIter(1,ML_FID)    = size(mesh % faces)
+      self % MLIter(1,ML_FID_INTERIOR)    = size(mesh % faces_interior)
+      self % MLIter(1,ML_FID_BOUNDARY)    = size(mesh % faces_boundary)
+      self % MLIter(1,ML_EID_SEQ)    = size(mesh % elements_sequential)
+      self % MLIter(1,ML_EIDN)    = mesh % no_of_elements
+      self % MLIter(1,ML_EIDN_SEQ)    = size(mesh % elements_sequential)
+      self % MLIter(1,ML_FIDN_INTERIOR)   = size(mesh % faces_interior)
+      self % MLIter(1,ML_FIDN_BOUNDARY)   = size(mesh % faces_boundary)
+      self % MLIter_eID (:) = [(i, i=1,size(mesh % elements))]
+      self % MLIter_fID (:) = [(i, i=1,size(mesh % faces))]
+      self % MLIter_fID_Interior       = mesh % faces_interior
+      self % MLIter_fID_Boundary       = mesh % faces_boundary
+      self % MLIter_eID_Seq            = mesh % elements_sequential
+      self % MLIter_eIDN (:) = [(i, i=1,size(mesh % elements))]
+      self % MLIter_eIDN_Seq            = mesh % elements_sequential
+      self % MLIter_fIDN_Interior       = mesh % faces_interior
+      self % MLIter_fIDN_Boundary       = mesh % faces_boundary
+
 #ifdef _HAS_MPI_
       if ( MPI_Process % doMPIAction ) then
          if( allocated(self % MLIter_eID_MPI) ) deallocate(self % MLIter_eID_MPI)
-		 if( allocated(self % MLIter_fID_MPI) ) deallocate(self % MLIter_fID_MPI)
-		 if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
-		 if( allocated(self % MLIter_fIDN_MPI) ) deallocate(self % MLIter_fIDN_MPI)
-		 if( allocated(self % MPIfaceRemoteLevel) ) deallocate(self % MPIfaceRemoteLevel)
+         if( allocated(self % MLIter_fID_MPI) ) deallocate(self % MLIter_fID_MPI)
+         if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
+         if( allocated(self % MLIter_fIDN_MPI) ) deallocate(self % MLIter_fIDN_MPI)
+         if( allocated(self % MPIfaceRemoteLevel) ) deallocate(self % MPIfaceRemoteLevel)
          allocate(self % MLIter_eID_MPI(size(mesh % elements_mpi)))
-		 allocate(self % MLIter_fID_MPI(size(mesh % faces_mpi)))
-		 allocate(self % MLIter_eIDN_MPI(size(mesh % elements_mpi)))
-		 allocate(self % MLIter_fIDN_MPI(size(mesh % faces_mpi)))
-		 allocate(self % MPIfaceRemoteLevel(2, size(mesh % faces)))
-		 self % MLIter(1,ML_EID_MPI)           = size(mesh % elements_mpi)
-		 self % MLIter(1,ML_FID_MPI)           = size(mesh % faces_mpi)
-		 self % MLIter(1,ML_EIDN_MPI)          = size(mesh % elements_mpi)
-		 self % MLIter(1,ML_FIDN_MPI)          = size(mesh % faces_mpi)
+         allocate(self % MLIter_fID_MPI(size(mesh % faces_mpi)))
+         allocate(self % MLIter_eIDN_MPI(size(mesh % elements_mpi)))
+         allocate(self % MLIter_fIDN_MPI(size(mesh % faces_mpi)))
+         allocate(self % MPIfaceRemoteLevel(2, size(mesh % faces)))
+         self % MLIter(1,ML_EID_MPI)           = size(mesh % elements_mpi)
+         self % MLIter(1,ML_FID_MPI)           = size(mesh % faces_mpi)
+         self % MLIter(1,ML_EIDN_MPI)          = size(mesh % elements_mpi)
+         self % MLIter(1,ML_FIDN_MPI)          = size(mesh % faces_mpi)
          self % MLIter_eID_MPI        = mesh % elements_mpi
-		 self % MLIter_fID_MPI        = mesh % faces_mpi
-		 self % MLIter_eIDN_MPI       = mesh % elements_mpi
-		 self % MLIter_fIDN_MPI       = mesh % faces_mpi
-		 self % MPIfaceRemoteLevel    = 0
+         self % MLIter_fID_MPI        = mesh % faces_mpi
+         self % MLIter_eIDN_MPI       = mesh % elements_mpi
+         self % MLIter_fIDN_MPI       = mesh % faces_mpi
+         self % MPIfaceRemoteLevel    = 0
       end if
 #endif
 
    end subroutine MultiLevel_RK_Construct
 !------------------------------------------------------------------------
-!  Update 
+!  Update
 !------------------------------------------------------------------------
    subroutine MultiLevel_RK_Update(self, mesh, CFL_Cut, globalMax, globalMin, maxCFLInterf)
-    use MPI_Process_Info
-	implicit none
-	!-arguments-----------------------------------------
-	class(MultiLevel_RK), target  , intent(inout)   :: self
-	type (HexMesh)                                  :: mesh 
-	real (kind=RP)                , intent(in)      :: CFL_Cut
-	real (kind=RP)                , intent(in)      :: globalMax
-	real (kind=RP)                , intent(in)      :: globalMin
-	real (kind=RP)                , intent(in)      :: maxCFLInterf
-	
-	!-local variable-----------------------------------------
-	integer          :: eID, level, levelOld, i, j, fID, sideID
-    integer          :: counter(1:self%nLevel), nInterior, nBoundary, nFace, nMPIface
-	integer, allocatable :: Level_eID(:), Level_eID_wN(:), Level_eID_wN_BUFF(:)
-	integer, allocatable :: faceFlag(:,:)
-	integer          :: iterations(self%nLevel+1,ML_NCOLUMNS)
-	integer          :: ierr                     ! Error for MPI calls
-	real(kind=RP)    :: perLevel, cflLevel, dtRatio, cfl
-	real(kind=RP)    :: maxc, minc
-	real(kind=RP)    :: cfl_cutoff(self%nLevel-1)
-	integer, allocatable :: counterOMP(:,:), counterOMPN(:,:)
+      use MPI_Process_Info
+      implicit none
+      !-arguments-----------------------------------------
+      class(MultiLevel_RK), target  , intent(inout)   :: self
+      type (HexMesh)                                  :: mesh
+      real (kind=RP)                , intent(in)      :: CFL_Cut
+      real (kind=RP)                , intent(in)      :: globalMax
+      real (kind=RP)                , intent(in)      :: globalMin
+      real (kind=RP)                , intent(in)      :: maxCFLInterf
+
+      !-local variable-----------------------------------------
+      integer          :: eID, level, levelOld, i, j, fID, sideID
+      integer          :: counter(1:self%nLevel), nInterior, nBoundary, nFace, nMPIface
+      integer, allocatable :: Level_eID(:), Level_eID_wN(:), Level_eID_wN_BUFF(:)
+      integer, allocatable :: faceFlag(:,:)
+      integer          :: iterations(self%nLevel+1,ML_NCOLUMNS)
+      integer          :: ierr                     ! Error for MPI calls
+      real(kind=RP)    :: perLevel, cflLevel, dtRatio, cfl
+      real(kind=RP)    :: maxc, minc
+      real(kind=RP)    :: cfl_cutoff(self%nLevel-1)
+      integer, allocatable :: counterOMP(:,:), counterOMPN(:,:)
 !
 !     Initialize
 !     ------------------------------------------------------------
-	  dtRatio = 2.5_RP ! estimated maximum local timestep ratio in RK3 (5/12)
-	  self % CFL_CutOff = CFL_Cut
-	  self % MLIter = 0
-	
-	  allocate(counterOMP(self%nLevel,mesh % no_of_elements), counterOMPN (self%nLevel,mesh % no_of_elements))
-	  allocate(Level_eID(mesh % no_of_elements), Level_eID_wN(mesh % no_of_elements), Level_eID_wN_BUFF(mesh % no_of_elements))
-	  allocate(faceFlag(size(mesh % faces),2))
-	  counterOMP   = 0
-	  counterOMPN  = 0
-	  Level_eID    = 0
-	  Level_eID_wN = 0 
-	  
-	  cfl_cutoff(1) = self % CFL_CutOff	  
-	  
-	  do i = 2, self % nLevel-1
-		cfl_cutoff(i) = cfl_cutoff(i-1)*dtRatio
-	  end do
+      dtRatio = 2.5_RP ! estimated maximum local timestep ratio in RK3 (5/12)
+      self % CFL_CutOff = CFL_Cut
+      self % MLIter = 0
+
+      allocate(counterOMP(self%nLevel,mesh % no_of_elements), counterOMPN (self%nLevel,mesh % no_of_elements))
+      allocate(Level_eID(mesh % no_of_elements), Level_eID_wN(mesh % no_of_elements), Level_eID_wN_BUFF(mesh % no_of_elements))
+      allocate(faceFlag(size(mesh % faces),2))
+      counterOMP   = 0
+      counterOMPN  = 0
+      Level_eID    = 0
+      Level_eID_wN = 0
+
+      cfl_cutoff(1) = self % CFL_CutOff
+
+      do i = 2, self % nLevel-1
+         cfl_cutoff(i) = cfl_cutoff(i-1)*dtRatio
+      end do
 !
 !     Determine the level of each element
 !     ------------------------------------------------------------
 !$omp parallel shared(self,mesh,CFL_Cut, dtRatio, counter, counterOMP, counterOMPN, maxCFLInterf, cfl_cutoff, Level_eID, Level_eID_wN) default(private)
 !$omp do schedule(runtime)
       do eID = 1, SIZE(mesh % elements)
-		 ! Determine level from CFL cutoff and CFL percentile. Level <= max Level
-		 cfl = mesh % elements(eID) % ML_CFL
+         ! Determine level from CFL cutoff and CFL percentile. Level <= max Level
+         cfl = mesh % elements(eID) % ML_CFL
 #ifdef MULTIPHASE
-	     ! For multiphase, the interface elements have homogenous level, represented by the highest CFL along interface elements
-		 maxc = min(maxval(mesh % elements(eID) % storage % Q(1,:,:,:)),1.0_RP)
-		 minc = max(minval(mesh % elements(eID) % storage % Q(1,:,:,:)),0.0_RP)
-		 if ((maxc.gt.self % interfaceTol).and.(minc.lt.1.0_RP-self % interfaceTol)) then
-			cfl = maxCFLInterf * 100
-		 end if 
-#endif		
+         ! For multiphase, the interface elements have homogenous level, represented by the highest CFL along interface elements
+         maxc = min(maxval(mesh % elements(eID) % storage % Q(1,:,:,:)),1.0_RP)
+         minc = max(minval(mesh % elements(eID) % storage % Q(1,:,:,:)),0.0_RP)
+         if ((maxc.gt.self % interfaceTol).and.(minc.lt.1.0_RP-self % interfaceTol)) then
+            cfl = maxCFLInterf * 100
+         end if
+#endif
          ! Determine Level of element based on its cfl
-         level = self % nLevel 
+         level = self % nLevel
          do i = 1, self % nLevel-1
-			if (cfl .lt. cfl_cutoff(i)) then 
-				level = i
-				exit
-			end if 
-		 end do 
-		 counterOMP(level,eID) = 1
-		 mesh % elements(eID) % MLevel   = level
-		 mesh % elements(eID) % MLevelwN = level
-		 Level_eID(eID) = level
-	  end do 
+            if (cfl .lt. cfl_cutoff(i)) then
+               level = i
+               exit
+            end if
+         end do
+         counterOMP(level,eID) = 1
+         mesh % elements(eID) % MLevel   = level
+         mesh % elements(eID) % MLevelwN = level
+         Level_eID(eID) = level
+      end do
 !$omp end do
 !$omp end parallel
       counterOMPN = counterOMP
-	  Level_eID_wN= Level_eID
+      Level_eID_wN= Level_eID
       ! Check the neighbours of each element to ensure no rapid jump in level, modify level if required
-	  do i=self%nLevel, 2, -1
-		call MultiLevel_RK_CheckNeighbour(self, mesh, i, Level_eID, Level_eID_wN, counterOMP, counterOMPN)
-	  end do 
-	  Level_eID_wN_BUFF = Level_eID_wN
+      do i=self%nLevel, 2, -1
+         call MultiLevel_RK_CheckNeighbour(self, mesh, i, Level_eID, Level_eID_wN, counterOMP, counterOMPN)
+      end do
+      Level_eID_wN_BUFF = Level_eID_wN
       ! Sort decending Level_eID (Large to small level) and Level_eID_wN (neighbour included)
       call mergeSortDescendInt(Level_eID,self % MLIter_eID)
-	  call mergeSortDescendInt(Level_eID_wN,self % MLIter_eIDN)
-  
-	  do i = 1, self % nLevel
-		self % MLIter(i,ML_EID) = sum(counterOMP(i:self % nLevel,:))    ! Elements
-		self % ML_Level(i) = sum(counterOMP(i,:))
-		self % MLIter(i,ML_EIDN) = sum(counterOMPN(i:self % nLevel,:))   ! Elements + neighbours   
-	  end do
-	  
-	  deallocate(counterOMP, counterOMPN)
+      call mergeSortDescendInt(Level_eID_wN,self % MLIter_eIDN)
 
-	  !All faces of each sorted element
-	  nInterior=0
-	  nBoundary=0
-	  levelOld = self % nLevel
-	  faceFlag = 0
-	  nFace = 0
-	  nMPIface = 0 
-	  
-	  do i = 1, self % MLIter(1,ML_EID)
-		eID   = self % MLIter_eID(i)
-		level = Level_eID (i)
-		
-		if (level .ne. levelOld) then
-		    self % MLIter(1:levelOld,ML_FID) = nFace
-			self % MLIter(1:levelOld,ML_FID_INTERIOR) = nInterior
-			self % MLIter(1:levelOld,ML_FID_BOUNDARY) = nBoundary
-			self % MLIter(1:levelOld,ML_FID_MPI) = nMPIface
-			levelOld = level
-		end if 
-		
-		! Check for interior or boundary faces
-		do j=1,6
-		   fID    = mesh % elements(eID) % faceIDs(j)
-		   sideID = mesh % elements(eID) % faceSide(j)
-		   
-		   ! Order of faceID from highest to lowest level
-		   if (faceFlag(fID,1).eq.0) then
-				nFace = nFace+1
-				self % MLIter_fID(nFace) = fID
-				faceFlag(fID,1) = 1
-		   end if 
-		   ! Order of interiorFace, boundaryFace and MPIFace from highest to lowest level
-           if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
-			  if (faceFlag(fID,2).eq.0) then
-				nInterior = nInterior+1
-				self % MLIter_fID_Interior(nInterior) = fID
-				faceFlag(fID,2) = 1
-			  end if 
-		   elseif (mesh % faces(fID) % FaceType .eq. HMESH_BOUNDARY) then
-		      nBoundary = nBoundary+1
-		      self % MLIter_fID_Boundary(nBoundary) = fID
-		   elseif (mesh % faces(fID) % FaceType .eq. HMESH_MPI) then
-		      nMPIface = nMPIface + 1
-			  self % MLIter_fID_MPI(nMPIface) = fID
-		   end if 
-		end do
-	  end do
-	  self % MLIter(1:level,ML_FID) = nFace
-	  self % MLIter(1:level,ML_FID_INTERIOR) = nInterior
-	  self % MLIter(1:level,ML_FID_BOUNDARY) = nBoundary
-	  self % MLIter(1:level,ML_FID_MPI) = nMPIface
-	  
-	  ! ! Sequential elements
-	  do i = 1, size(mesh % elements_sequential)
-	    eID = mesh % elements_sequential(i) 
-		Level_eID(i) = mesh % elements(eID) % MLevel
-		Level_eID_wN(i) = Level_eID_wN_BUFF(eID)
-		self % MLIter(1:Level_eID(i),ML_EID_SEQ) = self % MLIter(1:Level_eID(i),ML_EID_SEQ)+1
-		self % MLIter(1:Level_eID_wN(i),ML_EIDN_SEQ) = self % MLIter(1:Level_eID_wN(i),ML_EIDN_SEQ)+1
-	  end do 
-	  ! The stable sort of MLIter_eID/eIDN already leaves each level in ascending eID, and elements_sequential is
-	  ! ascending, so filtering gives the same lists as sorting them
-	  call filterElements(self % MLIter_eID , .false., self % MLIter_eID_Seq)
-	  call filterElements(self % MLIter_eIDN, .false., self % MLIter_eIDN_Seq)
+      do i = 1, self % nLevel
+         self % MLIter(i,ML_EID) = sum(counterOMP(i:self % nLevel,:))    ! Elements
+         self % ML_Level(i) = sum(counterOMP(i,:))
+         self % MLIter(i,ML_EIDN) = sum(counterOMPN(i:self % nLevel,:))   ! Elements + neighbours
+      end do
 
-	  ! Sort fID for better memory access. Each level's interior/boundary faces are the faces of that level's
-	  ! fID block, so they are filtered from the sorted list
-	  iterations = 0
-	  iterations(1:self%nLevel,:)=self % MLIter
-	  do i=self % nLevel, 1, -1
-		call mergeSortAscendInt(self % MLIter_fID(iterations(i+1,ML_FID)+1:iterations(i,ML_FID)))
-	  end do
-	  nInterior = 0
-	  nBoundary = 0
-	  do i = 1, self % MLIter(1,ML_FID)
-		fID = self % MLIter_fID(i)
-		if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
-			nInterior = nInterior + 1
-			self % MLIter_fID_Interior(nInterior) = fID
-		elseif (mesh % faces(fID) % FaceType .eq. HMESH_BOUNDARY) then
-			nBoundary = nBoundary + 1
-			self % MLIter_fID_Boundary(nBoundary) = fID
-		end if
-	  end do
+      deallocate(counterOMP, counterOMPN)
+
+      !All faces of each sorted element
+      nInterior=0
+      nBoundary=0
+      levelOld = self % nLevel
+      faceFlag = 0
+      nFace = 0
+      nMPIface = 0
+
+      do i = 1, self % MLIter(1,ML_EID)
+         eID   = self % MLIter_eID(i)
+         level = Level_eID (i)
+
+         if (level .ne. levelOld) then
+            self % MLIter(1:levelOld,ML_FID) = nFace
+            self % MLIter(1:levelOld,ML_FID_INTERIOR) = nInterior
+            self % MLIter(1:levelOld,ML_FID_BOUNDARY) = nBoundary
+            self % MLIter(1:levelOld,ML_FID_MPI) = nMPIface
+            levelOld = level
+         end if
+
+         ! Check for interior or boundary faces
+         do j=1,6
+            fID    = mesh % elements(eID) % faceIDs(j)
+            sideID = mesh % elements(eID) % faceSide(j)
+
+            ! Order of faceID from highest to lowest level
+            if (faceFlag(fID,1).eq.0) then
+               nFace = nFace+1
+               self % MLIter_fID(nFace) = fID
+               faceFlag(fID,1) = 1
+            end if
+            ! Order of interiorFace, boundaryFace and MPIFace from highest to lowest level
+            if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
+               if (faceFlag(fID,2).eq.0) then
+                  nInterior = nInterior+1
+                  self % MLIter_fID_Interior(nInterior) = fID
+                  faceFlag(fID,2) = 1
+               end if
+            elseif (mesh % faces(fID) % FaceType .eq. HMESH_BOUNDARY) then
+               nBoundary = nBoundary+1
+               self % MLIter_fID_Boundary(nBoundary) = fID
+            elseif (mesh % faces(fID) % FaceType .eq. HMESH_MPI) then
+               nMPIface = nMPIface + 1
+               self % MLIter_fID_MPI(nMPIface) = fID
+            end if
+         end do
+      end do
+      self % MLIter(1:level,ML_FID) = nFace
+      self % MLIter(1:level,ML_FID_INTERIOR) = nInterior
+      self % MLIter(1:level,ML_FID_BOUNDARY) = nBoundary
+      self % MLIter(1:level,ML_FID_MPI) = nMPIface
+
+      ! ! Sequential elements
+      do i = 1, size(mesh % elements_sequential)
+         eID = mesh % elements_sequential(i)
+         Level_eID(i) = mesh % elements(eID) % MLevel
+         Level_eID_wN(i) = Level_eID_wN_BUFF(eID)
+         self % MLIter(1:Level_eID(i),ML_EID_SEQ) = self % MLIter(1:Level_eID(i),ML_EID_SEQ)+1
+         self % MLIter(1:Level_eID_wN(i),ML_EIDN_SEQ) = self % MLIter(1:Level_eID_wN(i),ML_EIDN_SEQ)+1
+      end do
+      ! The stable sort of MLIter_eID/eIDN already leaves each level in ascending eID, and elements_sequential is
+      ! ascending, so filtering gives the same lists as sorting them
+      call filterElements(self % MLIter_eID , .false., self % MLIter_eID_Seq)
+      call filterElements(self % MLIter_eIDN, .false., self % MLIter_eIDN_Seq)
+
+      ! Sort fID for better memory access. Each level's interior/boundary faces are the faces of that level's
+      ! fID block, so they are filtered from the sorted list
+      iterations = 0
+      iterations(1:self%nLevel,:)=self % MLIter
+      do i=self % nLevel, 1, -1
+         call mergeSortAscendInt(self % MLIter_fID(iterations(i+1,ML_FID)+1:iterations(i,ML_FID)))
+      end do
+      nInterior = 0
+      nBoundary = 0
+      do i = 1, self % MLIter(1,ML_FID)
+         fID = self % MLIter_fID(i)
+         if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
+            nInterior = nInterior + 1
+            self % MLIter_fID_Interior(nInterior) = fID
+         elseif (mesh % faces(fID) % FaceType .eq. HMESH_BOUNDARY) then
+            nBoundary = nBoundary + 1
+            self % MLIter_fID_Boundary(nBoundary) = fID
+         end if
+      end do
       self % ML_GlobalLevel = self % ML_Level
 
-	  call faceListsByLevelwN(mesh % faces_interior, self % MLIter_fIDN_Interior, 11)
-	  call faceListsByLevelwN(mesh % faces_boundary, self % MLIter_fIDN_Boundary, 12)
-	  
+      call faceListsByLevelwN(mesh % faces_interior, self % MLIter_fIDN_Interior, 11)
+      call faceListsByLevelwN(mesh % faces_boundary, self % MLIter_fIDN_Boundary, 12)
+
 ! MPI elements and operation
 #ifdef _HAS_MPI_
       if ( MPI_Process % doMPIAction ) then
-	      counter(1:self % nLevel)=0
-		  do i = 1, size(mesh % elements_mpi)
-			eID = mesh % elements_mpi(i) 
-			Level_eID(i) = mesh % elements(eID) % MLevel
-			Level_eID_wN(i) = Level_eID_wN_BUFF(eID)
-			self % MLIter(1:Level_eID(i),ML_EID_MPI) = self % MLIter(1:Level_eID(i),ML_EID_MPI)+1
-			self % MLIter(1:Level_eID_wN(i),ML_EIDN_MPI) = self % MLIter(1:Level_eID_wN(i),ML_EIDN_MPI)+1
-		  end do 
-		  call filterElements(self % MLIter_eID , .true., self % MLIter_eID_MPI)
-		  call filterElements(self % MLIter_eIDN, .true., self % MLIter_eIDN_MPI)
-		  call faceListsByLevelwN(mesh % faces_mpi, self % MLIter_fIDN_MPI, 13)
-		  call MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
-          
-          ! Global statistics level		  
-          call mpi_allreduce(self % ML_Level(1:self%nLevel), self % ML_GlobalLevel(1:self%nLevel), self%nLevel, MPI_INT, MPI_SUM, &
-                            MPI_COMM_WORLD, ierr)
+         counter(1:self % nLevel)=0
+         do i = 1, size(mesh % elements_mpi)
+            eID = mesh % elements_mpi(i)
+            Level_eID(i) = mesh % elements(eID) % MLevel
+            Level_eID_wN(i) = Level_eID_wN_BUFF(eID)
+            self % MLIter(1:Level_eID(i),ML_EID_MPI) = self % MLIter(1:Level_eID(i),ML_EID_MPI)+1
+            self % MLIter(1:Level_eID_wN(i),ML_EIDN_MPI) = self % MLIter(1:Level_eID_wN(i),ML_EIDN_MPI)+1
+         end do
+         call filterElements(self % MLIter_eID , .true., self % MLIter_eID_MPI)
+         call filterElements(self % MLIter_eIDN, .true., self % MLIter_eIDN_MPI)
+         call faceListsByLevelwN(mesh % faces_mpi, self % MLIter_fIDN_MPI, 13)
+         call MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
+
+         ! Global statistics level
+         call mpi_allreduce(self % ML_Level(1:self%nLevel), self % ML_GlobalLevel(1:self%nLevel), self%nLevel, MPI_INT, MPI_SUM, &
+                           MPI_COMM_WORLD, ierr)
       end if
 #endif
 
 !       Max actual level - This is the actual level used should no element exist in nLevel
-		do i = self % nLevel,1,-1
-			self % maxLevel = i
-			if (self % ML_GlobalLevel(i).ne.0) exit
-		end do 
-		
-	if (self % maxLevel.eq.1) then
-		if (MPI_Process % isRoot ) then
-!
-!        Write Error Information 
-!        -----------------------------------------------         
-         write(STD_OUT,'(/)')
-         call SubSection_Header("Update Multi-Level Local Timestepping")
-			write(STD_OUT,'(A)') "Error: All elements are in Level 1. Minimum 2 levels required. Use normal RK method"
-		end if 
-	    errorMessage(STD_OUT)
-		error stop
-	end if 
+      do i = self % nLevel,1,-1
+         self % maxLevel = i
+         if (self % ML_GlobalLevel(i).ne.0) exit
+      end do
 
-	if ( .not. MPI_Process % isRoot ) return
+      if (self % maxLevel.eq.1) then
+         if (MPI_Process % isRoot ) then
 !
-!        Write Information 
-!        -----------------------------------------------         
-         write(STD_OUT,'(/)')
-         call SubSection_Header("Update Multi-Level Local Timestepping")
-			write(STD_OUT,'(30X,A,A27,F10.4)') "->" , "Max. Advective CFL: " , globalMax
-			write(STD_OUT,'(30X,A,A27,F10.4)') "->" , "Min. Advective CFL: " , globalMin
-			write(STD_OUT,'(30X,A,A27,F10.4)') "->" , "Max. Allow. Global CFL: " , 2.5_RP**real(self % maxLevel-1) 
+!        Write Error Information
+!        -----------------------------------------------
+            write(STD_OUT,'(/)')
+            call SubSection_Header("Update Multi-Level Local Timestepping")
+            write(STD_OUT,'(A)') "Error: All elements are in Level 1. Minimum 2 levels required. Use normal RK method"
+         end if
+         errorMessage(STD_OUT)
+         error stop
+      end if
+
+      if ( .not. MPI_Process % isRoot ) return
+!
+!        Write Information
+!        -----------------------------------------------
+      write(STD_OUT,'(/)')
+      call SubSection_Header("Update Multi-Level Local Timestepping")
+      write(STD_OUT,'(30X,A,A27,F10.4)') "->" , "Max. Advective CFL: " , globalMax
+      write(STD_OUT,'(30X,A,A27,F10.4)') "->" , "Min. Advective CFL: " , globalMin
+      write(STD_OUT,'(30X,A,A27,F10.4)') "->" , "Max. Allow. Global CFL: " , 2.5_RP**real(self % maxLevel-1)
 #if defined(MULTIPHASE)
-			write(STD_OUT,'(30X,A,A27,F10.4)') "->" , "Max. CFL Interface: " , maxCFLInterf
-#endif	  
-			write(STD_OUT,'(30X,A,A27)') "->" , "Number of Element: "
-			do i = 1,self % nLevel
-				write(STD_OUT,'(30X,A,A18,I4,A4,I10)') "->" , "Level ", i," : ",self%ML_GlobalLevel(i)
-            end do 
-			write(STD_OUT,'(30X,A,A27,I4)') "->" , "Number of RK3 Level: " , self % maxLevel
+      write(STD_OUT,'(30X,A,A27,F10.4)') "->" , "Max. CFL Interface: " , maxCFLInterf
+#endif
+      write(STD_OUT,'(30X,A,A27)') "->" , "Number of Element: "
+      do i = 1,self % nLevel
+         write(STD_OUT,'(30X,A,A18,I4,A4,I10)') "->" , "Level ", i," : ",self%ML_GlobalLevel(i)
+      end do
+      write(STD_OUT,'(30X,A,A27,I4)') "->" , "Number of RK3 Level: " , self % maxLevel
 
    contains
 
    subroutine filterElements(sorted, shared, filtered)
-	integer, intent(in)  :: sorted(:)
-	logical, intent(in)  :: shared
-	integer, intent(out) :: filtered(:)
-	integer :: k, n
-	n = 0
-	do k = 1, size(sorted)
-		if (mesh % elements(sorted(k)) % hasSharedFaces .eqv. shared) then
-			n = n + 1
-			filtered(n) = sorted(k)
-		end if
-	end do
+      integer, intent(in)  :: sorted(:)
+      logical, intent(in)  :: shared
+      integer, intent(out) :: filtered(:)
+      integer :: k, n
+      n = 0
+      do k = 1, size(sorted)
+         if (mesh % elements(sorted(k)) % hasSharedFaces .eqv. shared) then
+            n = n + 1
+            filtered(n) = sorted(k)
+         end if
+      end do
    end subroutine filterElements
 
    ! A face is in the level-L list when one of its local elements has MLevelwN >= L
    subroutine faceListsByLevelwN(faceIDs, list, col)
-	integer, intent(in)  :: faceIDs(:)
-	integer, intent(out) :: list(:)
-	integer, intent(in)  :: col
-	integer, allocatable :: faceLevel(:)
-	integer :: k, n, lvl, e(2)
-	allocate(faceLevel(size(faceIDs)))
-	do k = 1, size(faceIDs)
-		e = mesh % faces(faceIDs(k)) % elementIDs
-		faceLevel(k) = 0
-		if (e(1) > 0) faceLevel(k) = Level_eID_wN_BUFF(e(1))
-		if (e(2) > 0) faceLevel(k) = max(faceLevel(k), Level_eID_wN_BUFF(e(2)))
-	end do
-	n = 0
-	do lvl = self % nLevel, 1, -1
-		do k = 1, size(faceIDs)
-			if (faceLevel(k) .eq. lvl) then
-				n = n + 1
-				list(n) = faceIDs(k)
-			end if
-		end do
-		self % MLIter(lvl,col) = n
-	end do
+      integer, intent(in)  :: faceIDs(:)
+      integer, intent(out) :: list(:)
+      integer, intent(in)  :: col
+      integer, allocatable :: faceLevel(:)
+      integer :: k, n, lvl, e(2)
+      allocate(faceLevel(size(faceIDs)))
+      do k = 1, size(faceIDs)
+         e = mesh % faces(faceIDs(k)) % elementIDs
+         faceLevel(k) = 0
+         if (e(1) > 0) faceLevel(k) = Level_eID_wN_BUFF(e(1))
+         if (e(2) > 0) faceLevel(k) = max(faceLevel(k), Level_eID_wN_BUFF(e(2)))
+      end do
+      n = 0
+      do lvl = self % nLevel, 1, -1
+         do k = 1, size(faceIDs)
+            if (faceLevel(k) .eq. lvl) then
+               n = n + 1
+               list(n) = faceIDs(k)
+            end if
+         end do
+         self % MLIter(lvl,col) = n
+      end do
    end subroutine faceListsByLevelwN
 
    end subroutine MultiLevel_RK_Update
@@ -7125,116 +7127,116 @@ call elementMPIList % destruct
 !  Levels of the elements across the MPI faces, used to exchange only the faces needed at each level
 !------------------------------------------------------------------------
    subroutine MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
-	implicit none
-	type(MultiLevel_RK), intent(inout) :: self
-	type(HexMesh)                      :: mesh
+      implicit none
+      type(MultiLevel_RK), intent(inout) :: self
+      type(HexMesh)                      :: mesh
 #ifdef _HAS_MPI_
-	type levelBuffer_t
-		integer, allocatable :: send(:), recv(:)
-	end type levelBuffer_t
-	integer :: k, domain, mpifID, fID, eID, nFaces, nShared, ierr
-	integer, allocatable :: reqs(:)
-	type(levelBuffer_t), allocatable :: buffers(:)
+      type levelBuffer_t
+         integer, allocatable :: send(:), recv(:)
+      end type levelBuffer_t
+      integer :: k, domain, mpifID, fID, eID, nFaces, nShared, ierr
+      integer, allocatable :: reqs(:)
+      type(levelBuffer_t), allocatable :: buffers(:)
 
-	if ( .not. (MPI_Process % doMPIAction .and. mesh % MPIfaces % constructed) ) return
-	if ( .not. allocated(self % MPIfaceRemoteLevel) ) return
-	nShared = mesh % MPIfaces % nDomainShared
-	if ( nShared <= 0 ) return
+      if ( .not. (MPI_Process % doMPIAction .and. mesh % MPIfaces % constructed) ) return
+      if ( .not. allocated(self % MPIfaceRemoteLevel) ) return
+      nShared = mesh % MPIfaces % nDomainShared
+      if ( nShared <= 0 ) return
 
-	allocate(buffers(nShared), reqs(2*nShared))
-	reqs = MPI_REQUEST_NULL
-	do k = 1, nShared
-		domain = mesh % MPIfaces % listDomain(k)
-		nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
-		allocate(buffers(k) % send(2*nFaces), buffers(k) % recv(2*nFaces))
-		if ( nFaces > 0 ) then
-			call mpi_irecv(buffers(k) % recv, 2*nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(k), ierr)
-		end if
-	end do
-	do k = 1, nShared
-		domain = mesh % MPIfaces % listDomain(k)
-		nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
-		if ( nFaces <= 0 ) cycle
-		do mpifID = 1, nFaces
-			fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
-			eID = mesh % faces(fID) % elementIDs(mesh % MPIfaces % faces(domain) % elementSide(mpifID))
-			buffers(k) % send(2*mpifID-1:2*mpifID) = [mesh % elements(eID) % MLevel, mesh % elements(eID) % MLevelwN]
-		end do
-		call mpi_isend(buffers(k) % send, 2*nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(nShared+k), ierr)
-	end do
-	call mpi_waitall(2*nShared, reqs, MPI_STATUSES_IGNORE, ierr)
-	do k = 1, nShared
-		domain = mesh % MPIfaces % listDomain(k)
-		do mpifID = 1, mesh % MPIfaces % faces(domain) % no_of_faces
-			fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
-			self % MPIfaceRemoteLevel(:,fID) = buffers(k) % recv(2*mpifID-1:2*mpifID)
-		end do
-	end do
+      allocate(buffers(nShared), reqs(2*nShared))
+      reqs = MPI_REQUEST_NULL
+      do k = 1, nShared
+         domain = mesh % MPIfaces % listDomain(k)
+         nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
+         allocate(buffers(k) % send(2*nFaces), buffers(k) % recv(2*nFaces))
+         if ( nFaces > 0 ) then
+            call mpi_irecv(buffers(k) % recv, 2*nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(k), ierr)
+         end if
+      end do
+      do k = 1, nShared
+         domain = mesh % MPIfaces % listDomain(k)
+         nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
+         if ( nFaces <= 0 ) cycle
+         do mpifID = 1, nFaces
+            fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
+            eID = mesh % faces(fID) % elementIDs(mesh % MPIfaces % faces(domain) % elementSide(mpifID))
+            buffers(k) % send(2*mpifID-1:2*mpifID) = [mesh % elements(eID) % MLevel, mesh % elements(eID) % MLevelwN]
+         end do
+         call mpi_isend(buffers(k) % send, 2*nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(nShared+k), ierr)
+      end do
+      call mpi_waitall(2*nShared, reqs, MPI_STATUSES_IGNORE, ierr)
+      do k = 1, nShared
+         domain = mesh % MPIfaces % listDomain(k)
+         do mpifID = 1, mesh % MPIfaces % faces(domain) % no_of_faces
+            fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
+            self % MPIfaceRemoteLevel(:,fID) = buffers(k) % recv(2*mpifID-1:2*mpifID)
+         end do
+      end do
 #endif
    end subroutine MultiLevel_RK_ExchangeRemoteLevels
 !------------------------------------------------------------------------
-!  Update 
+!  Update
 !------------------------------------------------------------------------
    subroutine MultiLevel_RK_CheckNeighbour(self, mesh, level, Level_eID, Level_eID_wN, counterOMP, counterOMPN)
-	implicit none
-	!-arguments-----------------------------------------
-	type(MultiLevel_RK)  , intent(inout)   :: self
-	type (HexMesh)                         :: mesh 
-	integer              , intent(in)      :: level
-	integer              , intent(inout)   :: Level_eID(mesh % no_of_elements)
-	integer              , intent(inout)   :: Level_eID_wN(mesh % no_of_elements)
-	integer              , intent(inout)   :: counterOMP(self % nLevel, mesh % no_of_elements)
-	integer              , intent(inout)   :: counterOMPN(self % nLevel, mesh % no_of_elements)
-	
-	integer              :: eID, i, fID, nb
-	logical              :: hasNeighbourAtLevel, haveRemote
-	integer, allocatable :: levelOld(:)
+      implicit none
+      !-arguments-----------------------------------------
+      type(MultiLevel_RK)  , intent(inout)   :: self
+      type (HexMesh)                         :: mesh
+      integer              , intent(in)      :: level
+      integer              , intent(inout)   :: Level_eID(mesh % no_of_elements)
+      integer              , intent(inout)   :: Level_eID_wN(mesh % no_of_elements)
+      integer              , intent(inout)   :: counterOMP(self % nLevel, mesh % no_of_elements)
+      integer              , intent(inout)   :: counterOMPN(self % nLevel, mesh % no_of_elements)
+
+      integer              :: eID, i, fID, nb
+      logical              :: hasNeighbourAtLevel, haveRemote
+      integer, allocatable :: levelOld(:)
 
 !   Levels at the start of this pass, and the level of the element across each MPI face
-	allocate(levelOld(mesh % no_of_elements))
-	do eID = 1, mesh % no_of_elements
-		levelOld(eID) = mesh % elements(eID) % MLevel
-	end do
-	call MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
-	haveRemote = allocated(self % MPIfaceRemoteLevel)
+      allocate(levelOld(mesh % no_of_elements))
+      do eID = 1, mesh % no_of_elements
+         levelOld(eID) = mesh % elements(eID) % MLevel
+      end do
+      call MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
+      haveRemote = allocated(self % MPIfaceRemoteLevel)
 
 !$omp parallel shared(self,mesh,levelOld,haveRemote, counterOMP, counterOMPN, Level_eID, Level_eID_wN, level) default(private)
-!$omp do schedule(runtime)	  
-	 ! Neighbouring elements of elements with level N will have at least level N-1
+!$omp do schedule(runtime)
+      ! Neighbouring elements of elements with level N will have at least level N-1
       do eID =1, SIZE(mesh % elements)
-		if (levelOld(eID).lt.(level)) then
-			hasNeighbourAtLevel = .false.
-			do i = 1, 6
-				fID = mesh % elements(eID) % faceIDs(i)
-				if ( mesh % faces(fID) % faceType .eq. HMESH_MPI ) then
-					if ( haveRemote ) then
-						if ( self % MPIfaceRemoteLevel(1,fID) .eq. level ) hasNeighbourAtLevel = .true.
-					end if
-				else
-					if ( mesh % faces(fID) % elementIDs(1) .eq. eID ) then
-						nb = mesh % faces(fID) % elementIDs(2)    ! 0 (HMESH_NONE) on boundary faces
-					else
-						nb = mesh % faces(fID) % elementIDs(1)
-					end if
-					if ( nb .gt. 0 ) then
-						if ( levelOld(nb) .eq. level ) hasNeighbourAtLevel = .true.
-					end if
-				end if
-			end do
-			if (hasNeighbourAtLevel) then
-				associate(element => mesh % elements(eID))
-				element % MLevel = level-1
-				counterOMP (:,eID) = 0
-				counterOMP (level-1,eID) = 1
-				element % MLevelwN = level
-				Level_eID_wN(eID)  = level
-				Level_eID(eID) = element % MLevel
-				counterOMPN (:,eID)= 0
-				counterOMPN (level,eID) = 1
-				end associate
-			end if 
-		end if 
-	  end do 
+         if (levelOld(eID).lt.(level)) then
+            hasNeighbourAtLevel = .false.
+            do i = 1, 6
+               fID = mesh % elements(eID) % faceIDs(i)
+               if ( mesh % faces(fID) % faceType .eq. HMESH_MPI ) then
+                  if ( haveRemote ) then
+                     if ( self % MPIfaceRemoteLevel(1,fID) .eq. level ) hasNeighbourAtLevel = .true.
+                  end if
+               else
+                  if ( mesh % faces(fID) % elementIDs(1) .eq. eID ) then
+                     nb = mesh % faces(fID) % elementIDs(2)    ! 0 (HMESH_NONE) on boundary faces
+                  else
+                     nb = mesh % faces(fID) % elementIDs(1)
+                  end if
+                  if ( nb .gt. 0 ) then
+                     if ( levelOld(nb) .eq. level ) hasNeighbourAtLevel = .true.
+                  end if
+               end if
+            end do
+            if (hasNeighbourAtLevel) then
+               associate(element => mesh % elements(eID))
+                  element % MLevel = level-1
+                  counterOMP (:,eID) = 0
+                  counterOMP (level-1,eID) = 1
+                  element % MLevelwN = level
+                  Level_eID_wN(eID)  = level
+                  Level_eID(eID) = element % MLevel
+                  counterOMPN (:,eID)= 0
+                  counterOMPN (level,eID) = 1
+               end associate
+            end if
+         end if
+      end do
 !$omp end do
 !$omp end parallel
 
@@ -7243,22 +7245,22 @@ call elementMPIList % destruct
 !  Send Global Element ID Level
 !------------------------------------------------------------------------
    subroutine MultiLevel_RK_SendGlobID(self, mesh, globIDLevelPartition, nElementLevelPartition)
-    use MPI_Process_Info
-	implicit none
-	!-arguments-----------------------------------------
-	class(MultiLevel_RK), target  , intent(inout)   :: self
-	type (HexMesh)                                  :: mesh 
-	integer                       , intent(out)     :: globIDLevelPartition(mesh % no_of_allElements)
-	integer                       , intent(out)     :: nElementLevelPartition(self % nLevel)
-	
-	!-local variable-----------------------------------------
-	integer          :: eID
+      use MPI_Process_Info
+      implicit none
+      !-arguments-----------------------------------------
+      class(MultiLevel_RK), target  , intent(inout)   :: self
+      type (HexMesh)                                  :: mesh
+      integer                       , intent(out)     :: globIDLevelPartition(mesh % no_of_allElements)
+      integer                       , intent(out)     :: nElementLevelPartition(self % nLevel)
 
-	nElementLevelPartition=0
-	do eID=1,mesh % no_of_elements
-		globIDLevelPartition(mesh % elements (eID) % globID) = mesh % elements (eID) % MLevelwN
-		nElementLevelPartition(mesh % elements (eID) % MLevelwN) = nElementLevelPartition(mesh % elements (eID) % MLevelwN) + 1
-	end do 
+      !-local variable-----------------------------------------
+      integer          :: eID
+
+      nElementLevelPartition=0
+      do eID=1,mesh % no_of_elements
+         globIDLevelPartition(mesh % elements (eID) % globID) = mesh % elements (eID) % MLevelwN
+         nElementLevelPartition(mesh % elements (eID) % MLevelwN) = nElementLevelPartition(mesh % elements (eID) % MLevelwN) + 1
+      end do
 
    end subroutine MultiLevel_RK_SendGlobID
 !------------------------------------------------------------------------
@@ -7266,70 +7268,70 @@ call elementMPIList % destruct
 !  followed by "MLevel MLevelwN" per element in global element order (read by horses2plt)
 !------------------------------------------------------------------------
    subroutine MultiLevel_RK_ExportLevels(self, mesh, fileName)
-    use MPI_Process_Info
-	implicit none
-	!-arguments-----------------------------------------
-	class(MultiLevel_RK), target  , intent(in)      :: self
-	type (HexMesh)                , intent(in)      :: mesh
-	character(len=*)              , intent(in)      :: fileName
-	!-local variable-----------------------------------------
-	integer                    :: eID, fID, ierr
-	integer, allocatable       :: levels(:,:)
-	character(len=LINE_LENGTH) :: levelFileName
+      use MPI_Process_Info
+      implicit none
+      !-arguments-----------------------------------------
+      class(MultiLevel_RK), target  , intent(in)      :: self
+      type (HexMesh)                , intent(in)      :: mesh
+      character(len=*)              , intent(in)      :: fileName
+      !-local variable-----------------------------------------
+      integer                    :: eID, fID, ierr
+      integer, allocatable       :: levels(:,:)
+      character(len=LINE_LENGTH) :: levelFileName
 
-	allocate(levels(2, mesh % no_of_allElements))
-	levels = 0
-	do eID = 1, mesh % no_of_elements
-		levels(:, mesh % elements(eID) % globID) = [mesh % elements(eID) % MLevel, mesh % elements(eID) % MLevelwN]
-	end do
+      allocate(levels(2, mesh % no_of_allElements))
+      levels = 0
+      do eID = 1, mesh % no_of_elements
+         levels(:, mesh % elements(eID) % globID) = [mesh % elements(eID) % MLevel, mesh % elements(eID) % MLevelwN]
+      end do
 #ifdef _HAS_MPI_
-	if ( MPI_Process % doMPIAction ) then
-		call mpi_allreduce(MPI_IN_PLACE, levels, size(levels), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
-	end if
+      if ( MPI_Process % doMPIAction ) then
+         call mpi_allreduce(MPI_IN_PLACE, levels, size(levels), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+      end if
 #endif
 
-	if ( MPI_Process % isRoot ) then
-		levelFileName = "./MESH/" // trim(removePath(getFileName(fileName))) // ".lmesh"
-		open(newunit = fID, file = trim(levelFileName), action = 'write')
-		write(fID,*) mesh % no_of_allElements
-		do eID = 1, mesh % no_of_allElements
-			write(fID,*) levels(:, eID)
-		end do
-		close(fID)
-	end if
+      if ( MPI_Process % isRoot ) then
+         levelFileName = "./MESH/" // trim(removePath(getFileName(fileName))) // ".lmesh"
+         open(newunit = fID, file = trim(levelFileName), action = 'write')
+         write(fID,*) mesh % no_of_allElements
+         do eID = 1, mesh % no_of_allElements
+            write(fID,*) levels(:, eID)
+         end do
+         close(fID)
+      end if
 
-	deallocate(levels)
+      deallocate(levels)
 
    end subroutine MultiLevel_RK_ExportLevels
-   
+
 !------------------------------------------------------------------------
-!  Destruct 
+!  Destruct
 !------------------------------------------------------------------------
    subroutine MultiLevel_RK_Destruct(self)
-	implicit none
-	!-arguments-----------------------------------------
-	class(MultiLevel_RK), target  , intent(inout)   :: self
-	
-	if( allocated(self % ML_GlobalLevel) ) deallocate(self % ML_GlobalLevel)
-	if( allocated(self % ML_Level))        deallocate(self % ML_Level)
-	if( allocated(self % MLIter) )         deallocate(self % MLIter)
-	if( allocated(self % MLIter_eID) )     deallocate(self % MLIter_eID)
-	if( allocated(self % MLIter_fID) )     deallocate(self % MLIter_fID)
-	if( allocated(self % MLIter_fID_Interior))  deallocate(self % MLIter_fID_Interior)
-	if( allocated(self % MLIter_fID_Boundary) ) deallocate(self % MLIter_fID_Boundary)
-	if( allocated(self % MLIter_fID_MPI) )  deallocate(self % MLIter_fID_MPI)
-	if( allocated(self % MLIter_eID_Seq) )  deallocate(self % MLIter_eID_Seq)
-	if( allocated(self % MLIter_eIDN) )     deallocate(self % MLIter_eIDN)
-	if( allocated(self % MLIter_eIDN_Seq) ) deallocate(self % MLIter_eIDN_Seq)
-	if( allocated(self % MLIter_fIDN_Interior) ) deallocate(self % MLIter_fIDN_Interior)
-	if( allocated(self % MLIter_fIDN_Boundary) ) deallocate(self % MLIter_fIDN_Boundary)
+      implicit none
+      !-arguments-----------------------------------------
+      class(MultiLevel_RK), target  , intent(inout)   :: self
 
-    if( allocated(self % MLIter_eID_MPI)  ) deallocate(self % MLIter_eID_MPI)
-    if( allocated(self % MLIter_fID_MPI)  ) deallocate(self % MLIter_fID_MPI)
-    if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
-    if( allocated(self % MLIter_fIDN_MPI) ) deallocate(self % MLIter_fIDN_MPI)
-    if( allocated(self % MPIfaceRemoteLevel) ) deallocate(self % MPIfaceRemoteLevel)
-	
+      if( allocated(self % ML_GlobalLevel) ) deallocate(self % ML_GlobalLevel)
+      if( allocated(self % ML_Level))        deallocate(self % ML_Level)
+      if( allocated(self % MLIter) )         deallocate(self % MLIter)
+      if( allocated(self % MLIter_eID) )     deallocate(self % MLIter_eID)
+      if( allocated(self % MLIter_fID) )     deallocate(self % MLIter_fID)
+      if( allocated(self % MLIter_fID_Interior))  deallocate(self % MLIter_fID_Interior)
+      if( allocated(self % MLIter_fID_Boundary) ) deallocate(self % MLIter_fID_Boundary)
+      if( allocated(self % MLIter_fID_MPI) )  deallocate(self % MLIter_fID_MPI)
+      if( allocated(self % MLIter_eID_Seq) )  deallocate(self % MLIter_eID_Seq)
+      if( allocated(self % MLIter_eIDN) )     deallocate(self % MLIter_eIDN)
+      if( allocated(self % MLIter_eIDN_Seq) ) deallocate(self % MLIter_eIDN_Seq)
+      if( allocated(self % MLIter_fIDN_Interior) ) deallocate(self % MLIter_fIDN_Interior)
+      if( allocated(self % MLIter_fIDN_Boundary) ) deallocate(self % MLIter_fIDN_Boundary)
+
+      if( allocated(self % MLIter_eID_MPI)  ) deallocate(self % MLIter_eID_MPI)
+      if( allocated(self % MLIter_fID_MPI)  ) deallocate(self % MLIter_fID_MPI)
+      if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
+      if( allocated(self % MLIter_fIDN_MPI) ) deallocate(self % MLIter_fIDN_MPI)
+      if( allocated(self % MPIfaceRemoteLevel) ) deallocate(self % MPIfaceRemoteLevel)
+
    end subroutine MultiLevel_RK_Destruct
 !
 !////////////////////////////////////////////////////////////////////////
