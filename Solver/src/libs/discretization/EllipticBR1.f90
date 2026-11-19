@@ -234,7 +234,7 @@ module EllipticBR1
 			 end do
 !$omp end do 
 
-         call RotateBackRotaryFacesGradientFlux(mesh, mesh % MLRK % MLIter(locLevelm1,3), mesh % MLRK % MLIter_fID_Interior(1:mesh % MLRK % MLIter(locLevelm1,3)))
+         call RotateBackRotaryFacesGradientFlux(mesh, mesh % MLRK % MLIter(locLevel,3), mesh % MLRK % MLIter_fID_Interior(1:mesh % MLRK % MLIter(locLevel,3)))
 !
 !$omp do schedule(runtime) private(eID)
 			 do iEl = 1, mesh % MLRK % MLIter(locLevel,9) 
