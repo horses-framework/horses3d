@@ -5,8 +5,6 @@ name: MMS convergence
 # so a sweep fits in the 6-hour limit of a job; a final job per case merges them.
 
 on:
-  push:    # until the workflow shows in the Actions tab of this repository
-    branches: [feature/automated-mms-workflow]
   workflow_dispatch:
     inputs:
       case:
@@ -49,7 +47,7 @@ jobs:
 
       - id: lists
         env:
-          CASE: ${{ inputs.case || 'all' }}
+          CASE: ${{ inputs.case }}
           P: ${{ inputs.P }}
           MESHES: ${{ inputs.meshes }}
         run: |
@@ -87,7 +85,7 @@ jobs:
       CASE: ${{ matrix.case }}
       ORDER: ${{ matrix.P }}
       MESHES: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].meshes }}
-      CHECK: ${{ github.event_name == 'push' || inputs.check }}
+      CHECK: ${{ inputs.check }}
       OMP_NUM_THREADS: 4
     steps:
       - uses: actions/checkout@v7
