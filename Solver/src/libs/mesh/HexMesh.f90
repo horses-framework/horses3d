@@ -6852,13 +6852,13 @@ call elementMPIList % destruct
       real (kind=RP)                , intent(in)      :: maxCFLInterf
 
       !-local variable-----------------------------------------
-      integer          :: eID, level, levelOld, i, j, fID, sideID
-      integer          :: counter(1:self%nLevel), nInterior, nBoundary, nFace, nMPIface
+      integer          :: eID, level, levelOld, i, j, fID
+      integer          :: nInterior, nBoundary, nFace, nMPIface
       integer, allocatable :: Level_eID(:), Level_eID_wN(:), Level_eID_wN_BUFF(:)
       integer, allocatable :: faceFlag(:,:)
       integer          :: iterations(self%nLevel+1,ML_NCOLUMNS)
       integer          :: ierr                     ! Error for MPI calls
-      real(kind=RP)    :: perLevel, cflLevel, dtRatio, cfl
+      real(kind=RP)    :: dtRatio, cfl
       real(kind=RP)    :: maxc, minc
       real(kind=RP)    :: cfl_cutoff(self%nLevel-1)
       integer, allocatable :: counterOMP(:,:), counterOMPN(:,:)
@@ -6885,7 +6885,7 @@ call elementMPIList % destruct
 !
 !     Determine the level of each element
 !     ------------------------------------------------------------
-!$omp parallel shared(self,mesh,CFL_Cut, dtRatio, counter, counterOMP, counterOMPN, maxCFLInterf, cfl_cutoff, Level_eID, Level_eID_wN) default(private)
+!$omp parallel shared(self,mesh,CFL_Cut, dtRatio, counterOMP, counterOMPN, maxCFLInterf, cfl_cutoff, Level_eID, Level_eID_wN) default(private)
 !$omp do schedule(runtime)
       do eID = 1, SIZE(mesh % elements)
          ! Level from the CFL cut-offs, at most nLevel
@@ -6954,7 +6954,6 @@ call elementMPIList % destruct
          ! Interior, boundary or MPI face
          do j=1,6
             fID    = mesh % elements(eID) % faceIDs(j)
-            sideID = mesh % elements(eID) % faceSide(j)
 
             ! Order of faceID from highest to lowest level
             if (faceFlag(fID,1).eq.0) then
@@ -6962,16 +6961,14 @@ call elementMPIList % destruct
                self % MLIter_fID(nFace) = fID
                faceFlag(fID,1) = 1
             end if
-            ! Order of interiorFace, boundaryFace and MPIFace from highest to lowest level
+            ! Interior and boundary faces are only counted here: their lists are filtered from the sorted MLIter_fID below
             if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
                if (faceFlag(fID,2).eq.0) then
                   nInterior = nInterior+1
-                  self % MLIter_fID_Interior(nInterior) = fID
                   faceFlag(fID,2) = 1
                end if
             elseif (mesh % faces(fID) % FaceType .eq. HMESH_BOUNDARY) then
                nBoundary = nBoundary+1
-               self % MLIter_fID_Boundary(nBoundary) = fID
             elseif (mesh % faces(fID) % FaceType .eq. HMESH_MPI) then
                nMPIface = nMPIface + 1
                self % MLIter_fID_MPI(nMPIface) = fID
@@ -7023,7 +7020,6 @@ call elementMPIList % destruct
 ! Elements with MPI faces: counts per level and lists; number of elements per level over all ranks
 #ifdef _HAS_MPI_
       if ( MPI_Process % doMPIAction ) then
-         counter(1:self % nLevel)=0
          do i = 1, size(mesh % elements_mpi)
             eID = mesh % elements_mpi(i)
             Level_eID(i) = mesh % elements(eID) % MLevel
