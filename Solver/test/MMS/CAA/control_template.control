@@ -6,12 +6,10 @@
                        Restart file name = {SOLUTION_FILE}
 !-------------------- Physical parameters:-
                           Flow equations = "NS"
-                             Mach number = 0.4
+                             Mach number = 0.3
                              Base solver = ns
                                    qBase = uniform
-                            qBase vector = [1.0, 0.3, 0.2, -0.1, 0.7142857142857143, 1.0]
-                       Lamb vector stats = uniform
-                      Lamb vector vector = [0.0, 0.0, 0.0]
+                            qBase vector = [1.2, 0.3, 0.2, -0.1, 1.2857142857142858, 1.5]
 !------------------------- Discretization:-
                         Polynomial order = {P}
                     Discretization nodes = Gauss-Lobatto
@@ -19,7 +17,6 @@
 !----------------------- Time integration:-
                         Time integration = Explicit
                          Explicit method = RK3
-  Compute time derivative after timestep = .true.
                          Simulation type = time-accurate
                    Convergence tolerance = 1.0d-10
                            Autosave mode = iteration

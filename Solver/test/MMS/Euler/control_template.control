@@ -7,18 +7,14 @@
 !-------------------- Physical parameters:-
                           Flow equations = "Euler"
                              Mach number = 0.3
-                               AOA theta = 0.0
-                                 AOA phi = 0.0
 !------------------------- Discretization:-
                         Polynomial order = {P}
-                    Discretization nodes = Gauss-Lobatto
-                          Riemann solver = Matrix dissipation
-                 Inviscid discretization = Split-form
-                               Averaging = Chandrasekar
+                    Discretization nodes = Gauss
+                          Riemann solver = Roe
+                 Inviscid discretization = Standard
 !----------------------- Time integration:-
                         Time integration = Explicit
                          Explicit method = RK3
-  Compute time derivative after timestep = .true.
                          Simulation type = time-accurate
                    Convergence tolerance = 1.0d-10
                            Autosave mode = iteration

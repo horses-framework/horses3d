@@ -4,13 +4,10 @@
                       Solution file name = {SOLUTION_FILE}
                                  Restart = .false.
                        Restart file name = {SOLUTION_FILE}
-              Save gradients to solution = .false.
 !-------------------- Physical parameters:-
                           Flow equations = "NS"
                              Mach number = 0.3
                          Reynolds number = 10.0
-                               AOA theta = 0.0
-                                 AOA phi = 0.0
 !------------------------- Discretization:-
                         Polynomial order = {P}
                     Discretization nodes = Gauss-Lobatto
@@ -21,7 +18,6 @@
 !----------------------- Time integration:-
                         Time integration = Explicit
                          Explicit method = RK3
-  Compute time derivative after timestep = .true.
                          Simulation type = time-accurate
                    Convergence tolerance = 1.0d-10
                            Autosave mode = iteration

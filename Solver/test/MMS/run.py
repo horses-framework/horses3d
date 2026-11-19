@@ -171,13 +171,16 @@ def orders(rows, P):
 
 
 def report(case, rows, ps, title):
-    variables = ["total"] + generate.CASES[case][2]
+    variables = generate.CASES[case][2]
     lines = [f"MMS {case}: {title}", "",
-             "| P | N | NDOF | L2 total | " + " | ".join(f"order {v}" for v in variables) + " |",
-             "|---" * (4 + len(variables)) + "|"]
+             "| P | N | NDOF | L2 total | order total | lowest order | " + " | ".join(f"order {v}" for v in variables) + " |",
+             "|---" * (6 + len(variables)) + "|"]
     for P in ps:
         for r, eoc in orders(rows, P):
-            cells = [f"{eoc[f'L2_{v}']:.2f}" if f"L2_{v}" in eoc else "" for v in variables]
+            each = {v: eoc[f"L2_{v}"] for v in variables if f"L2_{v}" in eoc}    # exact variables have no order
+            low = min(each, key=each.get) if each else None
+            cells = ([f"{eoc['L2_total']:.2f}" if "L2_total" in eoc else "", f"{each[low]:.2f} ({low})" if low else ""]
+                     + [f"{each[v]:.2f}" if v in each else "" for v in variables])
             lines.append(f"| {P} | {r['N']} | {r['NDOF']} | {r['L2_total']:.4e} | " + " | ".join(cells) + " |")
     text = "\n".join(lines) + "\n"
     print("\n" + text)
