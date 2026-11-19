@@ -1654,12 +1654,12 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 					k(nLevel) = k3							! Update the counter level-stages for nLevel 
 !           		Update G_NS/G_CH from QDot - Depend on level etc
 !$omp parallel do schedule(runtime)	private(id, corrector)	
-					do i = 1, MLIter(locLevel,1)            ! Loop all elements at the active level to update the G / Qdot contribution
+					do i = 1, MLIter(locLevel,ML_EID)            ! Loop all elements at the active level to update the G / Qdot contribution
 						id = MLIter_eID(i)					! ID of true element at partition
 	  
 						if (locLevel.eq.nLevel) then		! Variable a, weight of the previous Qdot contribution
 							corrector = a(k(nLevel))		
-					    elseif(i.gt.MLIter(min(locLevel+1,nLevel),1)) then 
+					    elseif(i.gt.MLIter(min(locLevel+1,nLevel),ML_EID)) then 
 							corrector = a(k(locLevel))		! If locLevel is j then all element with level > j will be on first stage corrector=0
 						else
 							corrector = 0.0_RP
@@ -1684,10 +1684,10 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 					end do 
 
 !$omp parallel do schedule(runtime)	private(id, corrector)			
-					do i = 1, MLIter(1,1)
+					do i = 1, MLIter(1,ML_EID)
 						do j = nLevel, 1, -1
 						    corrector = cL(j)
-							if (i.le.MLIter(j,1)) exit
+							if (i.le.MLIter(j,ML_EID)) exit
 						end do
 						
 						id = MLIter_eID(i)

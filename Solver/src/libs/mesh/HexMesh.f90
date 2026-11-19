@@ -37,6 +37,8 @@ MODULE HexMeshClass
       public      HexMesh
       public      Neighbor_t, NUM_OF_NEIGHBORS
 	  public      MultiLevel_RK
+      public      ML_EID, ML_FID, ML_FID_INTERIOR, ML_FID_BOUNDARY, ML_EID_SEQ, ML_EID_MPI, ML_FID_MPI
+      public      ML_EIDN, ML_EIDN_SEQ, ML_EIDN_MPI, ML_FIDN_INTERIOR, ML_FIDN_BOUNDARY, ML_FIDN_MPI, ML_NCOLUMNS
 
       public      GetOriginalNumberOfFaces
       public      ConstructFaces, ConstructPeriodicFaces
@@ -46,7 +48,23 @@ MODULE HexMeshClass
 !     Mesh definition
 !     ---------------
 !
-!     Multi-level RK3: levels and per-level lists, routines in the "Multi-level Runge-Kutta" section below
+!     Multi-level RK3: levels and per-level lists, routines in the "Multi-level Runge-Kutta" section below.
+!     Columns of MLIter: MLIter(L, col) is the number of entries of levels L..nLevel in the list named by col
+!     (the lists are sorted from the highest level down, so they are the first MLIter(L, col) entries).
+      integer, parameter :: ML_EID           = 1    ! MLIter_eID
+      integer, parameter :: ML_FID           = 2    ! MLIter_fID
+      integer, parameter :: ML_FID_INTERIOR  = 3    ! MLIter_fID_Interior
+      integer, parameter :: ML_FID_BOUNDARY  = 4    ! MLIter_fID_Boundary
+      integer, parameter :: ML_EID_SEQ       = 5    ! MLIter_eID_Seq
+      integer, parameter :: ML_EID_MPI       = 6    ! MLIter_eID_MPI
+      integer, parameter :: ML_FID_MPI       = 7    ! MLIter_fID_MPI
+      integer, parameter :: ML_EIDN          = 8    ! MLIter_eIDN
+      integer, parameter :: ML_EIDN_SEQ      = 9    ! MLIter_eIDN_Seq
+      integer, parameter :: ML_EIDN_MPI      = 10   ! MLIter_eIDN_MPI
+      integer, parameter :: ML_FIDN_INTERIOR = 11   ! MLIter_fIDN_Interior
+      integer, parameter :: ML_FIDN_BOUNDARY = 12   ! MLIter_fIDN_Boundary
+      integer, parameter :: ML_FIDN_MPI      = 13   ! MLIter_fIDN_MPI
+      integer, parameter :: ML_NCOLUMNS      = 13
 	  type MultiLevel_RK
 	     integer               :: nLevel 
 		 integer               :: maxLevel
@@ -54,7 +72,7 @@ MODULE HexMeshClass
 		 real(kind=RP)         :: interfaceTol = 1.0e-4_RP   ! Multiphase: a node with interfaceTol <= c <= 1-interfaceTol is on the interface
 		 integer, allocatable  :: ML_GlobalLevel(:)        ! Number of Multi-Level Timestep Element - Global - in TimeIntegrator.f90 and DGSEMClass.f90
 		 integer, allocatable  :: ML_Level(:)              ! Number of Multi-Level Timestep Element - Partition 
-		 integer, allocatable  :: MLIter(:,:)              ! Number of ML Iteration - partition (L1 include L2 & L3, etc); size(nLevel, 13); columns 11-13: faces of the eIDN elements (interior, boundary, MPI) 
+		 integer, allocatable  :: MLIter(:,:)              ! Cumulative counts per level of the lists below; size (nLevel, ML_NCOLUMNS), columns ML_*
 		 integer, allocatable  :: MLIter_eID(:)            ! Sorted Element ID from nLevel to Level 1 (eID) size is (mesh%element)
 		 integer, allocatable  :: MLIter_fID(:)            ! Element ID for each level iteration (fID) size is (mesh% faces)
 		 integer, allocatable  :: MLIter_fID_Interior(:)   ! Interior Face ID for each level iteration (fID) size is (mesh%faces_interior)
@@ -65,9 +83,9 @@ MODULE HexMeshClass
 		 integer, allocatable  :: MLIter_eIDN(:)            ! Sorted Element ID from nLevel to Level 1 (eID) size is (mesh%element)
 		 integer, allocatable  :: MLIter_eIDN_Seq(:)        ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
 		 integer, allocatable  :: MLIter_eIDN_MPI(:)        ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
-		 integer, allocatable  :: MLIter_fIDN_Interior(:)   ! Interior faces of the eIDN elements, highest level first (counts in MLIter(:,11))
-		 integer, allocatable  :: MLIter_fIDN_Boundary(:)   ! Boundary faces of the eIDN elements, highest level first (counts in MLIter(:,12))
-		 integer, allocatable  :: MLIter_fIDN_MPI(:)        ! MPI faces of the eIDN elements, highest level first (counts in MLIter(:,13))
+		 integer, allocatable  :: MLIter_fIDN_Interior(:)   ! Interior faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_INTERIOR))
+		 integer, allocatable  :: MLIter_fIDN_Boundary(:)   ! Boundary faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_BOUNDARY))
+		 integer, allocatable  :: MLIter_fIDN_MPI(:)        ! MPI faces of the eIDN elements, highest level first (counts in MLIter(:,ML_FIDN_MPI))
 		 integer, allocatable  :: MPIfaceRemoteLevel(:,:)   ! (MLevel, MLevelwN) of the element across each MPI face, by fID
 		 contains
 			procedure :: construct      => MultiLevel_RK_Construct
@@ -1045,7 +1063,7 @@ slavecoord:             DO l = 1, 4
 			if (present(Level)) then
 				locLevel = Level
 !$omp do schedule(runtime) private(fIDs, eID)
-				do lID = 1, self % MLRK % MLIter(locLevel,8)
+				do lID = 1, self % MLRK % MLIter(locLevel,ML_EIDN)
 				   eID = self % MLRK % MLIter_eIDN(lID)
 
 				   compute_element = .true.
@@ -1108,7 +1126,7 @@ slavecoord:             DO l = 1, 4
             locLevel = Level
 			
 !$omp do schedule(runtime) private(fIDs, eID)
-			 do lID = 1, self % MLRK % MLIter(locLevel,8)
+			 do lID = 1, self % MLRK % MLIter(locLevel,ML_EIDN)
 				eID = self % MLRK % MLIter_eIDN(lID)
 				fIDs = self % elements(eID) % faceIDs
 				call self % elements(eID) % ProlongGradientsToFaces(nGradEqn, &
@@ -6754,7 +6772,7 @@ call elementMPIList % destruct
 	if( allocated(self % MLIter_fIDN_Boundary) ) deallocate(self % MLIter_fIDN_Boundary)
 
 	!-allocate-----------------------------------------  
-    allocate(self % ML_GlobalLevel(nLevel), self % ML_Level(nLevel), self % MLIter(nLevel,13))
+    allocate(self % ML_GlobalLevel(nLevel), self % ML_Level(nLevel), self % MLIter(nLevel,ML_NCOLUMNS))
     allocate(self % MLIter_eID(mesh % no_of_elements))
 	allocate(self % MLIter_fID(mesh % no_of_faces))  ! Each face has 2 sides, except boundaries
 	allocate(self % MLIter_fID_Interior(size(mesh % faces_interior)))
@@ -6773,15 +6791,15 @@ call elementMPIList % destruct
 	self % ML_GlobalLevel = mesh % no_of_allElements
 	self % ML_Level       = mesh % no_of_elements
 	self % MLIter         = 0
-	self % MLIter(1,1)    = mesh % no_of_elements
-	self % MLIter(1,2)    = size(mesh % faces)
-	self % MLIter(1,3)    = size(mesh % faces_interior)
-	self % MLIter(1,4)    = size(mesh % faces_boundary)
-	self % MLIter(1,5)    = size(mesh % elements_sequential)
-	self % MLIter(1,8)    = mesh % no_of_elements
-	self % MLIter(1,9)    = size(mesh % elements_sequential)
-	self % MLIter(1,11)   = size(mesh % faces_interior)
-	self % MLIter(1,12)   = size(mesh % faces_boundary)
+	self % MLIter(1,ML_EID)    = mesh % no_of_elements
+	self % MLIter(1,ML_FID)    = size(mesh % faces)
+	self % MLIter(1,ML_FID_INTERIOR)    = size(mesh % faces_interior)
+	self % MLIter(1,ML_FID_BOUNDARY)    = size(mesh % faces_boundary)
+	self % MLIter(1,ML_EID_SEQ)    = size(mesh % elements_sequential)
+	self % MLIter(1,ML_EIDN)    = mesh % no_of_elements
+	self % MLIter(1,ML_EIDN_SEQ)    = size(mesh % elements_sequential)
+	self % MLIter(1,ML_FIDN_INTERIOR)   = size(mesh % faces_interior)
+	self % MLIter(1,ML_FIDN_BOUNDARY)   = size(mesh % faces_boundary)
 	self % MLIter_eID (:) = [(i, i=1,size(mesh % elements))]
 	self % MLIter_fID (:) = [(i, i=1,size(mesh % faces))]
 	self % MLIter_fID_Interior       = mesh % faces_interior
@@ -6804,10 +6822,10 @@ call elementMPIList % destruct
 		 allocate(self % MLIter_eIDN_MPI(size(mesh % elements_mpi)))
 		 allocate(self % MLIter_fIDN_MPI(size(mesh % faces_mpi)))
 		 allocate(self % MPIfaceRemoteLevel(2, size(mesh % faces)))
-		 self % MLIter(1,6)           = size(mesh % elements_mpi)
-		 self % MLIter(1,7)           = size(mesh % faces_mpi)
-		 self % MLIter(1,10)          = size(mesh % elements_mpi)
-		 self % MLIter(1,13)          = size(mesh % faces_mpi)
+		 self % MLIter(1,ML_EID_MPI)           = size(mesh % elements_mpi)
+		 self % MLIter(1,ML_FID_MPI)           = size(mesh % faces_mpi)
+		 self % MLIter(1,ML_EIDN_MPI)          = size(mesh % elements_mpi)
+		 self % MLIter(1,ML_FIDN_MPI)          = size(mesh % faces_mpi)
          self % MLIter_eID_MPI        = mesh % elements_mpi
 		 self % MLIter_fID_MPI        = mesh % faces_mpi
 		 self % MLIter_eIDN_MPI       = mesh % elements_mpi
@@ -6836,7 +6854,7 @@ call elementMPIList % destruct
     integer          :: counter(1:self%nLevel), nInterior, nBoundary, nFace, nMPIface
 	integer, allocatable :: Level_eID(:), Level_eID_wN(:), Level_eID_wN_BUFF(:)
 	integer, allocatable :: faceFlag(:,:)
-	integer          :: iterations(self%nLevel+1,13)
+	integer          :: iterations(self%nLevel+1,ML_NCOLUMNS)
 	integer          :: ierr                     ! Error for MPI calls
 	real(kind=RP)    :: perLevel, cflLevel, dtRatio, cfl
 	real(kind=RP)    :: maxc, minc
@@ -6905,9 +6923,9 @@ call elementMPIList % destruct
 	  call mergeSortDescendInt(Level_eID_wN,self % MLIter_eIDN)
   
 	  do i = 1, self % nLevel
-		self % MLIter(i,1) = sum(counterOMP(i:self % nLevel,:))    ! Elements
+		self % MLIter(i,ML_EID) = sum(counterOMP(i:self % nLevel,:))    ! Elements
 		self % ML_Level(i) = sum(counterOMP(i,:))
-		self % MLIter(i,8) = sum(counterOMPN(i:self % nLevel,:))   ! Elements + neighbours   
+		self % MLIter(i,ML_EIDN) = sum(counterOMPN(i:self % nLevel,:))   ! Elements + neighbours   
 	  end do
 	  
 	  deallocate(counterOMP, counterOMPN)
@@ -6920,15 +6938,15 @@ call elementMPIList % destruct
 	  nFace = 0
 	  nMPIface = 0 
 	  
-	  do i = 1, self % MLIter(1,1)
+	  do i = 1, self % MLIter(1,ML_EID)
 		eID   = self % MLIter_eID(i)
 		level = Level_eID (i)
 		
 		if (level .ne. levelOld) then
-		    self % MLIter(1:levelOld,2) = nFace
-			self % MLIter(1:levelOld,3) = nInterior
-			self % MLIter(1:levelOld,4) = nBoundary
-			self % MLIter(1:levelOld,7) = nMPIface
+		    self % MLIter(1:levelOld,ML_FID) = nFace
+			self % MLIter(1:levelOld,ML_FID_INTERIOR) = nInterior
+			self % MLIter(1:levelOld,ML_FID_BOUNDARY) = nBoundary
+			self % MLIter(1:levelOld,ML_FID_MPI) = nMPIface
 			levelOld = level
 		end if 
 		
@@ -6959,18 +6977,18 @@ call elementMPIList % destruct
 		   end if 
 		end do
 	  end do
-	  self % MLIter(1:level,2) = nFace
-	  self % MLIter(1:level,3) = nInterior
-	  self % MLIter(1:level,4) = nBoundary
-	  self % MLIter(1:level,7) = nMPIface
+	  self % MLIter(1:level,ML_FID) = nFace
+	  self % MLIter(1:level,ML_FID_INTERIOR) = nInterior
+	  self % MLIter(1:level,ML_FID_BOUNDARY) = nBoundary
+	  self % MLIter(1:level,ML_FID_MPI) = nMPIface
 	  
 	  ! ! Sequential elements
 	  do i = 1, size(mesh % elements_sequential)
 	    eID = mesh % elements_sequential(i) 
 		Level_eID(i) = mesh % elements(eID) % MLevel
 		Level_eID_wN(i) = Level_eID_wN_BUFF(eID)
-		self % MLIter(1:Level_eID(i),5) = self % MLIter(1:Level_eID(i),5)+1
-		self % MLIter(1:Level_eID_wN(i),9) = self % MLIter(1:Level_eID_wN(i),9)+1
+		self % MLIter(1:Level_eID(i),ML_EID_SEQ) = self % MLIter(1:Level_eID(i),ML_EID_SEQ)+1
+		self % MLIter(1:Level_eID_wN(i),ML_EIDN_SEQ) = self % MLIter(1:Level_eID_wN(i),ML_EIDN_SEQ)+1
 	  end do 
 	  ! The stable sort of MLIter_eID/eIDN already leaves each level in ascending eID, and elements_sequential is
 	  ! ascending, so filtering gives the same lists as sorting them
@@ -6982,11 +7000,11 @@ call elementMPIList % destruct
 	  iterations = 0
 	  iterations(1:self%nLevel,:)=self % MLIter
 	  do i=self % nLevel, 1, -1
-		call mergeSortAscendInt(self % MLIter_fID(iterations(i+1,2)+1:iterations(i,2)))
+		call mergeSortAscendInt(self % MLIter_fID(iterations(i+1,ML_FID)+1:iterations(i,ML_FID)))
 	  end do
 	  nInterior = 0
 	  nBoundary = 0
-	  do i = 1, self % MLIter(1,2)
+	  do i = 1, self % MLIter(1,ML_FID)
 		fID = self % MLIter_fID(i)
 		if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
 			nInterior = nInterior + 1
@@ -7009,8 +7027,8 @@ call elementMPIList % destruct
 			eID = mesh % elements_mpi(i) 
 			Level_eID(i) = mesh % elements(eID) % MLevel
 			Level_eID_wN(i) = Level_eID_wN_BUFF(eID)
-			self % MLIter(1:Level_eID(i),6) = self % MLIter(1:Level_eID(i),6)+1
-			self % MLIter(1:Level_eID_wN(i),10) = self % MLIter(1:Level_eID_wN(i),10)+1
+			self % MLIter(1:Level_eID(i),ML_EID_MPI) = self % MLIter(1:Level_eID(i),ML_EID_MPI)+1
+			self % MLIter(1:Level_eID_wN(i),ML_EIDN_MPI) = self % MLIter(1:Level_eID_wN(i),ML_EIDN_MPI)+1
 		  end do 
 		  call filterElements(self % MLIter_eID , .true., self % MLIter_eID_MPI)
 		  call filterElements(self % MLIter_eIDN, .true., self % MLIter_eIDN_MPI)
