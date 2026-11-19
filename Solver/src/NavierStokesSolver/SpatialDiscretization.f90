@@ -16,6 +16,8 @@ module SpatialDiscretization
       use DGSEMClass
       use ParticlesClass
       use FluidData
+      use RotationData
+      use RotaryFaceRotations
       use VariableConversion, only: NSGradientVariables_STATE, GetNSViscosity, NSGradientVariables_ENTROPY, &
                                     GetGradientValues_f, NSGradientVariables_ENERGY, get_laminar_mu_kappa, &
                                     set_getVelocityGradients
@@ -75,6 +77,8 @@ module SpatialDiscretization
                write(STD_OUT,'(30X,A,A30,1pG10.3)') "->", "Maximum h/N: ", hnmax
                write(STD_OUT,'(/)')
             end if
+
+            call DescribeRotation(CountRotaryFaces(sem % mesh))
    !
    !        Initialize inviscid discretization
    !        ----------------------------------
@@ -264,6 +268,16 @@ module SpatialDiscretization
 		 else 
 			call mesh % ProlongSolutionToFaces(NCONS, HO_Elements)
 		 end if 
+!
+!        Rotary periodic faces: rotate the side 2 states that were just prolonged
+!
+         if (HOElements) then
+            call RotateRotaryFacesSolution(mesh, mesh % HO_Elements)
+         elseif (present(Level)) then
+            call RotateRotaryFacesSolution(mesh, mesh % MLRK % MLIter_eIDN(1:mesh % MLRK % MLIter(Level,8)))
+         else
+            call RotateRotaryFacesSolution(mesh)
+         end if
 !        ----------------
 !        Update MPI Faces
 !        ----------------
@@ -469,6 +483,8 @@ module SpatialDiscretization
          end do
 !$omp end do nowait
 
+         call RotateBackRotaryFacesFlux(mesh, size(mesh % faces_interior), mesh % faces_interior)
+
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_boundary)
             fID = mesh % faces_boundary(iFace)
@@ -506,6 +522,11 @@ module SpatialDiscretization
                call mesh % GatherMPIFacesSolution(NCONS)
             end if
 !$omp end single
+            if ( flowIsNavierStokes ) then
+               call RotateRotaryMPIFacesGradients(mesh)
+            else
+               call RotateRotaryMPIFacesSolution(mesh)
+            end if
 !
 !           Compute viscosity at MPI faces
 !           ------------------------------
@@ -801,6 +822,8 @@ module SpatialDiscretization
          end do
 !$omp end do nowait
 
+         call RotateBackRotaryFacesFlux(mesh, MLIter(locLevel,3), MLIter_fID_Interior(1:MLIter(locLevel,3)))
+
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, MLIter(locLevel,4)
             fID = MLIter_fID_Boundary(iFace)
@@ -838,6 +861,11 @@ module SpatialDiscretization
                call mesh % GatherMPIFacesSolution(NCONS)
             end if
 !$omp end single
+            if ( flowIsNavierStokes ) then
+               call RotateRotaryMPIFacesGradients(mesh)
+            else
+               call RotateRotaryMPIFacesSolution(mesh)
+            end if
 !
 !           Compute viscosity at MPI faces
 !           ------------------------------
@@ -1123,6 +1151,8 @@ module SpatialDiscretization
       end do
 !$omp end do nowait
 
+      call RotateBackRotaryFacesFlux(mesh, size(mesh % HO_FacesInterior), mesh % HO_FacesInterior)
+
 !$omp do schedule(runtime) private(fID)
          do iFace = 1, size(mesh % faces_boundary)
             fID = mesh % faces_boundary(iFace)
@@ -1160,6 +1190,11 @@ module SpatialDiscretization
                call mesh % GatherMPIFacesSolution(NCONS)
             end if
 !$omp end single
+            if ( flowIsNavierStokes ) then
+               call RotateRotaryMPIFacesGradients(mesh)
+            else
+               call RotateRotaryMPIFacesSolution(mesh)
+            end if
 !
 !           Compute viscosity at MPI faces
 !           ------------------------------

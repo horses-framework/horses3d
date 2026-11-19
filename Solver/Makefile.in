@@ -229,15 +229,15 @@ LIBS += -ldl
 ##########################################
 ##  	Select HORSES libraries 	##
 ##########################################
-HORSES_LIBS_GENERAL = ftobject foundation mpiutils ml spectral io physics/multiphase physics/incns physics/navierstokes physics/cahnhilliard physics/spallartalmaras physics/acoustic
+HORSES_LIBS_GENERAL = ftobject foundation mpiutils ml spectral io rotation physics/multiphase physics/incns physics/navierstokes physics/cahnhilliard physics/spallartalmaras physics/acoustic
 HORSES_LIBS_PARTICULAR = physics/common mesh particles sources monitors problemfile discretization jacobian timeintegrator
 HORSES_LIBS=$(HORSES_LIBS_GENERAL) $(HORSES_LIBS_PARTICULAR)
-HORSES_LIBS_iNS=-L$(HOME_DIR)/lib -ltimeintegrator_ins -ljacobian_ins -ldiscretization_ins -lmonitors_ins -lparticles_ins -lmesh_ins -lphysics_ins -lphysicsins -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_ins -lml
-HORSES_LIBS_NS=-L$(HOME_DIR)/lib -ltimeintegrator_ns -ljacobian_ns -ldiscretization_ns -lmonitors_ns -lparticles_ns -lmesh_ns -lphysics_ns -lphysicsns -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_ns -lml
-HORSES_LIBS_NSSA=-L$(HOME_DIR)/lib -ltimeintegrator_nssa -ljacobian_nssa -ldiscretization_nssa -lmonitors_nssa -lparticles_nssa -lmesh_nssa -lphysics_nssa -lphysicsnssa -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_nssa -lml
-HORSES_LIBS_CH=-L$(HOME_DIR)/lib -ltimeintegrator_ch -ljacobian_ch -ldiscretization_ch -lmonitors_ch -lparticles_ch -lmesh_ch -lphysics_ch -lphysicsch -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_ch -lml
-HORSES_LIBS_MU=-L$(HOME_DIR)/lib -ltimeintegrator_mu -ljacobian_mu -ldiscretization_mu -lmonitors_mu -lparticles_mu -lmesh_mu -lphysics_mu -lphysicsch -lphysicsmu -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_mu -lml
-HORSES_LIBS_CAA=-L$(HOME_DIR)/lib -ltimeintegrator_caa -ljacobian_caa -ldiscretization_caa -lmonitors_caa -lparticles_caa -lmesh_caa -lphysics_caa -lphysicscaa -lio -lspectral -lmpiutils -lfoundation -lftobject -lsources_caa -lml
+HORSES_LIBS_iNS=-L$(HOME_DIR)/lib -ltimeintegrator_ins -ljacobian_ins -ldiscretization_ins -lmonitors_ins -lparticles_ins -lmesh_ins -lphysics_ins -lphysicsins -lio -lspectral -lrotation -lmpiutils -lfoundation -lftobject -lsources_ins -lml
+HORSES_LIBS_NS=-L$(HOME_DIR)/lib -ltimeintegrator_ns -ljacobian_ns -ldiscretization_ns -lmonitors_ns -lparticles_ns -lmesh_ns -lphysics_ns -lphysicsns -lio -lspectral -lrotation -lmpiutils -lfoundation -lftobject -lsources_ns -lml
+HORSES_LIBS_NSSA=-L$(HOME_DIR)/lib -ltimeintegrator_nssa -ljacobian_nssa -ldiscretization_nssa -lmonitors_nssa -lparticles_nssa -lmesh_nssa -lphysics_nssa -lphysicsnssa -lio -lspectral -lrotation -lmpiutils -lfoundation -lftobject -lsources_nssa -lml
+HORSES_LIBS_CH=-L$(HOME_DIR)/lib -ltimeintegrator_ch -ljacobian_ch -ldiscretization_ch -lmonitors_ch -lparticles_ch -lmesh_ch -lphysics_ch -lphysicsch -lio -lspectral -lrotation -lmpiutils -lfoundation -lftobject -lsources_ch -lml
+HORSES_LIBS_MU=-L$(HOME_DIR)/lib -ltimeintegrator_mu -ljacobian_mu -ldiscretization_mu -lmonitors_mu -lparticles_mu -lmesh_mu -lphysics_mu -lphysicsch -lphysicsmu -lio -lspectral -lrotation -lmpiutils -lfoundation -lftobject -lsources_mu -lml
+HORSES_LIBS_CAA=-L$(HOME_DIR)/lib -ltimeintegrator_caa -ljacobian_caa -ldiscretization_caa -lmonitors_caa -lparticles_caa -lmesh_caa -lphysics_caa -lphysicscaa -lio -lspectral -lrotation -lmpiutils -lfoundation -lftobject -lsources_caa -lml
 ADDONS=horses2tecplot extractgeometry mergeStatistics tools horsesConverter
 HORSESFLAGS += $(MACROS)
 ADDONSFLAGS += $(MACROS)
