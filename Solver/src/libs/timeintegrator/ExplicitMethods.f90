@@ -1665,14 +1665,12 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 							corrector = 0.0_RP
 						end if 
 						
-						associate(storage => mesh % elements(id) % storage)
 #ifdef FLOW        
-						storage % G_NS = corrector * storage % G_NS  +  storage % QDot
+						mesh % elements(id) % storage % G_NS = corrector * mesh % elements(id) % storage % G_NS  +  mesh % elements(id) % storage % QDot
 #endif
 #if (defined(CAHNHILLIARD)) && (!defined(FLOW))
-						storage % G_CH = corrector * storage % G_CH + storage % cDot
+						mesh % elements(id) % storage % G_CH = corrector * mesh % elements(id) % storage % G_CH + mesh % elements(id) % storage % cDot
 #endif
-						end associate
 					end do 
 !$omp end parallel do	
 				
@@ -1694,15 +1692,13 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 						
 						id = MLIter_eID(i)
 						
-						associate(storage => mesh % elements(id) % storage)
 #ifdef FLOW             
-						storage % Q    = storage % Q  + corrector * deltaT * storage % G_NS
+						mesh % elements(id) % storage % Q    = mesh % elements(id) % storage % Q  + corrector * deltaT * mesh % elements(id) % storage % G_NS
 #endif
 
 #if (defined(CAHNHILLIARD)) && (!defined(FLOW))
-						storage % c    = storage % c + corrector * deltaT * storage % G_CH
+						mesh % elements(id) % storage % c    = mesh % elements(id) % storage % c + corrector * deltaT * mesh % elements(id) % storage % G_CH
 #endif
-						end associate
 					end do
 !$omp end parallel do	
                     if (all(k(2:nLevel) == kmax)) then

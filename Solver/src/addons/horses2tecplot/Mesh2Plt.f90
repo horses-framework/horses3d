@@ -184,7 +184,7 @@ module Mesh2PltModule
 
                 do j = 0, e % Nmesh(2) - 1 ; do i = 0, e % Nmesh(1) - 1
                    cornersFace =  [ ij2localDOF(i,j,e%Nmesh(1:2)), ij2localDOF(i+1,j,e%Nmesh(1:2)), ij2localDOF(i+1,j+1,e%Nmesh(1:2)), ij2localDOF(i,j+1,e%Nmesh(1:2)) ] + firstPoint(eID)
-                   write(fid,*) cornersFace
+                   write(fid,'(*(I12))') cornersFace
                 end do                  ; end do
 
                 end associate
@@ -197,7 +197,7 @@ module Mesh2PltModule
                 do k = 0, e % Nmesh(3) - 1 ; do j = 0, e % Nmesh(2) - 1 ; do i = 0, e % Nmesh(1) - 1
                    corners =  [ ijk2localDOF(i,j,k  ,e%Nmesh), ijk2localDOF(i+1,j,k  ,e%Nmesh), ijk2localDOF(i+1,j+1,k  ,e%Nmesh), ijk2localDOF(i,j+1,k  ,e%Nmesh), &
                                 ijk2localDOF(i,j,k+1,e%Nmesh), ijk2localDOF(i+1,j,k+1,e%Nmesh), ijk2localDOF(i+1,j+1,k+1,e%Nmesh), ijk2localDOF(i,j+1,k+1,e%Nmesh)  ] + firstPoint(eID)
-                   write(fid,*) corners
+                   write(fid,'(*(I12))') corners
                 end do                    ; end do                    ; end do
                 
                 end associate

@@ -296,7 +296,7 @@
 !           Local variables
 !           ---------------
 !
-#if defined(NAVIERSTOKES)
+#if defined(NAVIERSTOKES) && (!(SPALARTALMARAS))
 !           The references are per-level sums of |Q| over all nodes, at the final time. A sponge or particle source
 !           missing in, or leaking into, any level changes them.
             integer,       parameter            :: N_LEVELS = 4
