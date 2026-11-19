@@ -46,6 +46,7 @@ MODULE HexMeshClass
 !     Mesh definition
 !     ---------------
 !
+!     Multi-level RK3: levels and per-level lists, routines in the "Multi-level Runge-Kutta" section below
 	  type MultiLevel_RK
 	     integer               :: nLevel 
 		 integer               :: maxLevel
@@ -6711,7 +6712,18 @@ call elementMPIList % destruct
    
 !
 !////////////////////////////////////////////////////////////////////////
-!  Multi Level Runge-Kutta 
+!  Multi-level Runge-Kutta (MLRK): element levels and per-level lists
+!
+!     MultiLevel_RK_Construct              allocate the lists, all elements in level 1
+!     MultiLevel_RK_Update                 levels from the CFL, then the per-level element and face lists
+!     MultiLevel_RK_ExchangeRemoteLevels   levels of the elements across MPI faces
+!     MultiLevel_RK_CheckNeighbour         neighbour promotion (one level per pass)
+!     MultiLevel_RK_SendGlobID             levels for the level-aware partition
+!     MultiLevel_RK_ExportLevels           level file ./MESH/<solution>.lmesh
+!     MultiLevel_RK_Destruct
+!
+!  The type is defined at the top of this module. Other HexMesh procedures read its lists when called with a
+!  level: ProlongSolutionToFaces, ProlongGradientsToFaces, UpdateMPIFaces*/GatherMPIFaces* (MPIFaceInLevel).
 !////////////////////////////////////////////////////////////////////////
 !------------------------------------------------------------------------
 !  Construct 
@@ -7303,6 +7315,7 @@ call elementMPIList % destruct
    end subroutine MultiLevel_RK_Destruct
 !
 !////////////////////////////////////////////////////////////////////////
+!  End of the multi-level Runge-Kutta section
 !   
 
    subroutine HexMesh_DefineAcousticElements(self, observer, acoustic_sources, d_th, virtualZones)
