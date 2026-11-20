@@ -4,8 +4,9 @@ Plot <case>/errors.csv into <case>/convergence.png.
 
     python3 plot.py CASE
 
-Left: error vs sqrt(NDOF) per mesh. Centre: error vs h = 1/N per P, with the
-least-squares slope (README.md explains the expected orders). Right: error vs P per mesh.
+Left: error vs sqrt(NDOF) per mesh. Centre: error vs h = 2/N per P, with the order
+between the two finest meshes, as in the job summary (README.md explains the expected
+orders). Right: error vs P per mesh.
 """
 import csv
 import sys
@@ -41,7 +42,7 @@ def main(case):
     fig.suptitle(f"MMS convergence, {case}  (dt = {float(rows[-1]['dt']):g}, t_final = {float(rows[-1]['t_final']):g})",
                  fontweight="bold")
     for ax, xlabel, title in [(ax_dof, r"$\sqrt{\mathrm{NDOF}}$", "Error vs DOF"),
-                              (ax_h, r"$h = 1/N$", r"$h$-convergence per $p$"),
+                              (ax_h, r"$h = 2/N$", r"$h$-convergence per $p$"),
                               (ax_p, r"$p$", r"$p$-convergence per mesh")]:
         ax.set_facecolor("#FAFAFA")
         ax.grid(True, which="both", linestyle="--", linewidth=0.5, color="#CCCCCC")
@@ -61,14 +62,15 @@ def main(case):
 
     for P in sorted(by_p):
         ns = sorted(by_p[P])
-        h = np.array([1.0/n for n in ns])
+        h = np.array([2.0/n for n in ns])
         e = np.array([by_p[P][n] for n in ns])
         col = P_COLOURS.get(P, "#333333")
         ax_h.plot(h, e, "o", color=col, mfc="white", mew=2)
         if len(ns) > 1:
-            slope, icpt = np.polyfit(np.log(h), np.log(e), 1)
+            # Line through the two finest meshes, labelled with the order between them
+            order = np.log(e[-2] / e[-1]) / np.log(h[-2] / h[-1])
             hf = np.geomspace(h.min()/1.2, h.max()*1.2, 20)
-            ax_h.plot(hf, np.exp(icpt)*hf**slope, "-", color=col, label=f"$p={P}$: {slope:.2f}")
+            ax_h.plot(hf, e[-1]*(hf/h[-1])**order, "-", color=col, label=f"$p={P}$: {order:.2f} ({ns[-2]}-{ns[-1]})")
 
     for ax in (ax_dof, ax_h, ax_p):
         ax.legend(fontsize=9)

@@ -5,10 +5,12 @@ Write <case>/SETUP/ProblemFile.f90 for an MMS case.
     python3 generate.py NS|Euler|NSSA|iNS|MU|CAA
 
 Each case defines a manufactured solution, periodic on [-1,1]^3, and the
-equations the solver discretises. The solutions are at full amplitude from t = 0,
-with a variable density (or concentration) and a velocity that is neither
-divergence-free nor irrotational, so that every term of the equations is active
-from the first step. The source term is the residual of the manufactured
+equations the solver discretises. The solutions are at full amplitude from t = 0
+and depend on t only through cos t. Except in CAA, the density (concentration in
+MU) varies and the velocity is neither divergence-free nor irrotational, so that
+every term of the equations is active from the first step. In CAA the density
+perturbation is 0, since APE-4 does not evolve it, and the velocity perturbation
+is irrotational. The source term is the residual of the manufactured
 solution, dq/dt + div F - S, emitted without symbolic simplification, with its
 common subexpressions as temporaries. The physical parameters are read from the
 solver at run time, except that NS and NSSA assume the default Sutherland

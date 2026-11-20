@@ -98,12 +98,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libglu1-mesa libgl1 libxcursor1 libxft2 libxinerama1 libfontconfig1
-          pip install sympy gmsh
+          pip install sympy==1.14.0 gmsh==4.15.2
 
       - name: Build HORSES3D
         working-directory: Solver
         run: |
           solver=$(python3 -c "import sys; sys.path.insert(0, 'test/MMS'); from generate import CASES; print(CASES['$CASE'][1])")
+          gfortran --version | head -1
           ./configure
           make $solver COMPILER=gfortran MODE=RELEASE COMM=SEQUENTIAL ENABLE_THREADS=YES WITH_MKL=NO
 
@@ -122,6 +123,7 @@ jobs:
             Solver/test/MMS/${{ matrix.case }}/errors.csv
             Solver/test/MMS/${{ matrix.case }}/CONTROL/
             Solver/test/MMS/${{ matrix.case }}/SETUP/make.log
+            Solver/test/MMS/${{ matrix.case }}/SETUP/ProblemFile.f90
 
   report:
     name: MMS ${{ matrix.case }}
@@ -136,6 +138,7 @@ jobs:
       CASE: ${{ matrix.case }}
       P: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].P }}
       MESHES: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].meshes }}
+      CHECK: ${{ inputs.check }}
     steps:
       - uses: actions/checkout@v7
 
@@ -144,7 +147,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install Python packages
-        run: pip install sympy matplotlib
+        run: pip install sympy==1.14.0 matplotlib
 
       - uses: actions/download-artifact@v8
         with:
@@ -159,9 +162,13 @@ jobs:
           if [ ${#csvs[@]} -eq 0 ]; then echo "::error::No errors.csv from the run jobs"; exit 1; fi
           args=(--P $P --meshes $MESHES --merge "${csvs[@]}")
           if [ -n "$SET" ]; then args+=(--set "$SET"); fi
-          python3 Solver/test/MMS/run.py "$CASE" "${args[@]}"
+          if [ "$CHECK" = "true" ]; then args+=(--check); fi
+          # Runs without a result or a failed check fail the job, after the plot and the files are saved
+          status=0
+          python3 Solver/test/MMS/run.py "$CASE" "${args[@]}" || status=$?
           python3 Solver/test/MMS/plot.py "$CASE"
           cp Solver/test/MMS/$CASE/errors.csv Solver/test/MMS/$CASE/convergence.png runs/
+          exit $status
 
       - uses: actions/upload-artifact@v7
         if: always()

@@ -8,3 +8,5 @@ MESH/
 */errors.csv
 */convergence.png
 __pycache__/
+*/.lock
+mms-*/
