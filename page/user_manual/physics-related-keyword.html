@@ -214,13 +214,18 @@
 </tr>
 <tr>
 <td>save Lamb vector mode</td>
-<td><em>CHARACTER</em>: The mode to save the Lamb vector. Options are: <code>time</code> or <code>iteration</code>.</td>
-<td>Mandatory keyword if <code>save Lamb vector = .true.</code></td>
+<td><em>CHARACTER</em>: The mode to save the Lamb vector and/or its divergence. Options are: <code>time</code> or <code>iteration</code>.</td>
+<td>Mandatory keyword if <code>save Lamb vector = .true.</code> or <code>save Lamb vector divergence = .true.</code></td>
 </tr>
 <tr>
 <td>save Lamb vector interval</td>
-<td><em>REAL</em> or <em>INTEGER</em>: The frequency to save the Lamb vector. If <code>save Lamb vector mode = time</code>, the Lamb vector is saved every <code>save Lamb vector interval</code> seconds of simulated time. If <code>save Lamb vector mode = iteration</code>, the Lamb vector is saved every <code>save Lamb vector interval</code> iterations.</td>
-<td>Mandatory keyword if <code>save Lamb vector = .true.</code></td>
+<td><em>REAL</em> or <em>INTEGER</em>: The frequency to save the Lamb vector and/or its divergence. If <code>save Lamb vector mode = time</code>, they are saved every <code>save Lamb vector interval</code> seconds of simulated time. If <code>save Lamb vector mode = iteration</code>, they are saved every <code>save Lamb vector interval</code> iterations.</td>
+<td>Mandatory keyword if <code>save Lamb vector = .true.</code> or <code>save Lamb vector divergence = .true.</code></td>
+</tr>
+<tr>
+<td>save Lamb vector divergence</td>
+<td><em>LOGICAL</em>: Whether to save the divergence of the Lamb vector, <script type="math/tex">\nabla\cdot\mathbf{L}</script>, in a file <code>solution_file_&lt;iteration&gt;.divLamb.hsol</code> with one variable per node. It is independent of <code>save Lamb vector</code>: it can be saved with or without the Lamb vector file. The frequency is set by <code>save Lamb vector mode</code> and <code>save Lamb vector interval</code>, and <code>Lamb vector cube</code> also applies. It is computed element by element from the Lamb vector, so it can be discontinuous across element interfaces. Options are: <code>.true.</code> or <code>.false.</code>.</td>
+<td><code>.false.</code></td>
 </tr>
 <tr>
 <td>Lamb vector cube</td>
@@ -565,13 +570,18 @@ density to vary spatially. </p>
 </tr>
 <tr>
 <td>save Lamb vector mode</td>
-<td><em>CHARACTER</em>: The mode to save the Lamb vector. Options are: <code>time</code> or <code>iteration</code>.</td>
-<td>Mandatory keyword if <code>save Lamb vector = .true.</code></td>
+<td><em>CHARACTER</em>: The mode to save the Lamb vector and/or its divergence. Options are: <code>time</code> or <code>iteration</code>.</td>
+<td>Mandatory keyword if <code>save Lamb vector = .true.</code> or <code>save Lamb vector divergence = .true.</code></td>
 </tr>
 <tr>
 <td>save Lamb vector interval</td>
-<td><em>REAL</em> or <em>INTEGER</em>: The frequency to save the Lamb vector. If <code>save Lamb vector mode = time</code>, the Lamb vector is saved every <code>save Lamb vector interval</code> seconds of simulated time. If <code>save Lamb vector mode = iteration</code>, the Lamb vector is saved every <code>save Lamb vector interval</code> iterations.</td>
-<td>Mandatory keyword if <code>save Lamb vector = .true.</code></td>
+<td><em>REAL</em> or <em>INTEGER</em>: The frequency to save the Lamb vector and/or its divergence. If <code>save Lamb vector mode = time</code>, they are saved every <code>save Lamb vector interval</code> seconds of simulated time. If <code>save Lamb vector mode = iteration</code>, they are saved every <code>save Lamb vector interval</code> iterations.</td>
+<td>Mandatory keyword if <code>save Lamb vector = .true.</code> or <code>save Lamb vector divergence = .true.</code></td>
+</tr>
+<tr>
+<td>save Lamb vector divergence</td>
+<td><em>LOGICAL</em>: Whether to save the divergence of the Lamb vector, <script type="math/tex">\nabla\cdot\mathbf{L}</script>, in a file <code>solution_file_&lt;iteration&gt;.divLamb.hsol</code> with one variable per node. It is independent of <code>save Lamb vector</code>: it can be saved with or without the Lamb vector file. The frequency is set by <code>save Lamb vector mode</code> and <code>save Lamb vector interval</code>, and <code>Lamb vector cube</code> also applies. It is computed element by element from the Lamb vector, so it can be discontinuous across element interfaces. Options are: <code>.true.</code> or <code>.false.</code>.</td>
+<td><code>.false.</code></td>
 </tr>
 <tr>
 <td>save Lamb vector stats</td>
@@ -756,13 +766,18 @@ Mobility <script type="math/tex">M_0</script> is computed from the control file 
 </tr>
 <tr>
 <td>save Lamb vector mode</td>
-<td><em>CHARACTER</em>: The mode to save the Lamb vector. Options are: <code>time</code> or <code>iteration</code>.</td>
-<td>Mandatory keyword if <code>save Lamb vector = .true.</code></td>
+<td><em>CHARACTER</em>: The mode to save the Lamb vector and/or its divergence. Options are: <code>time</code> or <code>iteration</code>.</td>
+<td>Mandatory keyword if <code>save Lamb vector = .true.</code> or <code>save Lamb vector divergence = .true.</code></td>
 </tr>
 <tr>
 <td>save Lamb vector interval</td>
-<td><em>REAL</em> or <em>INTEGER</em>: The frequency to save the Lamb vector. If <code>save Lamb vector mode = time</code>, the Lamb vector is saved every <code>save Lamb vector interval</code> seconds of simulated time. If <code>save Lamb vector mode = iteration</code>, the Lamb vector is saved every <code>save Lamb vector interval</code> iterations.</td>
-<td>Mandatory keyword if <code>save Lamb vector = .true.</code></td>
+<td><em>REAL</em> or <em>INTEGER</em>: The frequency to save the Lamb vector and/or its divergence. If <code>save Lamb vector mode = time</code>, they are saved every <code>save Lamb vector interval</code> seconds of simulated time. If <code>save Lamb vector mode = iteration</code>, they are saved every <code>save Lamb vector interval</code> iterations.</td>
+<td>Mandatory keyword if <code>save Lamb vector = .true.</code> or <code>save Lamb vector divergence = .true.</code></td>
+</tr>
+<tr>
+<td>save Lamb vector divergence</td>
+<td><em>LOGICAL</em>: Whether to save the divergence of the Lamb vector, <script type="math/tex">\nabla\cdot\mathbf{L}</script>, in a file <code>solution_file_&lt;iteration&gt;.divLamb.hsol</code> with one variable per node. It is independent of <code>save Lamb vector</code>: it can be saved with or without the Lamb vector file. The frequency is set by <code>save Lamb vector mode</code> and <code>save Lamb vector interval</code>, and <code>Lamb vector cube</code> also applies. It is computed element by element from the Lamb vector, so it can be discontinuous across element interfaces. Options are: <code>.true.</code> or <code>.false.</code>.</td>
+<td><code>.false.</code></td>
 </tr>
 <tr>
 <td>save Lamb vector stats</td>
@@ -1238,7 +1253,7 @@ When the base solver is incompressible Navier-Stokes, it is only possible to inp
             <p class="text-end">
               Documentation generated by
               <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
- on 2026-11-20 12:57 +0000             </p>
+ on 2026-11-20 21:27 +0000             </p>
           </div>
         </div>
         <br>
