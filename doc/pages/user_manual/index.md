@@ -11,6 +11,7 @@ ordered-subpage: b-immersed-boundary-method.md
 ordered-subpage: monitors.md
 ordered-subpage: s-advanced-user-setup.md
 ordered-subpage: s-postprocessing.md
+ordered-subpage: s-verification.md
 ordered-subpage: t-appendix.md
 ---
 
