@@ -161,7 +161,7 @@ module EllipticDiscretizationClass
 		 if (present(Level)) then
              locLevel = Level
 !$omp do schedule(runtime) private(eID)
-			 do lID = 1 , mesh % MLRK % MLIter(locLevel,8) 
+			 do lID = 1 , mesh % MLRK % MLIter(locLevel,ML_EIDN) 
 				eID = mesh % MLRK % MLIter_eIDN(lID)
 				compute_element = .true.
 				if (present(element_mask)) compute_element = element_mask(eID)

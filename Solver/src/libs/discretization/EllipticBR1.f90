@@ -130,7 +130,7 @@ module EllipticBR1
 	  	 if (present(Level)) then
 			 locLevel=Level
 !$omp do schedule(runtime) private(eID)
-			 do iEl = 1 , mesh % MLRK % MLIter(locLevel,8) 
+			 do iEl = 1 , mesh % MLRK % MLIter(locLevel,ML_EIDN) 
 				eID = mesh % MLRK % MLIter_eIDN(iEl)
 				compute_element = .true.
 				if (present(element_mask)) compute_element = element_mask(eID)
@@ -211,7 +211,7 @@ module EllipticBR1
 !        *******************************************
 !
 !$omp do schedule(runtime) private(fID)
-			 do iFace = 1, mesh % MLRK % MLIter(locLevel,11)
+			 do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FIDN_INTERIOR)
 				fID = mesh % MLRK % MLIter_fIDN_Interior(iFace)
 				compute_element = .true.
 				if (present(element_mask)) compute_element = face_mask(fID)
@@ -223,7 +223,7 @@ module EllipticBR1
 !$omp end do nowait
 
 !$omp do schedule(runtime) private(fID)
-			 do iFace = 1, mesh % MLRK % MLIter(locLevel,12)
+			 do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FIDN_BOUNDARY)
 				fID = mesh % MLRK % MLIter_fIDN_Boundary(iFace)
 				compute_element = .true.
 				if (present(element_mask)) compute_element = face_mask(fID)
@@ -234,10 +234,10 @@ module EllipticBR1
 			 end do
 !$omp end do 
 
-         call RotateBackRotaryFacesGradientFlux(mesh, mesh % MLRK % MLIter(locLevel,3), mesh % MLRK % MLIter_fID_Interior(1:mesh % MLRK % MLIter(locLevel,3)))
+         call RotateBackRotaryFacesGradientFlux(mesh, mesh % MLRK % MLIter(locLevel,ML_FID_INTERIOR), mesh % MLRK % MLIter_fID_Interior(1:mesh % MLRK % MLIter(locLevel,ML_FID_INTERIOR)))
 !
 !$omp do schedule(runtime) private(eID)
-			 do iEl = 1, mesh % MLRK % MLIter(locLevel,9) 
+			 do iEl = 1, mesh % MLRK % MLIter(locLevel,ML_EIDN_SEQ) 
 				eID = mesh % MLRK % MLIter_eIDN_Seq(iEl)
 				compute_element = .true.
 				if (present(element_mask)) compute_element = element_mask(eID)
@@ -263,7 +263,7 @@ module EllipticBR1
 				endif
 			 end do
 !$omp end do
-         call RotateRotaryFacesGradients(mesh, mesh % MLRK % MLIter_eIDN_Seq(1:mesh % MLRK % MLIter(locLevel,9)))
+         call RotateRotaryFacesGradients(mesh, mesh % MLRK % MLIter_eIDN_Seq(1:mesh % MLRK % MLIter(locLevel,ML_EIDN_SEQ)))
 
 #ifdef _HAS_MPI_
 !$omp single
@@ -274,14 +274,14 @@ module EllipticBR1
          call RotateRotaryMPIFacesSolution(mesh)
 
 !$omp do schedule(runtime) private(fID)
-			 do iFace = 1, mesh % MLRK % MLIter(locLevel,13)
+			 do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FIDN_MPI)
 				fID = mesh % MLRK % MLIter_fIDN_MPI(iFace)
 				call BR1_ComputeMPIFaceAverage(self, mesh % faces(fID), nEqn, nGradEqn, GetGradients)
 			 end do
 !$omp end do 
 !
 !$omp do schedule(runtime) private(eID) 
-			 do iEl = 1, mesh % MLRK % MLIter(locLevel,10)
+			 do iEl = 1, mesh % MLRK % MLIter(locLevel,ML_EIDN_MPI)
 				eID = mesh % MLRK % MLIter_eIDN_MPI(iEl)
 				associate(e => mesh % elements(eID))
 	!
@@ -301,7 +301,7 @@ module EllipticBR1
 				end associate
 			 end do
 !$omp end do
-         call RotateRotaryFacesGradients(mesh, mesh % MLRK % MLIter_eIDN_MPI(1:mesh % MLRK % MLIter(locLevel,10)))
+         call RotateRotaryFacesGradients(mesh, mesh % MLRK % MLIter_eIDN_MPI(1:mesh % MLRK % MLIter(locLevel,ML_EIDN_MPI)))
 #endif
          else
 !

@@ -268,7 +268,7 @@ module SpatialDiscretization
          select case (mode)
          case (CTD_IGNORE_MODE,CTD_IMEX_EXPLICIT)
 !$omp do schedule(runtime) private(eID)
-            do lID = 1, MLIter(locLevel,1)
+            do lID = 1, MLIter(locLevel,ML_EID)
 			   eID = MLIter_eID(lID)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
@@ -339,7 +339,7 @@ module SpatialDiscretization
          select case (mode)
          case (CTD_IGNORE_MODE, CTD_IMEX_EXPLICIT)
 !$omp do schedule(runtime) private(eID)
-            do lID = 1, MLIter(locLevel,1)
+            do lID = 1, MLIter(locLevel,ML_EID)
 			   eID = MLIter_eID(lID)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
@@ -358,7 +358,7 @@ module SpatialDiscretization
 !$omp end do         
          case (CTD_IMEX_IMPLICIT)
 !$omp do schedule(runtime) private(eID)
-            do lID = 1, MLIter(locLevel,1)
+            do lID = 1, MLIter(locLevel,ML_EID)
 			   eID = MLIter_eID(lID)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
@@ -475,7 +475,7 @@ module SpatialDiscretization
 !        -------------------------------------
 !
 !$omp do schedule(runtime) private(eID)
-         do lID = 1, MLIter(locLevel,1)
+         do lID = 1, MLIter(locLevel,ML_EID)
 		    eID = MLIter_eID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
@@ -498,7 +498,7 @@ module SpatialDiscretization
 !$omp end do nowait
 
 !$omp do schedule(runtime) private(fID)
-         do lID = 1, MLIter(locLevel,2)
+         do lID = 1, MLIter(locLevel,ML_FID)
 			fID = MLIter_fID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = face_mask(fID)
@@ -550,7 +550,7 @@ module SpatialDiscretization
 !        -------------------------------------
 !
 !$omp do schedule(runtime) private(i,j,k,sqrtRho,invMa2,eID)
-		 do lID = 1, MLIter(locLevel,1)  
+		 do lID = 1, MLIter(locLevel,ML_EID)  
 		    eID = MLIter_eID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
@@ -732,7 +732,7 @@ module SpatialDiscretization
 
          if ( LESModel % active) then
 !$omp do schedule(runtime) private(i,j,k,delta,mu_smag,eID)
-						do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+						do lID = 1, mesh % MLRK % MLIter(locLevel,ML_EID)
 						    eID = mesh % MLRK % MLIter_eID(lID)
                             delta = (mesh % elements(eID) % geom % Volume / product(mesh % elements(eID) % Nxyz + 1)) ** (1.0_RP / 3.0_RP)
 							
@@ -752,8 +752,8 @@ module SpatialDiscretization
 !
 !        Compute viscosity at interior and boundary faces
 !        ------------------------------------------------
-         call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,3), 2, mesh % MLRK % MLIter_fID_Interior(1:mesh % MLRK % MLIter(locLevel,3)), mesh)
-         call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,4), 1, mesh % MLRK % MLIter_fID_Boundary(1:mesh % MLRK % MLIter(locLevel,4)), mesh)
+         call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,ML_FID_INTERIOR), 2, mesh % MLRK % MLIter_fID_Interior(1:mesh % MLRK % MLIter(locLevel,ML_FID_INTERIOR)), mesh)
+         call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,ML_FID_BOUNDARY), 1, mesh % MLRK % MLIter_fID_Boundary(1:mesh % MLRK % MLIter(locLevel,ML_FID_BOUNDARY)), mesh)
 				  
 !
 !        ****************
@@ -761,7 +761,7 @@ module SpatialDiscretization
 !        ****************
 !
 !$omp do schedule(runtime) private(eID)
-		 do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+		 do lID = 1, mesh % MLRK % MLIter(locLevel,ML_EID)
 		    eID = mesh % MLRK % MLIter_eID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
@@ -779,7 +779,7 @@ module SpatialDiscretization
 !        ******************************************
 !
 !$omp do schedule(runtime) private(fID)
-         do iFace = 1, mesh % MLRK % MLIter(locLevel,3)
+         do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FID_INTERIOR)
 		    fID = mesh % MLRK % MLIter_fID_Interior(iFace)
 		    compute_element = .true.
 			if (present(element_mask)) compute_element = face_mask(fID)
@@ -791,7 +791,7 @@ module SpatialDiscretization
 !$omp end do nowait
 
 !$omp do schedule(runtime) private(fID)
-         do iFace = 1, mesh % MLRK % MLIter(locLevel,4)
+         do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FID_BOUNDARY)
 		    fID = mesh % MLRK % MLIter_fID_Boundary(iFace)
 		    compute_element = .true.
 			if (present(element_mask)) compute_element = face_mask(fID)
@@ -808,7 +808,7 @@ module SpatialDiscretization
 !        *************************************************************************************
 ! 
 !$omp do schedule(runtime) private(i,j,k,eID,sqrtRho,invSqrtRho)
-         do iEl = 1, mesh % MLRK % MLIter(locLevel,5)
+         do iEl = 1, mesh % MLRK % MLIter(locLevel,ML_EID_SEQ)
             eID = mesh % MLRK % MLIter_eID_Seq(iEl)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
@@ -850,14 +850,14 @@ module SpatialDiscretization
 !
 !           Compute viscosity at MPI faces
 !           ------------------------------
-            call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,7), 2, mesh % MLRK % MLIter_fID_MPI(1:mesh % MLRK % MLIter(locLevel,7)), mesh)
+            call compute_viscosity_at_faces(mesh % MLRK % MLIter(locLevel,ML_FID_MPI), 2, mesh % MLRK % MLIter_fID_MPI(1:mesh % MLRK % MLIter(locLevel,ML_FID_MPI)), mesh)
 !
 !           **************************************
 !           Compute Riemann solver of shared faces
 !           **************************************
 !
 !$omp do schedule(runtime) private(fID)
-            do iFace = 1, mesh % MLRK % MLIter(locLevel,7)
+            do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FID_MPI)
                fID = mesh % MLRK % MLIter_fID_MPI(iFace)
                compute_element = .true.
                if (present(element_mask)) compute_element = face_mask(fID)
@@ -873,7 +873,7 @@ module SpatialDiscretization
 !           ***********************************************************
 ! 
 !$omp do schedule(runtime) private(i,j,k, eID, sqrtRho, invSqrtRho)
-            do iEl = 1, mesh % MLRK % MLIter(locLevel,6)
+            do iEl = 1, mesh % MLRK % MLIter(locLevel,ML_EID_MPI)
                eID = mesh % MLRK % MLIter_eID_MPI(iEl)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
@@ -913,7 +913,7 @@ module SpatialDiscretization
 !           Add source term
 !           ***************
 !$omp do schedule(runtime) private(i,j,k, InvSqrtRho, eID)
-            do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+            do lID = 1, mesh % MLRK % MLIter(locLevel,ML_EID)
 			   eID = mesh % MLRK % MLIter_eID(lID)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
@@ -938,7 +938,7 @@ module SpatialDiscretization
 
 ! Add all the source terms
 !$omp do schedule(runtime) private(i,j,k, Source, eID)
-         do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+         do lID = 1, mesh % MLRK % MLIter(locLevel,ML_EID)
 		    eID = mesh % MLRK % MLIter_eID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
@@ -959,7 +959,7 @@ module SpatialDiscretization
          if( mesh% IBM% active ) then
             if( .not. mesh% IBM% semiImplicit ) then 
 !$omp do schedule(runtime) private(i,j,k,Source, eID)
-                  do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+                  do lID = 1, mesh % MLRK % MLIter(locLevel,ML_EID)
 					 eID = mesh % MLRK % MLIter_eID(lID)
                      compute_element = .true.
                      if (present(element_mask)) compute_element = element_mask(eID)
@@ -1394,7 +1394,7 @@ module SpatialDiscretization
 !        ****************
 !
 !$omp do schedule(runtime) private(eID)
-		 do lID = 1, mesh % MLRK % MLIter(locLevel,1)
+		 do lID = 1, mesh % MLRK % MLIter(locLevel,ML_EID)
 		    eID = mesh % MLRK % MLIter_eID(lID)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
@@ -1410,7 +1410,7 @@ module SpatialDiscretization
 !        ******************************************
 !
 !$omp do schedule(runtime) private(fID)
-         do iFace = 1, mesh % MLRK % MLIter(locLevel,3)
+         do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FID_INTERIOR)
             fID = mesh % MLRK % MLIter_fID_Interior(iFace)
 			compute_element = .true.
             if (present(element_mask)) compute_element = face_mask(fID)
@@ -1422,7 +1422,7 @@ module SpatialDiscretization
 !$omp end do nowait
 
 !$omp do schedule(runtime) private(fID)
-         do iFace = 1, mesh % MLRK % MLIter(locLevel,4)
+         do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FID_BOUNDARY)
             fID = mesh % MLRK % MLIter_fID_Boundary(iFace)
 			compute_element = .true.
             if (present(element_mask)) compute_element = face_mask(fID)
@@ -1438,7 +1438,7 @@ module SpatialDiscretization
 !        ***************************************************************
 ! 
 !$omp do schedule(runtime) private(i,j,k,eID)
-         do iEl = 1, mesh % MLRK % MLIter(locLevel,5)
+         do iEl = 1, mesh % MLRK % MLIter(locLevel,ML_EID_SEQ)
             eID = mesh % MLRK % MLIter_eID_Seq(iEl)
             compute_element = .true.
             if (present(element_mask)) compute_element = element_mask(eID)
@@ -1469,7 +1469,7 @@ module SpatialDiscretization
 !           **************************************
 !
 !$omp do schedule(runtime) private(fID)
-            do iFace = 1, mesh % MLRK % MLIter(locLevel,7)
+            do iFace = 1, mesh % MLRK % MLIter(locLevel,ML_FID_MPI)
                fID = mesh % MLRK % MLIter_fID_MPI(iFace)
                compute_element = .true.
                if (present(element_mask)) compute_element = face_mask(fID)
@@ -1485,7 +1485,7 @@ module SpatialDiscretization
 !           ***********************************************************
 ! 
 !$omp do schedule(runtime) private(i,j,k,eID)
-            do iEl = 1, mesh % MLRK % MLIter(locLevel,6)
+            do iEl = 1, mesh % MLRK % MLIter(locLevel,ML_EID_MPI)
                eID = mesh % MLRK % MLIter_eID_MPI(iEl)
                compute_element = .true.
                if (present(element_mask)) compute_element = element_mask(eID)
