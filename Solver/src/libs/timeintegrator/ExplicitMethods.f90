@@ -1583,7 +1583,7 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
       REAL(KIND=RP), DIMENSION(3) :: a = (/0.0_RP       , -5.0_RP /9.0_RP , -153.0_RP/128.0_RP/)
       REAL(KIND=RP), DIMENSION(4) :: b = (/0.0_RP       ,  1.0_RP /3.0_RP ,    3.0_RP/4.0_RP  ,     1.0_RP     /)
       REAL(KIND=RP), DIMENSION(3) :: c = (/1.0_RP/3.0_RP,  15.0_RP/16.0_RP,    8.0_RP/15.0_RP /)
-	  REAL(KIND=RP), DIMENSION(3) :: d = (/1.0_RP/3.0_RP,  5.0_RP/12.0_RP,    1.0_RP/4.0_RP /)        ! Temporal step of stages
+	  REAL(KIND=RP), DIMENSION(3) :: d        ! Temporal step of stages
 	  
 
 
@@ -1601,6 +1601,8 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
          updateQLowRK = .false.
       end if
 	  
+	  d = b(2:4) - b(1:3)		! Must match b: the levels' sub-steps are nested inside these stage lengths
+
 	  nLevel = mesh % MLRK % maxLevel
 	  allocate(k(nLevel), cL(nLevel), tk(nLevel), deltaTL(nLevel))
 	  
@@ -1663,14 +1665,12 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 							corrector = 0.0_RP
 						end if 
 						
-						associate(storage => mesh % elements(id) % storage)
 #ifdef FLOW        
-						storage % G_NS = corrector * storage % G_NS  +  storage % QDot
+						mesh % elements(id) % storage % G_NS = corrector * mesh % elements(id) % storage % G_NS  +  mesh % elements(id) % storage % QDot
 #endif
 #if (defined(CAHNHILLIARD)) && (!defined(FLOW))
-						storage % G_CH = corrector * storage % G_CH + storage % cDot
+						mesh % elements(id) % storage % G_CH = corrector * mesh % elements(id) % storage % G_CH + mesh % elements(id) % storage % cDot
 #endif
-						end associate
 					end do 
 !$omp end parallel do	
 				
@@ -1692,15 +1692,13 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 						
 						id = MLIter_eID(i)
 						
-						associate(storage => mesh % elements(id) % storage)
 #ifdef FLOW             
-						storage % Q    = storage % Q  + corrector * deltaT * storage % G_NS
+						mesh % elements(id) % storage % Q    = mesh % elements(id) % storage % Q  + corrector * deltaT * mesh % elements(id) % storage % G_NS
 #endif
 
 #if (defined(CAHNHILLIARD)) && (!defined(FLOW))
-						storage % c    = storage % c + corrector * deltaT * storage % G_CH
+						mesh % elements(id) % storage % c    = mesh % elements(id) % storage % c + corrector * deltaT * mesh % elements(id) % storage % G_CH
 #endif
-						end associate
 					end do
 !$omp end parallel do	
                     if (all(k(2:nLevel) == kmax)) then
@@ -1713,6 +1711,7 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
 					end if 
 					
 					tk(locLevel)=tk(locLevel-1)+b(k(locLevel)+1) * deltaTL(locLevel)
+					tk(locLevel+1:nLevel)=tk(locLevel)			! Finer levels restart their RK3 step at this time
 					call ComputeTimeDerivative( mesh, particles, tk(locLevel), CTD_IGNORE_MODE, Level=locLevel) ! Update Qdot
 				end do 
 			end do 
@@ -1720,8 +1719,7 @@ SUBROUTINE TakeMixedRKStep( mesh, particles, t, deltaT, ComputeTimeDerivative , 
        end do ! k1
 	   
 	   end associate
-	   
-	   call ComputeTimeDerivative( mesh, particles, t+deltaT, CTD_IGNORE_MODE) ! Necessary for residual computation
+
 !
 !     To obtain the updated residuals
       if ( CTD_AFTER_STEPS ) CALL ComputeTimeDerivative( mesh, particles, t+deltaT, CTD_IGNORE_MODE)

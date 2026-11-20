@@ -74,6 +74,7 @@ contains
 !  Main class constructor
 !  -------------------------------------------------------
    subroutine AnJacobian_Construct(this, mesh, nEqn, controlVariables)
+      use RotationData, only: rotationParams
       implicit none
       !-arguments-----------------------------------------
       class(AnJacobian_t)  , intent(inout) :: this
@@ -84,6 +85,15 @@ contains
       integer :: fID, eID
       !---------------------------------------------------
       
+!
+!     The rotations of the periodic revolution faces are not in the analytical Jacobian
+!     -----------------------------------------------------------------------------------
+      if (rotationParams % periodicEnabled) then
+         if (MPI_Process % isRoot) then
+            write(STD_OUT,'(A)') "ERROR: the analytical Jacobian does not support periodic revolution BCs yet"
+         end if
+         error stop
+      end if
 !
 !     Construct parent
 !     ----------------

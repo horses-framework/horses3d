@@ -10,6 +10,7 @@ module Storage
    public Mesh_t, Element_t, Boundary_t
    public NVARS, NGRADVARS, hasMPIranks, hasBoundaries, isOldStats
    public partitionFileName, boundaryFileName, flowEq
+   public hasMLRKLevels, mlrkLevelFileName
    public hasExtraGradients, hasMu_NS, hasUt_NS, hasWallY, NSTAT, hasMu_sgs, hasSource
 
    integer                          :: NVARS, NGRADVARS
@@ -20,7 +21,9 @@ module Storage
    logical                          :: hasWallY     = .false.
    logical                          :: hasMu_sgs = .false.
    logical                          :: hasSource = .false.
+   logical                          :: hasMLRKLevels = .false.
    character(len=LINE_LENGTH)       :: boundaryFileName, partitionFileName, flowEq
+   character(len=LINE_LENGTH)       :: mlrkLevelFileName
    integer, parameter               :: NSTAT = 9
 
    type Element_t
@@ -28,6 +31,7 @@ module Storage
       integer                    :: eID
       integer                    :: Nmesh(NDIM)
       integer                    :: mpi_rank = 0
+      integer                    :: mlevel = 0, mlevelwN = 0     ! MLRK level, without and with neighbour promotion
       real(kind=RP), pointer     :: x(:,:,:,:)
 !                                /* Solution quantities */
       integer                    :: Nsol(NDIM)
@@ -180,6 +184,12 @@ module Storage
 !        ---------------------------
          if (hasMPIranks) then
                call readPartitionFile(self)
+         end if
+
+!        Read MLRK levels (if present)
+!        -----------------------------
+         if (hasMLRKLevels) then
+               call readMLRKLevelFile(self)
          end if
 !
 !        Describe the mesh
@@ -457,6 +467,12 @@ module Storage
          if (hasMPIranks) then
                call readPartitionFile(self)
          end if
+
+!        Read MLRK levels (if present)
+!        -----------------------------
+         if (hasMLRKLevels) then
+               call readMLRKLevelFile(self)
+         end if
          
 !
 !        Describe the solution
@@ -505,6 +521,27 @@ module Storage
 
          close(fID)
       end subroutine readPartitionFile
+
+      subroutine readMLRKLevelFile(self)
+         implicit none
+
+         !-arguments-----------------------------------------------
+         class(Mesh_t)   , intent(inout)  :: self
+
+         !-local-variables-----------------------------------------
+         integer                    :: nelem, eID, fID
+         !---------------------------------------------------------
+
+         open(newunit = fID, file=trim(mlrkLevelFileName),action='read')
+
+            read(fID,*) nelem
+
+            do eID = 1, nelem
+               read(fID,*) self % elements(eID) % mlevel, self % elements(eID) % mlevelwN
+            end do
+
+         close(fID)
+      end subroutine readMLRKLevelFile
       
       subroutine readBoundaryFile(boundaries)
          implicit none

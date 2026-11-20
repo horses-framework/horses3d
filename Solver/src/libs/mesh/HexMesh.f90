@@ -1,6 +1,7 @@
 #include "Includes.h"
 MODULE HexMeshClass
-      use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax, sortDescendInt, sortAscendInt
+      use Utilities                       , only: toLower, almostEqual, AlmostEqualRelax, &
+                                                  mergeSortDescendInt, mergeSortAscendInt
       use SMConstants
       USE MeshTypes
       USE NodeClass
@@ -49,9 +50,10 @@ MODULE HexMeshClass
 	     integer               :: nLevel 
 		 integer               :: maxLevel
 		 real(kind=RP)         :: CFL_CutOff
+		 real(kind=RP)         :: interfaceTol = 1.0e-4_RP   ! Multiphase: a node with interfaceTol <= c <= 1-interfaceTol is on the interface
 		 integer, allocatable  :: ML_GlobalLevel(:)        ! Number of Multi-Level Timestep Element - Global - in TimeIntegrator.f90 and DGSEMClass.f90
 		 integer, allocatable  :: ML_Level(:)              ! Number of Multi-Level Timestep Element - Partition 
-		 integer, allocatable  :: MLIter(:,:)              ! Number of ML Iteration - partition (L1 include L2 & L3, etc); size(nLevel, 6(eID, fID, fID_Inter, fID Bound, eID Seq, eID MPI)) 
+		 integer, allocatable  :: MLIter(:,:)              ! Number of ML Iteration - partition (L1 include L2 & L3, etc); size(nLevel, 13); columns 11-13: faces of the eIDN elements (interior, boundary, MPI) 
 		 integer, allocatable  :: MLIter_eID(:)            ! Sorted Element ID from nLevel to Level 1 (eID) size is (mesh%element)
 		 integer, allocatable  :: MLIter_fID(:)            ! Element ID for each level iteration (fID) size is (mesh% faces)
 		 integer, allocatable  :: MLIter_fID_Interior(:)   ! Interior Face ID for each level iteration (fID) size is (mesh%faces_interior)
@@ -62,10 +64,15 @@ MODULE HexMeshClass
 		 integer, allocatable  :: MLIter_eIDN(:)            ! Sorted Element ID from nLevel to Level 1 (eID) size is (mesh%element)
 		 integer, allocatable  :: MLIter_eIDN_Seq(:)        ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
 		 integer, allocatable  :: MLIter_eIDN_MPI(:)        ! Element ID for each level 1 iteration (eID,levelIteration) size is (mesh%element,nLevel)
+		 integer, allocatable  :: MLIter_fIDN_Interior(:)   ! Interior faces of the eIDN elements, highest level first (counts in MLIter(:,11))
+		 integer, allocatable  :: MLIter_fIDN_Boundary(:)   ! Boundary faces of the eIDN elements, highest level first (counts in MLIter(:,12))
+		 integer, allocatable  :: MLIter_fIDN_MPI(:)        ! MPI faces of the eIDN elements, highest level first (counts in MLIter(:,13))
+		 integer, allocatable  :: MPIfaceRemoteLevel(:,:)   ! (MLevel, MLevelwN) of the element across each MPI face, by fID
 		 contains
 			procedure :: construct      => MultiLevel_RK_Construct
 			procedure :: update			=> MultiLevel_RK_Update
 	        procedure :: sendGlobalID   => MultiLevel_RK_SendGlobID
+			procedure :: exportLevels   => MultiLevel_RK_ExportLevels
 			procedure :: destruct       => MultiLevel_RK_Destruct
 	  end type MultiLevel_RK
       type HexMesh
@@ -92,6 +99,8 @@ MODULE HexMeshClass
          type(IBM_type)                            :: IBM
          type(Zone_t), dimension(:), allocatable   :: zones
 		 type(MultiLevel_RK)                       :: MLRK
+         integer                                   :: MPIfacesLevelQ = 0   ! MLRK level of the last solution exchange (0: all faces)
+         integer                                   :: MPIfacesLevelU = 0   ! MLRK level of the last gradient exchange (0: all faces)
          logical                                   :: child       = .FALSE.         ! Is this a (multigrid) child mesh? default .FALSE.
          logical                                   :: meshIs2D    = .FALSE.         ! Is this a 2D mesh? default .FALSE.
          integer                                   :: dir2D       = 0               ! If it is in fact a 2D mesh, dir 2D stores the global direction IX, IY or IZ
@@ -548,6 +557,10 @@ MODULE HexMeshClass
       INTEGER                    :: i,j,k,l
       integer                    :: zIDplus, zIDMinus, iFace, jFace
       character(len=LINE_LENGTH) :: associatedBname
+      real(kind=RP)              :: printAngle       ! Magnitude of the rotary angle, for the summary
+      integer                    :: ierr
+!
+      printAngle = 0.0_RP
 !
 !     --------------------------------------------
 !     Loop to find faces with the label "periodic"
@@ -571,6 +584,7 @@ MODULE HexMeshClass
 !        Reset the coordinate (changes when changing zones)
 !        --------------------------------------------------
          coord = 0
+         if (rotationParams % periodicEnabled) coord = RotationAxisIndex()
 !
 !        Get the marker of the associated zone
 !        -------------------------------------
@@ -672,10 +686,18 @@ slavecoord:             DO l = 1, 4
                      DO l = 1, 4
                         IF (.NOT.slave_matched(l)) THEN
                            x2 = self%nodes(self%faces(j)%nodeIDs(l))%x
-                           IF (useRelaxTol) THEN
-                               CALL CompareTwoNodesRelax(x1, x2, master_matched(k), coord, min_edge_length)
+                           IF (rotationParams % periodicEnabled) THEN
+                               IF (useRelaxTol) THEN
+                                  CALL CompareTwoNodesRevolRelax(x1, x2, master_matched(k), coord, rotationParams % center, min_edge_length)
+                               ELSE
+                                  CALL CompareTwoNodesRevol(x1, x2, master_matched(k), coord, rotationParams % center)
+                               END IF
                            ELSE
-                               CALL CompareTwoNodes(x1, x2, master_matched(k), coord)
+                               IF (useRelaxTol) THEN
+                                  CALL CompareTwoNodesRelax(x1, x2, master_matched(k), coord, min_edge_length)
+                               ELSE
+                                  CALL CompareTwoNodes(x1, x2, master_matched(k), coord)
+                               END IF
                            END IF
                            IF (master_matched(k)) THEN
                               slave_matched(l) = .TRUE.
@@ -694,6 +716,18 @@ slavecoord:             DO l = 1, 4
                   self % faces(i) % elementIDs(2)  = self % faces(j) % elementIDs(1)
                   self % faces(i) % elementSide(2) = self % faces(j) % elementSide(1)
                   self % faces(i) % FaceType       = HMESH_INTERIOR
+                  if (rotationParams % periodicEnabled) then
+!                    Angle that rotates face i (kept, side 1) onto face j (side 2), from the face centroids:
+!                    each pair keeps its own sign, and a centroid is never on the rotation axis
+                     x1 = 0.0_RP
+                     x2 = 0.0_RP
+                     do k = 1, 4
+                        x1 = x1 + 0.25_RP * self % nodes(self % faces(i) % nodeIDs(k)) % x
+                        x2 = x2 + 0.25_RP * self % nodes(self % faces(j) % nodeIDs(k)) % x
+                     end do
+                     self % faces(i) % rotaryAngle = SectorAngle(x1, x2)
+                     printAngle = abs(self % faces(i) % rotaryAngle)
+                  end if
                   self % elements(self % faces(i) % elementIDs(1)) % boundaryName(self % faces(i) % elementSide(1)) = emptyBCName
                   self % elements(self % faces(i) % elementIDs(2)) % boundaryName(self % faces(i) % elementSide(2)) = emptyBCName
 !
@@ -703,10 +737,18 @@ slavecoord:             DO l = 1, 4
                      x1 = self % nodes ( self % faces(i) % nodeIDs(k)) % x
                      do l = 1, 4
                         x2 = self % nodes ( self % faces(j) % nodeIDs(l) ) % x
-                        IF (useRelaxTol) THEN
-                            CALL CompareTwoNodesRelax(x1, x2, success, coord, min_edge_length)
+                        IF (rotationParams % periodicEnabled) THEN
+                            IF (useRelaxTol) THEN
+                               CALL CompareTwoNodesRevolRelax(x1, x2, success, coord, rotationParams % center, min_edge_length)
+                            ELSE
+                               CALL CompareTwoNodesRevol(x1, x2, success, coord, rotationParams % center)
+                            END IF
                         ELSE
-                            CALL CompareTwoNodes(x1, x2, success, coord)
+                            IF (useRelaxTol) THEN
+                               CALL CompareTwoNodesRelax(x1, x2, success, coord, min_edge_length)
+                            ELSE
+                               CALL CompareTwoNodes(x1, x2, success, coord)
+                            END IF
                         END IF
                         if ( success ) then
                            slaveNodeIDs(l) = self % faces(i) % nodeIDs(k)
@@ -732,6 +774,16 @@ slavecoord:             DO l = 1, 4
          end do               ! periodic+ zones
 
          if ( MPI_Process % isRoot .and. useRelaxTol) print *, "Success: when matching all periodic boundary conditions with relaxed comparison"
+         if ( MPI_Process % isRoot .and. rotationParams % periodicEnabled) then
+            write(STD_OUT,'(A,3(ES10.3,A),I0)') "Success: revolution periodic matching with center [", &
+                                                 rotationParams % center(1), ", ", &
+                                                 rotationParams % center(2), ", ", &
+                                                 rotationParams % center(3), "] and axis ", coord
+            if (printAngle > 0.0_RP) then
+               write(STD_OUT,'(A,F8.3,A)') "         Periodic sector angle: ", &
+                                            printAngle * 180.0_RP / PI, " degrees"
+            end if
+         end if
 
       END SUBROUTINE ConstructPeriodicFaces
 !
@@ -1196,12 +1248,13 @@ slavecoord:             DO l = 1, 4
 !     -----------------------------------------------------------------------
 !     Subroutine to update the MPIFaces solution Q (MPI Receive and MPI Send)
 !     -----------------------------------------------------------------------
-      subroutine HexMesh_UpdateMPIFacesSolution(self, nEqn)
+      subroutine HexMesh_UpdateMPIFacesSolution(self, nEqn, Level)
          use MPI_Face_Class
          implicit none
          !-arguments----------------------------------------------------------
          class(HexMesh)         :: self
          integer,    intent(in) :: nEqn
+         integer, intent(in), optional :: Level   ! MLRK level: only the faces used at this level are exchanged
 #ifdef _HAS_MPI_
          !-local-variables----------------------------------------------------
 		 integer :: k, domain, mpifID, fID, thisSide
@@ -1209,9 +1262,14 @@ slavecoord:             DO l = 1, 4
 		 integer, parameter :: otherSide(2) = (/2,1/)
 		 integer :: nShared, nreqs, idx_send
 		 integer, allocatable :: all_reqs(:)
+		 integer :: lvl
          !--------------------------------------------------------------------
 
          if ( .not. MPI_Process % doMPIAction ) return
+
+		 lvl = 0
+		 if ( present(Level) .and. allocated(self % MLRK % MPIfaceRemoteLevel) ) lvl = Level
+		 self % MPIfacesLevelQ = lvl
 		 
 		 nShared = self % MPIfaces % nDomainShared
 		 ! Return when no faces are shared
@@ -1257,6 +1315,7 @@ slavecoord:             DO l = 1, 4
             do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
                fID = MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+               if ( .not. MPIFaceInLevel(self, fID, thisSide, lvl, 2, .true.) ) cycle
                associate(f => self % faces(fID))
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   MPIfaces % faces(domain) % Qsend(counter:counter+nEqn-1) = f % storage(thisSide) % Q(1:nEqn,i,j)
@@ -1269,7 +1328,7 @@ slavecoord:             DO l = 1, 4
 !           Send solution
 !           -------------
 !
-            call MPIfaces % faces(domain) % SendQ(domain, nEqn, all_reqs(idx_send))
+            call MPIfaces % faces(domain) % SendQ(domain, nEqn, all_reqs(idx_send), counter-1)
 			idx_send = idx_send + 1
          end do
 !
@@ -1289,12 +1348,13 @@ slavecoord:             DO l = 1, 4
 !     ---------------------------------------------------------------------------
 !     Subroutine to update the MPIFaces solution gradQ (MPI Receive and MPI Send)
 !     ---------------------------------------------------------------------------
-      subroutine HexMesh_UpdateMPIFacesGradients(self, nEqn)
+      subroutine HexMesh_UpdateMPIFacesGradients(self, nEqn, Level)
          use MPI_Face_Class
          implicit none
          !-arguments----------------------------------------------------------
          class(HexMesh)      :: self
          integer, intent(in) :: nEqn
+         integer, intent(in), optional :: Level   ! MLRK level: only the faces used at this level are exchanged
 #ifdef _HAS_MPI_
          !-local-variables----------------------------------------------------
 		 integer :: k, domain, mpifID, fID, thisSide
@@ -1302,9 +1362,14 @@ slavecoord:             DO l = 1, 4
 		 integer, parameter :: otherSide(2) = (/2,1/)
 		 integer :: nShared, nreqs, idx_send, token
 		 integer, allocatable :: all_reqs(:)
+		 integer :: lvl
          !--------------------------------------------------------------------
 
          if ( .not. MPI_Process % doMPIAction ) return
+
+		 lvl = 0
+		 if ( present(Level) .and. allocated(self % MLRK % MPIfaceRemoteLevel) ) lvl = Level
+		 self % MPIfacesLevelU = lvl
 		 
 		 nShared = self % MPIfaces % nDomainShared
 		 ! Return when no faces are shared
@@ -1354,6 +1419,7 @@ slavecoord:             DO l = 1, 4
             do mpifID = 1, MPIfaces % faces(domain) % no_of_faces
                fID = MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = MPIfaces % faces(domain) % elementSide(mpifID)
+               if ( .not. MPIFaceInLevel(self, fID, thisSide, lvl, 1, .true.) ) cycle
                associate(f => self % faces(fID))
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   MPIfaces % faces(domain) % U_xyzsend(counter:counter+nEqn-1) = f % storage(thisSide) % U_x(1:nEqn,i,j)
@@ -1376,7 +1442,7 @@ slavecoord:             DO l = 1, 4
 !           Send gradients
 !           -------------
 !
-            call MPIfaces % faces(domain) % SendU_xyz(domain, nEqn, all_reqs(idx_send))
+            call MPIfaces % faces(domain) % SendU_xyz(domain, nEqn, all_reqs(idx_send), counter-1)
 			idx_send = idx_send + 1
          end do
 !
@@ -1614,6 +1680,7 @@ slavecoord:             DO l = 1, 4
             do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
                fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+               if ( .not. MPIFaceInLevel(self, fID, thisSide, self % MPIfacesLevelQ, 2, .false.) ) cycle
                associate(f => self % faces(fID))
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   f % storage(otherSide(thisSide)) % Q(1:nEqn,i,j) = self % MPIfaces % faces(domain) % Qrecv(counter:counter+nEqn-1)
@@ -1657,6 +1724,7 @@ slavecoord:             DO l = 1, 4
             do mpifID = 1, self % MPIfaces % faces(domain) % no_of_faces
                fID = self % MPIfaces % faces(domain) % faceIDs(mpifID)
                thisSide = self % MPIfaces % faces(domain) % elementSide(mpifID)
+               if ( .not. MPIFaceInLevel(self, fID, thisSide, self % MPIfacesLevelU, 1, .false.) ) cycle
                associate(f => self % faces(fID))
                do j = 0, f % Nf(2)  ; do i = 0, f % Nf(1)
                   f % storage(otherSide(thisSide)) % U_x(1:nEqn,i,j) = self % MPIfaces % faces(domain) % U_xyzrecv(counter:counter+nEqn-1)
@@ -1677,6 +1745,31 @@ slavecoord:             DO l = 1, 4
          end do
 #endif
       end subroutine HexMesh_GatherMPIFacesGradients
+!
+!     An MPI face is exchanged at MLRK level L when the receiving element has MLevel (which = 1, gradients) or
+!     MLevelwN (which = 2, solution) >= L: only those elements use the values across the face at level L
+!
+      logical function MPIFaceInLevel(self, fID, thisSide, level, which, remote)
+         implicit none
+         class(HexMesh), intent(in) :: self
+         integer,        intent(in) :: fID, thisSide, level, which
+         logical,        intent(in) :: remote   ! .true.: receiver is the other rank (sending)
+         integer :: eID, lev
+
+         MPIFaceInLevel = .true.
+         if ( level <= 1 ) return
+         if ( remote ) then
+            lev = self % MLRK % MPIfaceRemoteLevel(which, fID)
+         else
+            eID = self % faces(fID) % elementIDs(thisSide)
+            if ( which == 1 ) then
+               lev = self % elements(eID) % MLevel
+            else
+               lev = self % elements(eID) % MLevelwN
+            end if
+         end if
+         MPIFaceInLevel = (lev >= level)
+      end function MPIFaceInLevel
 !
 !////////////////////////////////////////////////////////////////////////
 !
@@ -2649,6 +2742,11 @@ slavecoord:             DO l = 1, 4
             f % elementIDs(otherSide(eSide)) = HMESH_NONE   ! This makes sense since elementIDs are in local numbering...
             f % elementSide(eSide) = side
             f % elementSide(otherSide(eSide)) = partition % element_mpifaceSideOther(bFace)
+!
+!           Restore the rotary angle that was packed in
+!           GetPartitionBoundaryFaces and communicated via MPI.
+!           -----------------------------------------------------------------
+            f % rotaryAngle = partition % mpiface_rotaryAngle(bFace)
 
             if (eSide == RIGHT) f % nodeIDs = f % nodeIDs (invRot (:,f % rotation) )
             end associate
@@ -6640,9 +6738,11 @@ call elementMPIList % destruct
 	if( allocated(self % MLIter_eID_Seq) ) deallocate(self % MLIter_eID_Seq)
 	if( allocated(self % MLIter_eIDN) ) deallocate(self % MLIter_eIDN)
 	if( allocated(self % MLIter_eIDN_Seq) ) deallocate(self % MLIter_eIDN_Seq)
+	if( allocated(self % MLIter_fIDN_Interior) ) deallocate(self % MLIter_fIDN_Interior)
+	if( allocated(self % MLIter_fIDN_Boundary) ) deallocate(self % MLIter_fIDN_Boundary)
 
 	!-allocate-----------------------------------------  
-    allocate(self % ML_GlobalLevel(nLevel), self % ML_Level(nLevel), self % MLIter(nLevel,10))
+    allocate(self % ML_GlobalLevel(nLevel), self % ML_Level(nLevel), self % MLIter(nLevel,13))
     allocate(self % MLIter_eID(mesh % no_of_elements))
 	allocate(self % MLIter_fID(mesh % no_of_faces))  ! Each face has 2 sides, except boundaries
 	allocate(self % MLIter_fID_Interior(size(mesh % faces_interior)))
@@ -6650,6 +6750,8 @@ call elementMPIList % destruct
 	allocate(self % MLIter_eID_Seq(size(mesh % elements_sequential)))
 	allocate(self % MLIter_eIDN(mesh % no_of_elements))
 	allocate(self % MLIter_eIDN_Seq(size(mesh % elements_sequential)))
+	allocate(self % MLIter_fIDN_Interior(size(mesh % faces_interior)))
+	allocate(self % MLIter_fIDN_Boundary(size(mesh % faces_boundary)))
 	
    
     !Initial default value - all Level 1
@@ -6666,6 +6768,8 @@ call elementMPIList % destruct
 	self % MLIter(1,5)    = size(mesh % elements_sequential)
 	self % MLIter(1,8)    = mesh % no_of_elements
 	self % MLIter(1,9)    = size(mesh % elements_sequential)
+	self % MLIter(1,11)   = size(mesh % faces_interior)
+	self % MLIter(1,12)   = size(mesh % faces_boundary)
 	self % MLIter_eID (:) = [(i, i=1,size(mesh % elements))]
 	self % MLIter_fID (:) = [(i, i=1,size(mesh % faces))]
 	self % MLIter_fID_Interior       = mesh % faces_interior
@@ -6673,21 +6777,30 @@ call elementMPIList % destruct
 	self % MLIter_eID_Seq            = mesh % elements_sequential
 	self % MLIter_eIDN (:) = [(i, i=1,size(mesh % elements))]
 	self % MLIter_eIDN_Seq            = mesh % elements_sequential
+	self % MLIter_fIDN_Interior       = mesh % faces_interior
+	self % MLIter_fIDN_Boundary       = mesh % faces_boundary
 	
 #ifdef _HAS_MPI_
       if ( MPI_Process % doMPIAction ) then
          if( allocated(self % MLIter_eID_MPI) ) deallocate(self % MLIter_eID_MPI)
 		 if( allocated(self % MLIter_fID_MPI) ) deallocate(self % MLIter_fID_MPI)
 		 if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
+		 if( allocated(self % MLIter_fIDN_MPI) ) deallocate(self % MLIter_fIDN_MPI)
+		 if( allocated(self % MPIfaceRemoteLevel) ) deallocate(self % MPIfaceRemoteLevel)
          allocate(self % MLIter_eID_MPI(size(mesh % elements_mpi)))
 		 allocate(self % MLIter_fID_MPI(size(mesh % faces_mpi)))
 		 allocate(self % MLIter_eIDN_MPI(size(mesh % elements_mpi)))
+		 allocate(self % MLIter_fIDN_MPI(size(mesh % faces_mpi)))
+		 allocate(self % MPIfaceRemoteLevel(2, size(mesh % faces)))
 		 self % MLIter(1,6)           = size(mesh % elements_mpi)
 		 self % MLIter(1,7)           = size(mesh % faces_mpi)
 		 self % MLIter(1,10)          = size(mesh % elements_mpi)
+		 self % MLIter(1,13)          = size(mesh % faces_mpi)
          self % MLIter_eID_MPI        = mesh % elements_mpi
 		 self % MLIter_fID_MPI        = mesh % faces_mpi
 		 self % MLIter_eIDN_MPI       = mesh % elements_mpi
+		 self % MLIter_fIDN_MPI       = mesh % faces_mpi
+		 self % MPIfaceRemoteLevel    = 0
       end if
 #endif
 
@@ -6709,14 +6822,14 @@ call elementMPIList % destruct
 	!-local variable-----------------------------------------
 	integer          :: eID, level, levelOld, i, j, fID, sideID
     integer          :: counter(1:self%nLevel), nInterior, nBoundary, nFace, nMPIface
-	integer          :: Level_eID(mesh % no_of_elements), Level_eID_wN(mesh % no_of_elements), Level_eID_wN_BUFF(mesh % no_of_elements)
-	integer          :: faceFlag(size(mesh % faces),2)
-	integer          :: iterations(self%nLevel+1,10)
+	integer, allocatable :: Level_eID(:), Level_eID_wN(:), Level_eID_wN_BUFF(:)
+	integer, allocatable :: faceFlag(:,:)
+	integer          :: iterations(self%nLevel+1,13)
 	integer          :: ierr                     ! Error for MPI calls
 	real(kind=RP)    :: perLevel, cflLevel, dtRatio, cfl
 	real(kind=RP)    :: maxc, minc
 	real(kind=RP)    :: cfl_cutoff(self%nLevel-1)
-	integer, allocatable :: neighborID(:,:), neighborIDAll(:,:),counterOMP(:,:), counterOMPN(:,:)
+	integer, allocatable :: counterOMP(:,:), counterOMPN(:,:)
 !
 !     Initialize
 !     ------------------------------------------------------------
@@ -6724,10 +6837,9 @@ call elementMPIList % destruct
 	  self % CFL_CutOff = CFL_Cut
 	  self % MLIter = 0
 	
-	  allocate(neighborID(self%nLevel-2,mesh % no_of_allElements), neighborIDAll(self%nLevel-2,mesh % no_of_allElements))
-	  neighborID   = 0
-	  neighborIDAll= 0
 	  allocate(counterOMP(self%nLevel,mesh % no_of_elements), counterOMPN (self%nLevel,mesh % no_of_elements))
+	  allocate(Level_eID(mesh % no_of_elements), Level_eID_wN(mesh % no_of_elements), Level_eID_wN_BUFF(mesh % no_of_elements))
+	  allocate(faceFlag(size(mesh % faces),2))
 	  counterOMP   = 0
 	  counterOMPN  = 0
 	  Level_eID    = 0
@@ -6741,7 +6853,7 @@ call elementMPIList % destruct
 !
 !     Determine the level of each element
 !     ------------------------------------------------------------
-!$omp parallel shared(self,mesh,neighborID,neighborIDAll,CFL_Cut, dtRatio, counter, counterOMP, counterOMPN, maxCFLInterf, cfl_cutoff, Level_eID, Level_eID_wN) default(private)
+!$omp parallel shared(self,mesh,CFL_Cut, dtRatio, counter, counterOMP, counterOMPN, maxCFLInterf, cfl_cutoff, Level_eID, Level_eID_wN) default(private)
 !$omp do schedule(runtime)
       do eID = 1, SIZE(mesh % elements)
 		 ! Determine level from CFL cutoff and CFL percentile. Level <= max Level
@@ -6750,7 +6862,7 @@ call elementMPIList % destruct
 	     ! For multiphase, the interface elements have homogenous level, represented by the highest CFL along interface elements
 		 maxc = min(maxval(mesh % elements(eID) % storage % Q(1,:,:,:)),1.0_RP)
 		 minc = max(minval(mesh % elements(eID) % storage % Q(1,:,:,:)),0.0_RP)
-		 if ((maxc.gt.0.001).and.(minc.lt.0.999)) then
+		 if ((maxc.gt.self % interfaceTol).and.(minc.lt.1.0_RP-self % interfaceTol)) then
 			cfl = maxCFLInterf * 100
 		 end if 
 #endif		
@@ -6777,8 +6889,8 @@ call elementMPIList % destruct
 	  end do 
 	  Level_eID_wN_BUFF = Level_eID_wN
       ! Sort decending Level_eID (Large to small level) and Level_eID_wN (neighbour included)
-      call sortDescendInt(Level_eID,self % MLIter_eID) 
-	  call sortDescendInt(Level_eID_wN, self % MLIter_eIDN)
+      call mergeSortDescendInt(Level_eID,self % MLIter_eID)
+	  call mergeSortDescendInt(Level_eID_wN,self % MLIter_eIDN)
   
 	  do i = 1, self % nLevel
 		self % MLIter(i,1) = sum(counterOMP(i:self % nLevel,:))    ! Elements
@@ -6848,23 +6960,34 @@ call elementMPIList % destruct
 		self % MLIter(1:Level_eID(i),5) = self % MLIter(1:Level_eID(i),5)+1
 		self % MLIter(1:Level_eID_wN(i),9) = self % MLIter(1:Level_eID_wN(i),9)+1
 	  end do 
-	  ! Sort decending Level_eID (Large to small level)
-      call sortDescendInt(Level_eID(1:size(mesh % elements_sequential)),self % MLIter_eID_Seq) 
-	  call sortDescendInt(Level_eID_wN(1:size(mesh % elements_sequential)),self % MLIter_eIDN_Seq) 
-	 
-	  ! Sort eID, fID for better memory access
+	  ! The stable sort of MLIter_eID/eIDN already leaves each level in ascending eID, and elements_sequential is
+	  ! ascending, so filtering gives the same lists as sorting them
+	  call filterElements(self % MLIter_eID , .false., self % MLIter_eID_Seq)
+	  call filterElements(self % MLIter_eIDN, .false., self % MLIter_eIDN_Seq)
+
+	  ! Sort fID for better memory access. Each level's interior/boundary faces are the faces of that level's
+	  ! fID block, so they are filtered from the sorted list
 	  iterations = 0
 	  iterations(1:self%nLevel,:)=self % MLIter
 	  do i=self % nLevel, 1, -1
-		call sortAscendInt(self % MLIter_eID(iterations(i+1,1)+1:iterations(i,1)))
-		call sortAscendInt(self % MLIter_fID(iterations(i+1,2)+1:iterations(i,2)))
-		call sortAscendInt(self % MLIter_fID_Interior(iterations(i+1,3)+1:iterations(i,3)))
-		call sortAscendInt(self % MLIter_fID_Boundary(iterations(i+1,4)+1:iterations(i,4)))
-		call sortAscendInt(self % MLIter_eID_Seq(iterations(i+1,5)+1:iterations(i,5)))
-		call sortAscendInt(self % MLIter_eIDN(iterations(i+1,8)+1:iterations(i,8)))
-		call sortAscendInt(self % MLIter_eIDN_Seq(iterations(i+1,9)+1:iterations(i,9)))
+		call mergeSortAscendInt(self % MLIter_fID(iterations(i+1,2)+1:iterations(i,2)))
+	  end do
+	  nInterior = 0
+	  nBoundary = 0
+	  do i = 1, self % MLIter(1,2)
+		fID = self % MLIter_fID(i)
+		if (mesh % faces(fID) % FaceType .eq. HMESH_INTERIOR) then
+			nInterior = nInterior + 1
+			self % MLIter_fID_Interior(nInterior) = fID
+		elseif (mesh % faces(fID) % FaceType .eq. HMESH_BOUNDARY) then
+			nBoundary = nBoundary + 1
+			self % MLIter_fID_Boundary(nBoundary) = fID
+		end if
 	  end do
       self % ML_GlobalLevel = self % ML_Level
+
+	  call faceListsByLevelwN(mesh % faces_interior, self % MLIter_fIDN_Interior, 11)
+	  call faceListsByLevelwN(mesh % faces_boundary, self % MLIter_fIDN_Boundary, 12)
 	  
 ! MPI elements and operation
 #ifdef _HAS_MPI_
@@ -6877,9 +7000,10 @@ call elementMPIList % destruct
 			self % MLIter(1:Level_eID(i),6) = self % MLIter(1:Level_eID(i),6)+1
 			self % MLIter(1:Level_eID_wN(i),10) = self % MLIter(1:Level_eID_wN(i),10)+1
 		  end do 
-		  ! Sort decending Level_eID (Large to small level)
-		  call sortDescendInt(Level_eID(1:size(mesh % elements_mpi)),self % MLIter_eID_MPI) 
-		  call sortDescendInt(Level_eID_wN(1:size(mesh % elements_mpi)),self % MLIter_eIDN_MPI) 
+		  call filterElements(self % MLIter_eID , .true., self % MLIter_eID_MPI)
+		  call filterElements(self % MLIter_eIDN, .true., self % MLIter_eIDN_MPI)
+		  call faceListsByLevelwN(mesh % faces_mpi, self % MLIter_fIDN_MPI, 13)
+		  call MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
           
           ! Global statistics level		  
           call mpi_allreduce(self % ML_Level(1:self%nLevel), self % ML_GlobalLevel(1:self%nLevel), self%nLevel, MPI_INT, MPI_SUM, &
@@ -6924,7 +7048,100 @@ call elementMPIList % destruct
             end do 
 			write(STD_OUT,'(30X,A,A27,I4)') "->" , "Number of RK3 Level: " , self % maxLevel
 
+   contains
+
+   subroutine filterElements(sorted, shared, filtered)
+	integer, intent(in)  :: sorted(:)
+	logical, intent(in)  :: shared
+	integer, intent(out) :: filtered(:)
+	integer :: k, n
+	n = 0
+	do k = 1, size(sorted)
+		if (mesh % elements(sorted(k)) % hasSharedFaces .eqv. shared) then
+			n = n + 1
+			filtered(n) = sorted(k)
+		end if
+	end do
+   end subroutine filterElements
+
+   ! A face is in the level-L list when one of its local elements has MLevelwN >= L
+   subroutine faceListsByLevelwN(faceIDs, list, col)
+	integer, intent(in)  :: faceIDs(:)
+	integer, intent(out) :: list(:)
+	integer, intent(in)  :: col
+	integer, allocatable :: faceLevel(:)
+	integer :: k, n, lvl, e(2)
+	allocate(faceLevel(size(faceIDs)))
+	do k = 1, size(faceIDs)
+		e = mesh % faces(faceIDs(k)) % elementIDs
+		faceLevel(k) = 0
+		if (e(1) > 0) faceLevel(k) = Level_eID_wN_BUFF(e(1))
+		if (e(2) > 0) faceLevel(k) = max(faceLevel(k), Level_eID_wN_BUFF(e(2)))
+	end do
+	n = 0
+	do lvl = self % nLevel, 1, -1
+		do k = 1, size(faceIDs)
+			if (faceLevel(k) .eq. lvl) then
+				n = n + 1
+				list(n) = faceIDs(k)
+			end if
+		end do
+		self % MLIter(lvl,col) = n
+	end do
+   end subroutine faceListsByLevelwN
+
    end subroutine MultiLevel_RK_Update
+!------------------------------------------------------------------------
+!  Levels of the elements across the MPI faces, used to exchange only the faces needed at each level
+!------------------------------------------------------------------------
+   subroutine MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
+	implicit none
+	type(MultiLevel_RK), intent(inout) :: self
+	type(HexMesh)                      :: mesh
+#ifdef _HAS_MPI_
+	type levelBuffer_t
+		integer, allocatable :: send(:), recv(:)
+	end type levelBuffer_t
+	integer :: k, domain, mpifID, fID, eID, nFaces, nShared, ierr
+	integer, allocatable :: reqs(:)
+	type(levelBuffer_t), allocatable :: buffers(:)
+
+	if ( .not. (MPI_Process % doMPIAction .and. mesh % MPIfaces % constructed) ) return
+	if ( .not. allocated(self % MPIfaceRemoteLevel) ) return
+	nShared = mesh % MPIfaces % nDomainShared
+	if ( nShared <= 0 ) return
+
+	allocate(buffers(nShared), reqs(2*nShared))
+	reqs = MPI_REQUEST_NULL
+	do k = 1, nShared
+		domain = mesh % MPIfaces % listDomain(k)
+		nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
+		allocate(buffers(k) % send(2*nFaces), buffers(k) % recv(2*nFaces))
+		if ( nFaces > 0 ) then
+			call mpi_irecv(buffers(k) % recv, 2*nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(k), ierr)
+		end if
+	end do
+	do k = 1, nShared
+		domain = mesh % MPIfaces % listDomain(k)
+		nFaces = mesh % MPIfaces % faces(domain) % no_of_faces
+		if ( nFaces <= 0 ) cycle
+		do mpifID = 1, nFaces
+			fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
+			eID = mesh % faces(fID) % elementIDs(mesh % MPIfaces % faces(domain) % elementSide(mpifID))
+			buffers(k) % send(2*mpifID-1:2*mpifID) = [mesh % elements(eID) % MLevel, mesh % elements(eID) % MLevelwN]
+		end do
+		call mpi_isend(buffers(k) % send, 2*nFaces, MPI_INT, domain-1, DEFAULT_TAG, MPI_COMM_WORLD, reqs(nShared+k), ierr)
+	end do
+	call mpi_waitall(2*nShared, reqs, MPI_STATUSES_IGNORE, ierr)
+	do k = 1, nShared
+		domain = mesh % MPIfaces % listDomain(k)
+		do mpifID = 1, mesh % MPIfaces % faces(domain) % no_of_faces
+			fID = mesh % MPIfaces % faces(domain) % faceIDs(mpifID)
+			self % MPIfaceRemoteLevel(:,fID) = buffers(k) % recv(2*mpifID-1:2*mpifID)
+		end do
+	end do
+#endif
+   end subroutine MultiLevel_RK_ExchangeRemoteLevels
 !------------------------------------------------------------------------
 !  Update 
 !------------------------------------------------------------------------
@@ -6939,48 +7156,43 @@ call elementMPIList % destruct
 	integer              , intent(inout)   :: counterOMP(self % nLevel, mesh % no_of_elements)
 	integer              , intent(inout)   :: counterOMPN(self % nLevel, mesh % no_of_elements)
 	
-	integer              :: eID, i, j
-	integer              :: ierr  
-	integer, allocatable :: neighborID(:), neighborIDAll(:)
+	integer              :: eID, i, fID, nb
+	logical              :: hasNeighbourAtLevel, haveRemote
+	integer, allocatable :: levelOld(:)
 
-	allocate(neighborID(mesh % no_of_allElements), neighborIDAll(mesh % no_of_allElements))
-	neighborID = 0
-	neighborIDAll = 0
-	  
-!$omp parallel shared(self,mesh,neighborID,neighborIDAll, counterOMP, counterOMPN, level, Level_eID, Level_eID_wN) default(private)
-!$omp do schedule(runtime)
-	 do eID =1, size(mesh % elements)
-	     associate(element => mesh % elements(eID))
-	     ! Flag neighboring elements of elements with level equal to the level N that being assesed	
-		 if (element % MLevel .eq. level) then
-			do i =1, 6
-				if ((element % Connection(i) % globID .gt. 0).and.(element % Connection(i) % globID .lt. mesh % no_of_allElements+1)) then
-					neighborID(element % Connection(i) % globID) = neighborID(element % Connection(i) % globID) +1
-			    end if 
-			end do 
-		 end if 
-		 end associate
-	 end do 
-!$omp end do
-!$omp end parallel
+!   Levels at the start of this pass, and the level of the element across each MPI face
+	allocate(levelOld(mesh % no_of_elements))
+	do eID = 1, mesh % no_of_elements
+		levelOld(eID) = mesh % elements(eID) % MLevel
+	end do
+	call MultiLevel_RK_ExchangeRemoteLevels(self, mesh)
+	haveRemote = allocated(self % MPIfaceRemoteLevel)
 
-	  neighborIDAll = neighborID
-!     Combine information on neighboring elements with other MPI
-#ifdef _HAS_MPI_
-      if ( MPI_Process % doMPIAction ) then
-          ! Gather all the neigboring element of level 3 (globalID)
-          call mpi_allreduce(neighborID, neighborIDAll, mesh % no_of_allElements, MPI_INT, MPI_SUM, &
-                            MPI_COMM_WORLD, ierr)
-      end if
-#endif
-      deallocate(neighborID)
-!$omp parallel shared(self,mesh,neighborIDAll, counterOMP, counterOMPN, Level_eID, Level_eID_wN, level) default(private)
+!$omp parallel shared(self,mesh,levelOld,haveRemote, counterOMP, counterOMPN, Level_eID, Level_eID_wN, level) default(private)
 !$omp do schedule(runtime)	  
 	 ! Neighbouring elements of elements with level N will have at least level N-1
       do eID =1, SIZE(mesh % elements)
-	    associate(element => mesh % elements(eID))
-		if (element % MLevel.lt.(level)) then
-			if (neighborIDAll(element % globID).gt.0) then
+		if (levelOld(eID).lt.(level)) then
+			hasNeighbourAtLevel = .false.
+			do i = 1, 6
+				fID = mesh % elements(eID) % faceIDs(i)
+				if ( mesh % faces(fID) % faceType .eq. HMESH_MPI ) then
+					if ( haveRemote ) then
+						if ( self % MPIfaceRemoteLevel(1,fID) .eq. level ) hasNeighbourAtLevel = .true.
+					end if
+				else
+					if ( mesh % faces(fID) % elementIDs(1) .eq. eID ) then
+						nb = mesh % faces(fID) % elementIDs(2)    ! 0 (HMESH_NONE) on boundary faces
+					else
+						nb = mesh % faces(fID) % elementIDs(1)
+					end if
+					if ( nb .gt. 0 ) then
+						if ( levelOld(nb) .eq. level ) hasNeighbourAtLevel = .true.
+					end if
+				end if
+			end do
+			if (hasNeighbourAtLevel) then
+				associate(element => mesh % elements(eID))
 				element % MLevel = level-1
 				counterOMP (:,eID) = 0
 				counterOMP (level-1,eID) = 1
@@ -6989,9 +7201,9 @@ call elementMPIList % destruct
 				Level_eID(eID) = element % MLevel
 				counterOMPN (:,eID)= 0
 				counterOMPN (level,eID) = 1
+				end associate
 			end if 
 		end if 
-		end associate
 	  end do 
 !$omp end do
 !$omp end parallel
@@ -7019,6 +7231,46 @@ call elementMPIList % destruct
 	end do 
 
    end subroutine MultiLevel_RK_SendGlobID
+!------------------------------------------------------------------------
+!  Export the level of each element: ./MESH/<fileName>.lmesh, with the number of elements
+!  followed by "MLevel MLevelwN" per element in global element order (read by horses2plt)
+!------------------------------------------------------------------------
+   subroutine MultiLevel_RK_ExportLevels(self, mesh, fileName)
+    use MPI_Process_Info
+	implicit none
+	!-arguments-----------------------------------------
+	class(MultiLevel_RK), target  , intent(in)      :: self
+	type (HexMesh)                , intent(in)      :: mesh
+	character(len=*)              , intent(in)      :: fileName
+	!-local variable-----------------------------------------
+	integer                    :: eID, fID, ierr
+	integer, allocatable       :: levels(:,:)
+	character(len=LINE_LENGTH) :: levelFileName
+
+	allocate(levels(2, mesh % no_of_allElements))
+	levels = 0
+	do eID = 1, mesh % no_of_elements
+		levels(:, mesh % elements(eID) % globID) = [mesh % elements(eID) % MLevel, mesh % elements(eID) % MLevelwN]
+	end do
+#ifdef _HAS_MPI_
+	if ( MPI_Process % doMPIAction ) then
+		call mpi_allreduce(MPI_IN_PLACE, levels, size(levels), MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
+	end if
+#endif
+
+	if ( MPI_Process % isRoot ) then
+		levelFileName = "./MESH/" // trim(removePath(getFileName(fileName))) // ".lmesh"
+		open(newunit = fID, file = trim(levelFileName), action = 'write')
+		write(fID,*) mesh % no_of_allElements
+		do eID = 1, mesh % no_of_allElements
+			write(fID,*) levels(:, eID)
+		end do
+		close(fID)
+	end if
+
+	deallocate(levels)
+
+   end subroutine MultiLevel_RK_ExportLevels
    
 !------------------------------------------------------------------------
 !  Destruct 
@@ -7039,10 +7291,14 @@ call elementMPIList % destruct
 	if( allocated(self % MLIter_eID_Seq) )  deallocate(self % MLIter_eID_Seq)
 	if( allocated(self % MLIter_eIDN) )     deallocate(self % MLIter_eIDN)
 	if( allocated(self % MLIter_eIDN_Seq) ) deallocate(self % MLIter_eIDN_Seq)
+	if( allocated(self % MLIter_fIDN_Interior) ) deallocate(self % MLIter_fIDN_Interior)
+	if( allocated(self % MLIter_fIDN_Boundary) ) deallocate(self % MLIter_fIDN_Boundary)
 
     if( allocated(self % MLIter_eID_MPI)  ) deallocate(self % MLIter_eID_MPI)
     if( allocated(self % MLIter_fID_MPI)  ) deallocate(self % MLIter_fID_MPI)
     if( allocated(self % MLIter_eIDN_MPI) ) deallocate(self % MLIter_eIDN_MPI)
+    if( allocated(self % MLIter_fIDN_MPI) ) deallocate(self % MLIter_fIDN_MPI)
+    if( allocated(self % MPIfaceRemoteLevel) ) deallocate(self % MPIfaceRemoteLevel)
 	
    end subroutine MultiLevel_RK_Destruct
 !

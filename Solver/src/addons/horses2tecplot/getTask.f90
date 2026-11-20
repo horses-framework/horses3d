@@ -52,6 +52,7 @@ module getTask
    character(len=*), parameter   :: OUTPUT_VARIABLES_FLAG="--output-variables="
    character(len=*), parameter   :: BOUNDARY_FILE_FLAG="--boundary-file="
    character(len=*), parameter   :: PARTITION_FILE_FLAG="--partition-file="
+   character(len=*), parameter   :: MLRK_LEVEL_FILE_FLAG="--mlrk-level-file="
    character(len=*), parameter   :: FLOW_EQS_FLAG="--flow-eqs="
    character(len=*), parameter   :: OUTPUT_FILE_TYPE="--output-type="
    character(len=*), parameter   :: WRITE_MESH_TYPE="--write-mesh="
@@ -320,6 +321,8 @@ module getTask
          if (hasBoundaries) boundaryFileName = controlVariables % stringValueForKey("boundary file", LINE_LENGTH)
          hasMPIranks = controlVariables % containsKey("partition file")
          if (hasMPIranks) partitionFileName = controlVariables % stringValueForKey("partition file", LINE_LENGTH)
+         hasMLRKLevels = controlVariables % containsKey("mlrk level file")
+         if (hasMLRKLevels) mlrkLevelFileName = controlVariables % stringValueForKey("mlrk level file", LINE_LENGTH)
          hasVariablesFlag = controlVariables % containsKey("output variables")
          if (hasVariablesFlag) askedVariables = controlVariables % stringValueForKey("output variables", LINE_LENGTH)
          outScale = .not. controlVariables % logicalValueForKey("dimensionless")
@@ -371,7 +374,8 @@ module getTask
 
       subroutine getTaskTypeCommand(taskType, meshName, no_of_solutions, solutionNames, solutionTypes, fixedOrder, Nout, basis,mode, oldStats, writeMesh)
          use SolutionFile
-         use Storage               , only: hasMPIranks, hasBoundaries, partitionFileName, boundaryFileName, flowEq
+         use Storage               , only: hasMPIranks, hasBoundaries, partitionFileName, boundaryFileName, flowEq, &
+                                           hasMLRKLevels, mlrkLevelFileName
          use OutputVariables       , only: outScale, hasVariablesFlag, askedVariables, Lreference
          use Utilities, only: toLower
          implicit none
@@ -617,6 +621,7 @@ module getTask
 !        ------------------------------------
          hasBoundaries    = .false.
          hasMPIranks      = .false.
+         hasMLRKLevels    = .false.
          outScale         = .true.
          hasVariablesFlag = .false.
 		 writeMesh        = .true. 
@@ -632,6 +637,12 @@ module getTask
             if ( pos .ne. 0 ) then
                hasMPIranks = .TRUE.
                partitionFileName = auxiliarName(pos+len_trim(PARTITION_FILE_FLAG):len_trim(auxiliarName))
+               cycle
+            end if
+            pos = index(trim(auxiliarName),MLRK_LEVEL_FILE_FLAG)
+            if ( pos .ne. 0 ) then
+               hasMLRKLevels = .TRUE.
+               mlrkLevelFileName = auxiliarName(pos+len_trim(MLRK_LEVEL_FILE_FLAG):len_trim(auxiliarName))
                cycle
             end if
             pos = index(trim(auxiliarName),"--dimensionless")

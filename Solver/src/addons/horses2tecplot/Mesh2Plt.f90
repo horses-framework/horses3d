@@ -43,10 +43,18 @@ module Mesh2PltModule
 !        -----------------------------
          write(fid,'(A,A,A)') 'TITLE = "',trim(meshFile),'"'
 
-         if (hasMPIranks) then
-            no_of_outputVariables = 1
+         no_of_outputVariables = 0
+         if (hasMPIranks)   no_of_outputVariables = no_of_outputVariables + 1
+         if (hasMLRKLevels) no_of_outputVariables = no_of_outputVariables + 2
+         if (no_of_outputVariables > 0) then
+            if (allocated(outputVariableNames)) deallocate(outputVariableNames)
             allocate( outputVariableNames(no_of_outputVariables) )
-            outputVariableNames(1) = MPIRANK_V
+            i = 1
+            if (hasMPIranks) then
+               outputVariableNames(i) = MPIRANK_V
+               i = i + 1
+            end if
+            if (hasMLRKLevels) outputVariableNames(i:i+1) = [MLEVEL_V, MLEVELWN_V]
             write(fid,'(A,A)') 'VARIABLES = "x","y","z"', trim(getOutputVariablesLabel())
          else
             write(fid,'(A)') 'VARIABLES = "x","y","z"'
@@ -100,11 +108,7 @@ module Mesh2PltModule
          formatout = getFormat()
 
          do k = 0, e % Nmesh(3)   ; do j = 0, e % Nmesh(2)    ; do i = 0, e % Nmesh(1)
-            if (hasMPIranks) then
-               write(fid,trim(formatout)) e % x(:,i,j,k), real(e % mpi_rank, kind=rp)
-            else
-               write(fid,trim(formatout)) e % x(:,i,j,k)
-            end if
+            write(fid,trim(formatout)) e % x(:,i,j,k), elementValues(e)
          end do               ; end do                ; end do
 
       end subroutine WriteElementToTecplot
@@ -166,11 +170,7 @@ module Mesh2PltModule
          do eID = 1, size(mesh % elements)
             associate ( e => mesh % elements(eID) )
             do k = 0, e % Nmesh(3) ; do j = 0, e % Nmesh(2) ; do i = 0, e % Nmesh(1)
-               if (hasMPIranks) then
-                  write(fid,trim(formatout)) e % x(:,i,j,k), real(e % mpi_rank, kind=rp)
-               else
-                  write(fid,trim(formatout)) e % x(:,i,j,k)
-               end if
+               write(fid,trim(formatout)) e % x(:,i,j,k), elementValues(e)
             end do                ; end do                ; end do
             end associate
          end do
@@ -184,7 +184,7 @@ module Mesh2PltModule
 
                 do j = 0, e % Nmesh(2) - 1 ; do i = 0, e % Nmesh(1) - 1
                    cornersFace =  [ ij2localDOF(i,j,e%Nmesh(1:2)), ij2localDOF(i+1,j,e%Nmesh(1:2)), ij2localDOF(i+1,j+1,e%Nmesh(1:2)), ij2localDOF(i,j+1,e%Nmesh(1:2)) ] + firstPoint(eID)
-                   write(fid,*) cornersFace
+                   write(fid,'(*(I12))') cornersFace
                 end do                  ; end do
 
                 end associate
@@ -197,13 +197,23 @@ module Mesh2PltModule
                 do k = 0, e % Nmesh(3) - 1 ; do j = 0, e % Nmesh(2) - 1 ; do i = 0, e % Nmesh(1) - 1
                    corners =  [ ijk2localDOF(i,j,k  ,e%Nmesh), ijk2localDOF(i+1,j,k  ,e%Nmesh), ijk2localDOF(i+1,j+1,k  ,e%Nmesh), ijk2localDOF(i,j+1,k  ,e%Nmesh), &
                                 ijk2localDOF(i,j,k+1,e%Nmesh), ijk2localDOF(i+1,j,k+1,e%Nmesh), ijk2localDOF(i+1,j+1,k+1,e%Nmesh), ijk2localDOF(i,j+1,k+1,e%Nmesh)  ] + firstPoint(eID)
-                   write(fid,*) corners
+                   write(fid,'(*(I12))') corners
                 end do                    ; end do                    ; end do
                 
                 end associate
              end do
          end if
       end subroutine WriteSingleFluidZoneToTecplot
+
+!     Per-element values written after the coordinates: MPI rank and MLRK levels, in the order of outputVariableNames
+      function elementValues(e) result(values)
+         type(Element_t), intent(in) :: e
+         real(kind=RP), allocatable  :: values(:)
+
+         allocate(values(0))
+         if (hasMPIranks)   values = [values, real(e % mpi_rank, kind=RP)]
+         if (hasMLRKLevels) values = [values, real(e % mlevel, kind=RP), real(e % mlevelwN, kind=RP)]
+      end function elementValues
 
       character(len=LINE_LENGTH) function getFormat()
          use OutputVariables

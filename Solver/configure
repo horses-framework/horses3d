@@ -39,12 +39,15 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./Euler/UniformFlow \
             ./Euler/JFNK \
             ./Euler/TaylorGreenKEPEC \
+            ./Euler/MLRK_FourLevels \
+            ./Euler/MLRK_PartitionLevels \
             ./Euler/Cylinder_ErrorEstimation_pAdaptationRL \
             ./NavierStokes/Convergence \
             ./NavierStokes/Convergence_energy \
             ./NavierStokes/Convergence_entropy \
             ./NavierStokes/Cylinder \
 			./NavierStokes/Cylinder_MLRK \
+            ./NavierStokes/MLRK_SpongeParticles \
             ./NavierStokes/CylinderFAS \
             ./NavierStokes/CylinderAnisFAS \
             ./NavierStokes/CylinderBR2 \
@@ -85,6 +88,7 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./NavierStokes/ABLBoundaryMapping \
             ./NavierStokes/ActuatorLineController \
             ./NavierStokes/LambVector \
+            ./NavierStokes/RotaryPeriodic \
             ./IncompressibleNS/Convergence \
             ./IncompressibleNS/Kovasznay \
             ./IncompressibleNS/TaylorGreen \
@@ -102,6 +106,7 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./Multiphase/RisingBubbleVreman \
             ./Multiphase/Snell \
             ./Multiphase/MixedRK \
+            ./Multiphase/MLRK_InterfaceCFL \
             ./Multiphase/Pipe \
             ./Multiphase/Monopole_pAdaptationRL \
             ./Multiphase/ActuatorLineInterpolation \
@@ -127,7 +132,8 @@ COMPONENTS_TEST_CASES="FacePatches \
  		       HexMesh \
 		       HexMappings \
  		       MeshConsistency \
-		       NodalStorage"
+		       NodalStorage \
+		       Sorting"
 			   
 ADDONS="./AddOns/horsesConverter/MappingResult \
         ./AddOns/horsesConverter/HorsesMesh2OF \
