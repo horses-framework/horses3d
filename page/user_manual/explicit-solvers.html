@@ -155,7 +155,7 @@ The main keywords to use it are shown in the table below</p>
 </tr>
 <tr>
 <td>explicit method</td>
-<td><em>CHARACTER</em>: Select desired Runge-Kutta solver. Options are: 'Euler', 'RK3', 'RK5', 'RKOpt', 'SSPRK33', 'SSPRK43, and 'MixedRK'</td>
+<td><em>CHARACTER</em>: Select desired Runge-Kutta solver. Options are: 'Euler', 'RK3', 'RK5', 'RKOpt', 'SSPRK33', 'SSPRK43, 'MixedRK' and 'Multi Level RK3' (see the Multi-level RK3 section below)</td>
 <td>RK3</td>
 </tr>
 <tr>
@@ -173,8 +173,86 @@ The main keywords to use it are shown in the table below</p>
 <td><em>REAL</em>: Minimum value of density and pressure allowed by the limiter.</td>
 <td>1e-13</td>
 </tr>
+<tr>
+<td>compute time derivative after timestep</td>
+<td><em>LOGICAL</em>: Evaluate the time derivative again after each time step, so that the residuals and the monitors that use the time derivative or the gradients correspond to the new solution. Without it, they come from the last stage of the step.</td>
+<td>.false.</td>
+</tr>
 </tbody>
 </table>
+<h2 id="multi-level-rk3">Multi-level RK3</h2>
+<p>'Multi Level RK3' is a local time-stepping version of the low-storage 'RK3'. The elements are grouped into levels by their advective CFL number. Level 1 takes the global time step <code>dt</code>, and every RK3 stage of a level contains a complete RK3 step of the next level, so the elements of higher levels take smaller sub-steps. During the sub-steps of a level, only the elements of that level and higher (and their face neighbours) are evaluated.</p>
+<table class="table table-striped">
+<thead>
+<tr>
+<th>Keyword</th>
+<th>Description</th>
+<th>Default value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>explicit method</td>
+<td><em>CHARACTER</em>: 'Multi Level RK3' activates the method.</td>
+<td>RK3</td>
+</tr>
+<tr>
+<td>dt</td>
+<td><em>REAL</em>: Global time step, taken by level 1. A fixed time step is required: with a CFL-based time step the global step is set by the smallest elements and the method brings no gain.</td>
+<td>--</td>
+</tr>
+<tr>
+<td>number of level</td>
+<td><em>INTEGER</em>: Maximum number of levels.</td>
+<td>3</td>
+</tr>
+<tr>
+<td>cfl cut-off</td>
+<td><em>REAL</em>: CFL number that separates level 1 from level 2. The threshold of each following level is 2.5 times the previous one. The value is limited to the range [1e-4, 10].</td>
+<td>0.5</td>
+</tr>
+<tr>
+<td>relevel iteration</td>
+<td><em>INTEGER</em>: The levels are assigned at the first time step and then every 'relevel iteration' steps.</td>
+<td>1000000000</td>
+</tr>
+<tr>
+<td>optimized partition</td>
+<td><em>LOGICAL</em>: MPI only. Builds a level-aware partition, so that every MPI rank owns a share of the elements of each level. Works with both 'metis' and 'SFC' partitioning.</td>
+<td>.false.</td>
+</tr>
+<tr>
+<td>MLRK interface tolerance</td>
+<td><em>REAL</em>: Multiphase only. A node with a concentration between this tolerance and one minus it belongs to the interface. Interface elements are placed in the highest level.</td>
+<td>1e-4</td>
+</tr>
+</tbody>
+</table>
+<p>How the levels are assigned:</p>
+<ul>
+<li>The advective CFL number of each element is computed with <code>dt</code> (viscous limits are not considered). An element is in level 1 if its CFL number is below 'cfl cut-off', in level 2 if it is below 2.5 times 'cfl cut-off', and so on. Elements above the last threshold go to the highest level, 'number of level'.</li>
+<li>Face neighbours of a higher-level element are raised so that neighbouring elements differ by at most one level.</li>
+<li>In multiphase simulations, the elements that contain the interface are placed in the highest level.</li>
+<li>The number of elements of each level is printed in the log under "Update Multi-Level Local Timestepping". If all the elements fall into level 1, the simulation stops: use a larger <code>dt</code> or a single-level method.</li>
+</ul>
+<p>Notes:</p>
+<ul>
+<li>The method is only available for the Navier-Stokes (including Euler) and multiphase solvers. The other solvers (RANS, incompressible Navier-Stokes, Cahn-Hilliard, acoustics) stop with an error if it is selected.</li>
+<li>As with 'RK3', the residuals and the monitors that use the time derivative or the gradients come from the last evaluation of each level. Set 'compute time derivative after timestep' to <code>.true.</code> to evaluate them after the step.</li>
+</ul>
+<h3 id="level-file">Level file</h3>
+<p>At the first level assignment, the solver writes the level of every element to <code>./MESH/&lt;solution file name&gt;.lmesh</code>. The first line holds the number of elements, followed by one line per element, in global element order, with two integers:</p>
+<ul>
+<li><code>MLevel</code>: the level the element is advanced with.</li>
+<li><code>MLevelwN</code>: the level at which the element is needed, i.e. its own level or, for a neighbour of a higher-level element, that level. The level-aware partition uses this value.</li>
+</ul>
+<p>The file can be added to the post-processing with <code>horses2plt</code> (see <a href="s-postprocessing.html">Post-processing</a>), which exports the variables <code>mlrk_level</code> and <code>mlrk_level_wn</code>:</p>
+<div class="codehilite"><pre><span></span><code>horses2plt MESH/mesh.hmesh RESULTS/solution.hsol --mlrk-level-file=MESH/solution.lmesh
+</code></pre></div>
+
+<p>The levels can also be added to a mesh-only conversion (without a solution file):</p>
+<div class="codehilite"><pre><span></span><code>horses2plt MESH/mesh.hmesh --mlrk-level-file=MESH/solution.lmesh
+</code></pre></div>
     </div>
   </div>
       <hr>
@@ -192,7 +270,7 @@ The main keywords to use it are shown in the table below</p>
             <p class="text-end">
               Documentation generated by
               <a href="https://github.com/Fortran-FOSS-Programmers/ford">FORD</a>
- on 2026-11-19 18:50 +0000             </p>
+ on 2026-11-20 08:53 +0000             </p>
           </div>
         </div>
         <br>
