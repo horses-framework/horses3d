@@ -9,7 +9,6 @@
 #include "Includes.h"
 Module DGSEMClass
    use SMConstants
-   use Utilities                 , only: sortDescendInt, sortAscendInt, sortAscend
    USE NodalStorageClass         , only: CurrentNodes, NodalStorage, NodalStorage_t
    use MeshTypes                 , only: HOPRMESH
    use ElementClass
@@ -580,10 +579,9 @@ Module DGSEMClass
 	  real(kind=RP)                      :: ML_CFL_CutOff, dt, globalMax, globalMin, maxCFLInterf
 	  integer                            :: ML_nLevel
 	  integer                            :: ierr, i, nElements
-	  integer                            :: globIDLevelPartition( self % mesh % no_of_allElements)
-	  integer                            :: globIDLevel( self % mesh % no_of_allElements)
-	  integer, allocatable               :: nElementLevelPartition(:), nElementLevel(:)
-	  integer                            :: eID_Order(self % mesh % no_of_allElements)
+	  integer, allocatable               :: globIDLevelPartition(:), globIDLevel(:)
+	  integer, allocatable               :: nElementLevelPartition(:), nElementLevel(:), levelPos(:)
+	  integer, allocatable               :: eID_Order(:)
 !       ---------------------------------------------
 !       Read MLRK Setup - No time integration storage
 !       ---------------------------------------------
@@ -600,6 +598,8 @@ Module DGSEMClass
 		end if
 		
 		allocate(nElementLevelPartition(ML_nLevel), nElementLevel(ML_nLevel))
+		allocate(globIDLevelPartition(self % mesh % no_of_allElements), globIDLevel(self % mesh % no_of_allElements))
+		allocate(eID_Order(self % mesh % no_of_allElements))
 		nElementLevelPartition = 0
 		nElementLevel          = 0 
 		globIDLevelPartition   = 0
@@ -609,6 +609,9 @@ Module DGSEMClass
 !       Initialize MLRK library in the mesh 
 !       -----------------------------------
 	    call self % mesh % MLRK % construct(self % mesh, ML_nLevel)
+		if ( controlVariables % ContainsKey("mlrk interface tolerance") ) then
+			 self % mesh % MLRK % interfaceTol = controlVariables % doublePrecisionValueForKey("mlrk interface tolerance")
+		end if
 !       Compute CFL and Level
 !       ---------------------
 	    dt         = controlVariables % doublePrecisionValueForKey("dt")
@@ -628,13 +631,18 @@ Module DGSEMClass
 			call mpi_allreduce(nElementLevelPartition, nElementLevel, ML_nLevel, MPI_INT, MPI_SUM, MPI_COMM_WORLD, ierr)
 		end if
 #endif
-!       Reorder the globIDLevel(level) and eID_Order(element ID)
-        eID_Order = [(i, i=1,self % mesh % no_of_allElements)]
-		call sortDescendInt(globIDLevel,eID_Order) ! Higher level first
-		call sortAscendInt(eID_Order(1:nElementLevel(ML_nLevel)))
-		do i=ML_nLevel-1,1,-1
-			call sortAscendInt(eID_Order(sum(nElementLevel(ML_nLevel:i+1))+1:sum(nElementLevel(ML_nLevel:i))))
-		end do 
+!       Order the global element IDs by level, level 1 first and IDs ascending within each level:
+!       the partitioners take nElementLevel(l) consecutive entries per level, starting from level 1
+		allocate(levelPos(ML_nLevel))
+		levelPos(1) = 1
+		do i = 2, ML_nLevel
+			levelPos(i) = levelPos(i-1) + nElementLevel(i-1)
+		end do
+		do i = 1, self % mesh % no_of_allElements
+			eID_Order(levelPos(globIDLevel(i))) = i
+			levelPos(globIDLevel(i)) = levelPos(globIDLevel(i)) + 1
+		end do
+		deallocate(levelPos)
 !       Destruct DGSEM Library and partitions
 !       -------------------------------------
         if (MPI_Process % isRoot) THEN
@@ -659,6 +667,7 @@ Module DGSEMClass
 	 
 	   if (allocated(nElementLevelPartition)) deallocate(nElementLevelPartition)
 	   if (allocated(nElementLevel)) deallocate(nElementLevel)
+	   deallocate(globIDLevelPartition, globIDLevel, eID_Order)
 	   
       END SUBROUTINE ReConstructDGSemMLRK		
 	  
@@ -1078,6 +1087,7 @@ Module DGSEMClass
 	  real(kind=RP)                 :: maxCFL, minCFL, maxCFLInterface
 	  real(kind=RP), allocatable    :: elementCFL(:), maxCFLInterfaceID(:)              
       logical                       :: isRootOnly	  
+      logical                       :: isInterface                      ! The element has at least one interface node
       type(NodalStorage_t), pointer :: spAxi_p, spAeta_p, spAzeta_p     ! Pointers to the nodal storage in every direction
       external                      :: ComputeEigenvaluesForState       ! Advective eigenvalue
 #if defined(INCNS) || defined(MULTIPHASE)
@@ -1106,6 +1116,7 @@ Module DGSEMClass
 
       do eID = 1, SIZE(self % mesh % elements)
 	     cfl = 0.0_RP
+	     isInterface = .false.
          N = self % mesh % elements(eID) % Nxyz
          spAxi_p => NodalStorage(N(1))
          spAeta_p => NodalStorage(N(2))
@@ -1178,12 +1189,14 @@ Module DGSEMClass
 			cfl = max( cfl, deltat * abs(lamcsi_a+lameta_a+lamzet_a)/abs(jac) ) 
 
 #ifdef MULTIPHASE
-			if ((Q(1).ge.0.0001_RP).or.(Q(1).ge.0.9999_RP)) then 
-				maxCFLInterfaceID (eID) = cfl
+			if ((Q(1).ge.self % mesh % MLRK % interfaceTol).and.(Q(1).le.1.0_RP-self % mesh % MLRK % interfaceTol)) then 
+				isInterface = .true.
 			end if 
 #endif			
 			
          end do ; end do ; end do
+		 
+		 if (isInterface) maxCFLInterfaceID(eID) = cfl
 		 
 		 self % mesh % elements(eID) % ML_CFL = cfl
 	     elementCFL(eID)=cfl 
@@ -1191,7 +1204,6 @@ Module DGSEMClass
 !$omp end do
 !$omp end parallel
 
-	  call sortAscend(elementCFL)
 	  maxCFL             = maxval(elementCFL)
 	  minCFL             = minval(elementCFL)
 	  maxCFLInterface    = maxval(maxCFLInterfaceID)

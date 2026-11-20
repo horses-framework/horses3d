@@ -1,0 +1,69 @@
+!
+!  MLRK interface CFL in multiphase (issue 400).
+!  Inclined interface at x ~ 0 (phase 1 for x < 0) and a fast block (u = 1000) at x < -0.6,
+!  both fluids with the same sound speed, so the fastest elements are phase-1 elements away
+!  from the interface. Interface elements get 100 x (largest interface CFL); the cut-off is set
+!  so that this falls in level 2, while 100 x (largest CFL overall), which the old interface
+!  test produced, falls in level 3. One step; the checks are in UserDefinedFinalize.
+!
+mesh file name        = "../MixedRK/MESH/N50.msh"
+Polynomial order i = 2
+Polynomial order j = 2
+Polynomial order k = 1
+Number of time steps  = 1
+Output Interval       = 1
+Convergence tolerance = 1.d-14
+dt                    = 1.0e-6
+Number of fluids (1/2) = 2
+fluid 1 density (kg/m^3) = 1.0
+fluid 1 viscosity (Pa.s) = 1e-16
+fluid 2 density (kg/m^3) = 2.0
+fluid 2 viscosity (Pa.s) = 1e-16
+reference velocity (m/s) = 1.0
+velocity direction = [1,0,0]
+fluid 1 sound speed square (m/s) = 117649.0
+fluid 2 sound speed square (m/s) = 117649.0
+Froude number = 1.0d+300
+Prandtl number = 0.72
+AOA theta             = 0.0
+AOA phi               = 0.0
+solution file name    = "RESULTS/MLRK_InterfaceCFL.hsol"
+save gradients with solution = .false.
+restart               = .false.
+restart file name     = "RESULTS/MLRK_InterfaceCFL.hsol"
+simulation type       = time-accurate
+Discretization nodes  = Gauss-Lobatto
+riemann solver        = exact
+Lambda stabilization = 1.0
+Averaging = Skew-symmetric 2
+Viscous discretization = BR1
+Cahn-Hilliard discretization = BR1
+chem characteristic time (s) = 1e+14
+interface width (m) = 0.01
+interface tension (N/m) = 1e-16
+Time integration = Explicit
+explicit method  = multi level rk3
+number of level  = 3
+cfl cut-off      = 1.84
+MLRK interface tolerance = 1.0e-3
+
+#define boundary front
+   type = FreeSlipWall
+#end
+#define boundary back
+   type = FreeSlipWall
+#end
+#define boundary top
+   type = FreeSlipWall
+#end
+#define boundary bottom
+   type = FreeSlipWall
+#end
+#define boundary right
+   type = Periodic
+   coupled boundary = left
+#end
+#define boundary left
+   type = Periodic
+   coupled boundary = right
+#end

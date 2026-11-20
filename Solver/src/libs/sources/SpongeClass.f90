@@ -69,6 +69,7 @@ Module SpongeClass  !
         use Headers
         use mainKeywordsModule
         use FileReadingUtilities, only: getFileName
+        use Utilities, only: toLower
         Implicit None
         type(sponge_t)                                          :: self
         type(HexMesh), intent(inout)                            :: mesh
@@ -106,6 +107,7 @@ Module SpongeClass  !
             end if
 
             self % shapeType(i) = trim(controlVariables % stringValueForKey(tmp, requestedLength = STRING_CONSTANT_LENGTH))
+            call toLower(self % shapeType(i))
             if(self % shapeType(i) == "cylindrical") then
                 if (useNumberedKeys) then
                     write(tmp, '("sponge radious ",I0)') i
@@ -420,10 +422,11 @@ Module SpongeClass  !
 
     End Subroutine creatRampSponge
 !
-    Subroutine addSourceSponge(self,mesh)
+    Subroutine addSourceSponge(self,mesh,Level)
         Implicit None
         type(sponge_t)                                          :: self
         type(HexMesh), intent(inout)                            :: mesh
+        integer, intent(in), optional                           :: Level   ! MLRK: only elements with MLevel >= Level
     
         !local variables
         integer                                                 :: i, j, k, eID, spongeEID
@@ -435,6 +438,9 @@ Module SpongeClass  !
 !$omp do schedule(runtime) private(i,j,k,eID)
         do spongeEID = 1, self % nElements
             eID = self % elementIndexMap(spongeEID)
+            if ( present(Level) ) then
+                if ( mesh % elements(eID) % MLevel < Level ) cycle
+            end if
             associate(e => mesh % elements(eID))
                 do k = 0, e % Nxyz(3) ; do j = 0, e % Nxyz(2) ; do i = 0, e % Nxyz(1)
                     e % storage % S_NS(:,i,j,k) = - e % storage % intensitySponge(i,j,k) * (e % storage % Q(:,i,j,k) - e % storage % QbaseSponge(:,i,j,k))

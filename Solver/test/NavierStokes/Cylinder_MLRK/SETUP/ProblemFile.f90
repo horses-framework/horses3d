@@ -553,15 +553,15 @@ end module ProblemFileFunctions
 #if defined(NAVIERSTOKES)
             INTEGER                            :: iterations(3:7) = [20, 0, 0, 0, 0]
   
-            real(kind=RP), parameter :: residuals(5) = [ 6.4366298273677529E+00_RP, &
-                                                         1.4382326132608259E+01_RP, &
-                                                         6.75679612029929E-02_RP, &
-                                                         1.6613872737245508E+01_RP, &
-                                                         1.7523096637012696E+02_RP]
+            real(kind=RP), parameter :: residuals(5) = [ 6.4545265184307148E+00_RP, &
+                                                         1.4344626415501782E+01_RP, &
+                                                         6.9929521151120444E-02_RP, &
+                                                         1.6340950048802782E+01_RP, &
+                                                         1.7698232760889718E+02_RP]
 
             real(kind=RP), parameter           :: wake_u = 1.0965307794823676E-08_RP
-            real(kind=RP), parameter           :: cd = 2.7645531468829969E+01_RP
-            real(kind=RP), parameter           :: cl = -7.9050985992168E-04_RP
+            real(kind=RP), parameter           :: cd = 2.7648766476941269E+01_RP
+            real(kind=RP), parameter           :: cl = -7.9030437791582919E-04_RP
 
 !
             N = mesh % elements(1) % Nxyz(1) ! This works here because all the elements have the same order in all directions

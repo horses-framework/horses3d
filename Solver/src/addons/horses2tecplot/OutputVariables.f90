@@ -18,7 +18,7 @@ module OutputVariables
    use SMConstants
    use PhysicsStorage
    use Headers
-   use Storage, only: NVARS, hasMPIranks
+   use Storage, only: NVARS, hasMPIranks, hasMLRKLevels
    use PhysicsStorage_NSSA, only: IRHOTHETA
    use PhysicsStorage_iNS, only: INSRHO, INSRHOU, INSRHOV, INSRHOW, INSP
    use PhysicsStorage_MU, only: IMC, IMSQRHOU, IMSQRHOV, IMSQRHOW, IMP
@@ -31,7 +31,7 @@ module OutputVariables
    public   getOutputVariables, ComputeOutputVariables, getOutputVariablesLabel
    public   getOutputVariablesList, outputVariablesForVariable, OutputVariablesForPreliminarVariable
    public   outScale, hasVariablesFlag, Lreference
-   public   MPIRANK_V
+   public   MPIRANK_V, MLEVEL_V, MLEVELWN_V
 				 
    integer, parameter   :: STR_VAR_LEN = 16
 !
@@ -50,6 +50,7 @@ module OutputVariables
       enumerator :: Xi_V, Eta_V, Zeta_V, ThreeAxes_V, Axes_V, eID_V
       enumerator :: LAMBvec_V, LAMBx_V, LAMBy_V, LAMBz_V
       enumerator :: QBase_V, RHOBase_V, UBase_V, VBase_V, WBase_V, PBase_V, A2Base_V
+      enumerator :: MLEVEL_V, MLEVELWN_V
       enumerator :: MPIRANK_V
       enumerator :: GRADV_V, UX_V, VX_V, WX_V
       enumerator :: UY_V, VY_V, WY_V, UZ_V, VZ_V, WZ_V
@@ -119,6 +120,8 @@ module OutputVariables
    character(len=STR_VAR_LEN), parameter  :: WBaseKey      = "wbase"
    character(len=STR_VAR_LEN), parameter  :: PBaseKey      = "pbase"
    character(len=STR_VAR_LEN), parameter  :: A2BaseKey     = "A2base"
+   character(len=STR_VAR_LEN), parameter  :: mlrkLevelKey   = "mlrk_level"
+   character(len=STR_VAR_LEN), parameter  :: mlrkLevelwNKey = "mlrk_level_wn"
    character(len=STR_VAR_LEN), parameter  :: mpiRankKey    = "mpi_rank"
    character(len=STR_VAR_LEN), parameter  :: gradVKey      = "gradV"
    character(len=STR_VAR_LEN), parameter  :: uxKey         = "u_x"
@@ -182,7 +185,7 @@ module OutputVariables
                                                                             XiKey, EtaKey, ZetaKey, ThreeAxesKey, AxesKey, eIDKey, &
                                                                             LambKey, LambxKey, LambyKey, LambzKey, &
                                                                             QBaseKey, RHOBaseKey, UBaseKey, VBaseKey, WBaseKey, PBaseKey, A2BaseKey, &
-                                                                            mpiRankKey, &
+                                                                            mlrkLevelKey, mlrkLevelwNKey, mpiRankKey, &
                                                                             gradVKey, uxKey, vxKey, wxKey, &
                                                                             uyKey, vyKey, wyKey, uzKey, vzKey, wzKey, &
                                                                             cxKey, cyKey, czKey, &
@@ -270,6 +273,7 @@ module OutputVariables
          end do
 
          if (hasMPIranks)  no_of_outputVariables = no_of_outputVariables + 1
+         if (hasMLRKLevels) no_of_outputVariables = no_of_outputVariables + 2
 
          safedeallocate( outputVariableNames) ; allocate( outputVariableNames(no_of_outputVariables) )
 
@@ -282,7 +286,11 @@ module OutputVariables
 
          end do
 
-         if (hasMPIranks) outputVariableNames(pos) = MPIRANK_V
+         if (hasMPIranks) then
+            outputVariableNames(pos) = MPIRANK_V
+            pos = pos + 1
+         end if
+         if (hasMLRKLevels) outputVariableNames(pos:pos+1) = [MLEVEL_V, MLEVELWN_V]
 !
 !        *****************************
 !        Describe the output variables
@@ -674,6 +682,12 @@ module OutputVariables
 
                case(MPIRANK_V)
                   output(var,:,:,:) = e % mpi_rank
+
+               case(MLEVEL_V)
+                  output(var,:,:,:) = e % mlevel
+
+               case(MLEVELWN_V)
+                  output(var,:,:,:) = e % mlevelwN
 !
 !              ******************
 !              Statistics variables   

@@ -259,6 +259,15 @@
                self % RKStep => TakeMixedRKStep
                self % RKStep_key = MIXED_RK_KEY
 			case(ML_RK3_NAME)
+#if !((defined(NAVIERSTOKES) && !defined(SPALARTALMARAS)) || defined(MULTIPHASE))
+!               Only the NS (and Euler) and multiphase solvers restrict the time derivative to a level
+				if ( MPI_Process % isRoot ) then
+					write(STD_OUT,'(A)') "Error: 'multi level rk3' is only available for the Navier-Stokes (and Euler) " // &
+					                     "and multiphase solvers. Use another explicit method."
+				end if
+				errorMessage(STD_OUT)
+				error stop
+#endif
 				if ( controlVariables % ContainsKey("cfl cut-off") ) then
 				     self % ML_CFL_CutOff = controlVariables % doublePrecisionValueForKey("cfl cut-off")
 					 self % ML_CFL_CutOff = min(max(self % ML_CFL_CutOff,0.0001_RP),10.0_RP)
@@ -282,6 +291,9 @@
 				self % ML_Counter = 0
 				
 				call sem % mesh % MLRK % construct(sem % mesh, self % ML_nLevel) ! construct nlevel  
+				if ( controlVariables % ContainsKey("mlrk interface tolerance") ) then
+				     sem % mesh % MLRK % interfaceTol = controlVariables % doublePrecisionValueForKey("mlrk interface tolerance")
+			    end if
 
             case default
                print*, "Explicit time integration method not implemented"
@@ -380,6 +392,9 @@
 			   write(STD_OUT,'(35X,A,A23,I14)')   "->" , "Update Iteration: ", self % ML_ReLevel_Iteration
 			   write(STD_OUT,'(35X,A,A23,A)')  "->" , "Cut-Off Level 1: ","CFL Cut-Off"
 			   write(STD_OUT,'(35X,A,A23,A)')  "->" , "Cut-Off Level N: ","CFL Cut-Off x 2.5^(N-1) "
+#if defined(MULTIPHASE)
+			   write(STD_OUT,'(35X,A,A23,ES10.3)') "->" , "Interface tolerance: ", sem % mesh % MLRK % interfaceTol
+#endif
             end select
 
             write(STD_OUT,'(30X,A,A28)',advance='no') "->" , "Stage limiter: "
@@ -802,6 +817,7 @@
 					CALL DetermineCFL(sem, self % dt, globalMax, globalMin, maxCFLInterf)
 					call sem % mesh % MLRK % construct(sem % mesh, self % ML_nLevel) ! reconstruct nLevel  
 					CALL sem % mesh % MLRK % update (sem % mesh, self % ML_CFL_CutOff, globalMax, globalMin, maxCFLInterf)
+					if (self % ML_ReLevel) call sem % mesh % MLRK % exportLevels(sem % mesh, SolutionFileName) ! first level assignment only
 					self % ML_ReLevel = .false. 
 					self % ML_Counter = 0
 				end if 

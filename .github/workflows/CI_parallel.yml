@@ -341,6 +341,56 @@ jobs:
         if: '!cancelled()'
 
 #
+# 5b) MLRK level-aware partition (METIS and SFC)
+# ----------------------------------------------
+
+      - name: Build MLRK_PartitionLevels
+        working-directory: ./Solver/test/Euler/MLRK_PartitionLevels/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: '!cancelled()'
+
+      - name: Run MLRK_PartitionLevels (METIS)
+        working-directory: ./Solver/test/Euler/MLRK_PartitionLevels
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 4 ./horses3d.ns MLRK_PartitionLevels_METIS.control
+        if: '!cancelled()'
+
+      - name: Run MLRK_PartitionLevels (SFC)
+        working-directory: ./Solver/test/Euler/MLRK_PartitionLevels
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 4 ./horses3d.ns MLRK_PartitionLevels_SFC.control
+        if: '!cancelled()'
+
+      - name: Run MLRK_PartitionLevels (method name in mixed case)
+        working-directory: ./Solver/test/Euler/MLRK_PartitionLevels
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 4 ./horses3d.ns MLRK_PartitionLevels_MixedCase.control
+        if: '!cancelled()'
+
+#
+# 5c) MLRK with 4 levels and the level export, with MPI
+# -----------------------------------------------------
+
+      - name: Build MLRK_FourLevels
+        working-directory: ./Solver/test/Euler/MLRK_FourLevels/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_METIS=YES EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: '!cancelled()'
+
+      - name: Run MLRK_FourLevels
+        working-directory: ./Solver/test/Euler/MLRK_FourLevels
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          mpiexec -n 4 ./horses3d.ns MLRK_FourLevels.control
+        if: '!cancelled()'
+
+#
 # 6) Vortex transport 2D with KEPEC
 # ---------------------------------
 

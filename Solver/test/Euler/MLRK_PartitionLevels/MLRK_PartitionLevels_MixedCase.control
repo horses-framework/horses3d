@@ -1,0 +1,58 @@
+!
+!  Method and partitioner names in mixed case (issue 404): the level-aware SFC partition must still be built. 4 MPI ranks.
+!  N=6 in the layer z < 2*pi/8 makes it level 2 (with elements numbered x-fastest, the default, DOF-weighted
+!  SFC split is unbalanced per level); its neighbour layers are needed at level 2. 320 / 192 elements by MLevelwN.
+!  With "optimized partition" every rank should own about 1/4 of each (checked in UserDefinedFinalize).
+!
+Flow equations           = "Euler"
+mesh file name           = "../../TestMeshes/TaylorGreen8.mesh"
+polynomial order file    = "orders_zlayer.dat"
+discretization nodes     = Gauss-Lobatto
+riemann solver           = roe
+mach number              = 0.08
+AOA theta                = 0.0
+AOA phi                  = 0.0
+restart                  = .false.
+restart file name        = "RESULTS/MLRK_PartitionLevels_MixedCase.hsol"
+solution file name       = "RESULTS/MLRK_PartitionLevels_MixedCase.hsol"
+simulation type          = time-accurate
+explicit method          = Multi Level RK3
+optimized partition      = .true.
+partitioning             = Sfc
+number of level          = 2
+cfl cut-off              = 0.4
+dt                       = 2.0e-3
+number of time steps     = 1
+output interval          = 1
+number of plot points    = 2
+convergence tolerance    = 1.d-14
+
+#define boundary front
+  type = periodic
+  coupled boundary = back
+#end
+
+#define boundary back
+  type = periodic
+  coupled boundary = front
+#end
+
+#define boundary bottom
+  type = periodic
+  coupled boundary = top
+#end
+
+#define boundary top
+  type = periodic
+  coupled boundary = bottom
+#end
+
+#define boundary left
+  type = periodic
+  coupled boundary = right
+#end
+
+#define boundary right
+  type = periodic
+  coupled boundary = left
+#end
