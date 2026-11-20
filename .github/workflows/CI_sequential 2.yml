@@ -893,6 +893,20 @@ jobs:
           ./horses3d.ns TaylorGreen.control
         if: '!cancelled()'
 
+      - name: Build LambVectorCube
+        working-directory: ./Solver/test/NavierStokes/LambVectorCube/SETUP
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} WITH_HDF5=${{matrix.hdf5}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: '!cancelled()'
+
+      - name: Run LambVectorCube
+        working-directory: ./Solver/test/NavierStokes/LambVectorCube
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./horses3d.ns LambVectorCube.control
+        if: '!cancelled()'
+
 #
 # 39) Rotary periodic
 # ----------------

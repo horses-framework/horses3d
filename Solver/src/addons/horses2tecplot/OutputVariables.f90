@@ -48,7 +48,7 @@ module OutputVariables
       enumerator :: SQRHOU_V, SQRHOV_V, SQRHOW_V
       enumerator :: Nxi_V, Neta_V, Nzeta_V, Nav_V, N_V
       enumerator :: Xi_V, Eta_V, Zeta_V, ThreeAxes_V, Axes_V, eID_V
-      enumerator :: LAMBvec_V, LAMBx_V, LAMBy_V, LAMBz_V
+      enumerator :: LAMBvec_V, LAMBx_V, LAMBy_V, LAMBz_V, DIVLAMB_V
       enumerator :: QBase_V, RHOBase_V, UBase_V, VBase_V, WBase_V, PBase_V, A2Base_V
       enumerator :: MLEVEL_V, MLEVELWN_V
       enumerator :: MPIRANK_V
@@ -113,6 +113,7 @@ module OutputVariables
    character(len=STR_VAR_LEN), parameter  :: LambxKey      = "lamb_x"
    character(len=STR_VAR_LEN), parameter  :: LambyKey      = "lamb_y"
    character(len=STR_VAR_LEN), parameter  :: LambzKey      = "lamb_z"
+   character(len=STR_VAR_LEN), parameter  :: DivLambKey    = "divlamb"
    character(len=STR_VAR_LEN), parameter  :: QBaseKey      = "Qbase"
    character(len=STR_VAR_LEN), parameter  :: RHOBaseKey    = "rhobase"
    character(len=STR_VAR_LEN), parameter  :: UBaseKey      = "ubase"
@@ -183,7 +184,7 @@ module OutputVariables
                                                                             SQRHOUKey, SQRHOVKey, SQRHOWKey, &
                                                                             NxiKey, NetaKey, NzetaKey, NavKey, NKey, &
                                                                             XiKey, EtaKey, ZetaKey, ThreeAxesKey, AxesKey, eIDKey, &
-                                                                            LambKey, LambxKey, LambyKey, LambzKey, &
+                                                                            LambKey, LambxKey, LambyKey, LambzKey, DivLambKey, &
                                                                             QBaseKey, RHOBaseKey, UBaseKey, VBaseKey, WBaseKey, PBaseKey, A2BaseKey, &
                                                                             mlrkLevelKey, mlrkLevelwNKey, mpiRankKey, &
                                                                             gradVKey, uxKey, vxKey, wxKey, &
@@ -603,6 +604,11 @@ module OutputVariables
                case(LAMBz_V)
                   do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
                      output(var,i,j,k) = Q(3,i,j,k)
+                  end do         ; end do         ; end do
+
+               case(DIVLAMB_V)
+                  do k = 0, N(3) ; do j = 0, N(2) ; do i = 0, N(1)
+                     output(var,i,j,k) = Q(1,i,j,k)
                   end do         ; end do         ; end do
                
                case(RHOBase_V)
