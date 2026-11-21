@@ -145,7 +145,7 @@
       SUBROUTINE ConstructPhysicsStorage_NS( controlVariables, Lref, timeref, success )
       USE FTValueDictionaryClass
       USE Physics_NSKeywordsModule
-      use mainKeywordsModule, only: saveLambVectorKey
+      use mainKeywordsModule, only: saveLambVectorKey, saveLambVectorDivergenceKey
       use Utilities, only: toLower, almostEqual
 !
 !     ---------
@@ -274,14 +274,6 @@
          end if
       end if
 
-      ! If Lamb vector is requested, computeGradient should be enabled
-      if (controlVariables % logicalValueForKey(saveLambVectorKey)) then
-         if (.not. computeGradients) then
-            print *, trim(COMPUTE_GRADIENTS_KEY), " should be enabled to compute the Lamb vector."
-            error stop
-         end if
-      end if
-
       dimensionless_ % gammaM2 = thermodynamics_ % gamma * POW2( dimensionless_ % Mach )
 !
 !     ********************
@@ -380,6 +372,15 @@
             flowIsNavierStokes = .true.
             computeGradients = .true.
 
+         end if
+      end if
+
+      ! If Lamb vector is requested, computeGradient should be enabled
+      if (controlVariables % logicalValueForKey(saveLambVectorKey) .or. &
+          controlVariables % logicalValueForKey(saveLambVectorDivergenceKey)) then
+         if (.not. computeGradients) then
+            print *, trim(COMPUTE_GRADIENTS_KEY), " should be enabled to compute the Lamb vector."
+            error stop
          end if
       end if
 !

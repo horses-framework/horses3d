@@ -167,7 +167,7 @@ module AutosaveClass
    end function Autosave_Autosave
 
    subroutine Autosave_LambVectorConfigure(self, controlVariables, t0)
-      use mainKeywordsModule, only: saveLambVectorKey
+      use mainKeywordsModule, only: saveLambVectorKey, saveLambVectorDivergenceKey
       implicit none
       class(Autosave_t)          :: self
       class(FTValueDictionary)   :: controlVariables
@@ -183,7 +183,8 @@ module AutosaveClass
       character(len=LINE_LENGTH), parameter :: autosaveByIteration = "iteration"
       character(len=LINE_LENGTH), parameter :: autosaveByTime = "time"
 
-      if (.not. controlVariables % logicalValueForKey(saveLambVectorKey)) then
+      if (.not. (controlVariables % logicalValueForKey(saveLambVectorKey) .or. &
+                 controlVariables % logicalValueForKey(saveLambVectorDivergenceKey))) then
          self % enable = .false.
          self % mode   = AUTOSAVE_UNDEFINED
          self % iter_interval = huge(1)

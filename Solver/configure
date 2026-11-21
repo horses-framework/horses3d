@@ -88,6 +88,7 @@ TEST_CASES="./Euler/BoxAroundCircle \
             ./NavierStokes/ABLBoundaryMapping \
             ./NavierStokes/ActuatorLineController \
             ./NavierStokes/LambVector \
+            ./NavierStokes/LambVectorCube \
             ./NavierStokes/RotaryPeriodic \
             ./IncompressibleNS/Convergence \
             ./IncompressibleNS/Kovasznay \

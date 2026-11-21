@@ -737,7 +737,8 @@ Module DGSEMClass
                call self % mesh % SaveBaseFlow(initial_iteration, initial_time, solutionName)
 #endif
 #ifdef FLOW
-               if (controlVariables % logicalValueForKey(saveLambVectorKey)) then
+               if (controlVariables % logicalValueForKey(saveLambVectorKey) .or. &
+                   controlVariables % logicalValueForKey(saveLambVectorDivergenceKey)) then
                   solutionName = controlVariables % stringValueForKey(solutionFileNameKey, requestedLength = LINE_LENGTH)
                   solutionName = trim(getFileName(solutionName))
                   call self % mesh % SaveLambVector(initial_iteration, initial_time, solutionName, controlVariables)
