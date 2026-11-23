@@ -1074,6 +1074,7 @@ module SpatialDiscretization
          real(kind=RP) :: fluxL(1:NCONS,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: fluxR(1:NCONS,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: muL, muR
+         real(kind=RP) :: QpenL(NCONS), QpenR(NCONS)
          real(kind=RP) :: UxL(1:NGRAD), UyL(1:NGRAD), UzL(1:NGRAD)
          real(kind=RP) :: UxR(1:NGRAD), UyR(1:NGRAD), UzR(1:NGRAD)
 
@@ -1100,11 +1101,18 @@ module SpatialDiscretization
 !              Viscous fluxes
 !              --------------
 !      
+!              The viscous Riemann solver penalizes the jump of QLeft/QRight. The mobility flux of the
+!              concentration differentiates mu, so its penalty must act on mu, not on c.
+               QpenL = f % storage(1) % Q(:,i,j)
+               QpenR = f % storage(2) % Q(:,i,j)
+               QpenL(IMC) = f % storage(1) % mu(1,i,j)
+               QpenR(IMC) = f % storage(2) % mu(1,i,j)
+
                CALL ViscousDiscretization % RiemannSolver(nEqn = NCONS, nGradEqn = NCONS, &
                                                   EllipticFlux = mViscousFlux, &
                                                   f = f, &
-                                                  QLeft = f % storage(1) % Q(:,i,j), &
-                                                  QRight = f % storage(2) % Q(:,i,j), &
+                                                  QLeft = QpenL, &
+                                                  QRight = QpenR, &
                                                   U_xLeft = UxL, &
                                                   U_yLeft = UyL, &
                                                   U_zLeft = UzL, &
@@ -1174,6 +1182,7 @@ module SpatialDiscretization
          real(kind=RP) :: fluxR(1:NCONS,0:f % Nf(1),0:f % Nf(2))
          real(kind=RP) :: flux(1:NCONS,0:f % Nf(1),0:f % Nf(2),2)
          real(kind=RP) :: muL, muR
+         real(kind=RP) :: QpenL(NCONS), QpenR(NCONS)
          real(kind=RP) :: UxL(1:NGRAD), UyL(1:NGRAD), UzL(1:NGRAD)
          real(kind=RP) :: UxR(1:NGRAD), UyR(1:NGRAD), UzR(1:NGRAD)
 
@@ -1200,11 +1209,18 @@ module SpatialDiscretization
 !              Viscous fluxes
 !              --------------
 !      
+!              The viscous Riemann solver penalizes the jump of QLeft/QRight. The mobility flux of the
+!              concentration differentiates mu, so its penalty must act on mu, not on c.
+               QpenL = f % storage(1) % Q(:,i,j)
+               QpenR = f % storage(2) % Q(:,i,j)
+               QpenL(IMC) = f % storage(1) % mu(1,i,j)
+               QpenR(IMC) = f % storage(2) % mu(1,i,j)
+
                CALL ViscousDiscretization % RiemannSolver(nEqn = NCONS, nGradEqn = NCONS, &
                                                   EllipticFlux = mViscousFlux, &
                                                   f = f, &
-                                                  QLeft = f % storage(1) % Q(:,i,j), &
-                                                  QRight = f % storage(2) % Q(:,i,j), &
+                                                  QLeft = QpenL, &
+                                                  QRight = QpenR, &
                                                   U_xLeft = UxL, &
                                                   U_yLeft = UyL, &
                                                   U_zLeft = UzL, &
