@@ -1,0 +1,46 @@
+#################################################################################
+##	Makefile to compile the multiphase Components test cases.
+##
+##	They link the multiphase libraries (build them first, e.g. make mu) and
+##	compile SpatialDiscretization.f90 of the multiphase solver together with
+##	the sources in ./src. SPATIAL_DISCRETIZATION selects the file under test.
+#################################################################################
+
+#######################################
+## Invoke the HORSES makefile
+#######################################
+HOME_DIR=@HORSES_HOME_DIR
+PROG_TEST:=@PROG_NAME
+include $(HOME_DIR)/Makefile
+
+INCLUDE:=-I./include $(INCLUDE)
+SPATIAL_DISCRETIZATION?=$(HOME_DIR)/src/MultiphaseSolver/SpatialDiscretization.f90
+
+OBJS_CASE_F90=$(notdir $(wildcard ./src/*.f90))
+OBJS_CASE_EXEC=$(patsubst %.f90,./build/%.o,$(OBJS_CASE_F90))
+
+#################################################
+### General rules
+#################################################
+.DEFAULT_GOAL:=allComponents
+allComponents: ./bin/$(PROG_TEST)
+
+./bin/$(PROG_TEST): ./build/SpatialDiscretization.o $(OBJS_CASE_EXEC) | mkdirsComponents
+	$(FC) $(FFLAGS) -o $@ ./build/SpatialDiscretization.o $(OBJS_CASE_EXEC) $(HORSES_LIBS_MU) $(PROBLEM_LIB_MU) $(LIBS)
+
+./build/SpatialDiscretization.o: $(SPATIAL_DISCRETIZATION) | mkdirsComponents
+	$(FC) $(FFLAGS) $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_mu $(MOD_FLAG)./include -c $< -o $@
+
+./build/%.o: ./src/%.f90 ./build/SpatialDiscretization.o
+	$(FC) $(FFLAGS) $(MACROS) $(EXTLIB_INC) $(INCLUDE) $(INCLUDE)_mu $(MOD_FLAG)./include -c $< -o $@
+
+####################################################
+## Extra rules
+####################################################
+clean: FORCE
+	@rm -rf ./build ./include ./bin ./RESULTS
+
+mkdirsComponents: FORCE
+	@mkdir -p ./build ./include ./bin ./MESH ./RESULTS
+
+FORCE:

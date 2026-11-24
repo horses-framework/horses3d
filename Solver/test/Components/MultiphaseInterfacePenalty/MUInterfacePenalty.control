@@ -1,0 +1,56 @@
+Mesh file name                 = ../../TestMeshes/UnitCube4x4.mesh
+Solution file name             = RESULTS/MUInterfacePenalty.hsol
+Restart                        = .false.
+Save gradients with solution   = .false.
+Save sensor with solution      = .false.
+Fluid 1 density (kg/m^3)       = 1.0
+Fluid 2 density (kg/m^3)       = 2.0
+Fluid 1 viscosity (Pa.s)       = 0.1
+Fluid 2 viscosity (Pa.s)       = 0.05
+Velocity direction             = [1.0, 0.0, 0.0]
+Reference velocity (m/s)       = 1.0
+Chem characteristic time (s)   = 10.0
+Interface width (m)            = 0.5
+Interface tension (N/m)        = 0.01
+Artificial sound speed square (m/s) = 100.0
+Polynomial order               = 3
+Discretization nodes           = Gauss-Lobatto
+Inviscid discretization        = Standard
+Riemann solver                 = Exact
+Viscous discretization         = BR1
+Cahn-Hilliard discretization   = BR1
+Penalty parameter              = 1.0
+Time integration               = Explicit
+Explicit method                = RK3
+Simulation type                = time-accurate
+dt                             = 1.0e-6
+Number of time steps           = 0
+Output interval                = 1
+Convergence tolerance          = 1.0e-10
+Autosave mode                  = iteration
+Autosave interval              = 1000000
+
+#define boundary Left
+   type = periodic
+   coupled boundary = Right
+#end
+#define boundary Right
+   type = periodic
+   coupled boundary = Left
+#end
+#define boundary bottom
+   type = periodic
+   coupled boundary = top
+#end
+#define boundary top
+   type = periodic
+   coupled boundary = bottom
+#end
+#define boundary Front
+   type = periodic
+   coupled boundary = Back
+#end
+#define boundary Back
+   type = periodic
+   coupled boundary = Front
+#end
