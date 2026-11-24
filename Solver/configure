@@ -128,6 +128,9 @@ COMPONENTS_TEST_CASES="FacePatches \
 		       HexMappings \
  		       MeshConsistency \
 		       NodalStorage"
+
+# Components tests that link the multiphase solver
+COMPONENTS_MU_TEST_CASES="MultiphaseInterfacePenalty"
 			   
 ADDONS="./AddOns/horsesConverter/MappingResult \
         ./AddOns/horsesConverter/HorsesMesh2OF \
@@ -183,6 +186,13 @@ done
 for subdir in $COMPONENTS_TEST_CASES; do
 	cp -v ./test/Components/Makefile.components ./test/Components/$subdir/Makefile
 	mkdir -p ./test/Components/$subdir/MESH
+	sed -i -e "s#@HORSES_HOME_DIR#$PWD#g" ./test/Components/$subdir/Makefile
+	sed -i -e "s#@PROG_NAME#$subdir#g" ./test/Components/$subdir/Makefile
+	rm -f ./test/Components/$subdir/Makefile-e
+done
+
+for subdir in $COMPONENTS_MU_TEST_CASES; do
+	cp -v ./test/Components/Makefile.components_mu ./test/Components/$subdir/Makefile
 	sed -i -e "s#@HORSES_HOME_DIR#$PWD#g" ./test/Components/$subdir/Makefile
 	sed -i -e "s#@PROG_NAME#$subdir#g" ./test/Components/$subdir/Makefile
 	rm -f ./test/Components/$subdir/Makefile-e
