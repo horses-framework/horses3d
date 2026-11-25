@@ -649,14 +649,16 @@
 
       end subroutine getStressTensor
 
-      Subroutine getFrictionVelocity(Q,Q_x,Q_y,Q_z,normal,tangent,u_tau)
+      Subroutine getFrictionVelocity(Q,Q_x,Q_y,Q_z,normal,tangent_1,tangent_2,freestream_dir, u_tau)
          implicit none
          real(kind=RP), intent(in)      :: Q   (1:NCONS   )
          real(kind=RP), intent(in)      :: Q_x (1:NGRAD   )
          real(kind=RP), intent(in)      :: Q_y (1:NGRAD   )
          real(kind=RP), intent(in)      :: Q_z (1:NGRAD   )
          real(kind=RP), intent(in)      :: normal (1:NDIM )
-         real(kind=RP), intent(in)      :: tangent (1:NDIM )
+         real(kind=RP), intent(in)      :: tangent_1 (1:NDIM )
+         real(kind=RP), intent(in)      :: tangent_2 (1:NDIM )
+         real(kind=RP), intent(in)      :: freestream_dir (1:NDIM )
          real(kind=RP), intent(out)     :: u_tau
 
 !
@@ -664,17 +666,33 @@
 !        Local variables
 !        ---------------
 !
-         real(kind=RP)                  :: tau (1:NDIM, 1:NDIM   )
+         real(kind=RP)                  :: tau (1:NDIM, 1:NDIM)
          real(kind=RP)                  :: tau_w_vec(1:NDIM)
-         real(kind=RP)                  :: tau_w
+         real(kind=RP)                  :: tau_w_1(1:NDIM)
+         real(kind=RP)                  :: tau_w_2(1:NDIM)
+         real(kind=RP)                  :: tau_w_3(1:NDIM)
+         real(kind=RP)                  :: tangent_3(1:NDIM)
+         real(kind=RP)                  :: tau_w, norm_t3,c1,c2
 
          call getStressTensor(Q, Q_x, Q_y, Q_z, tau)
-         tau_w_vec = matmul(tau, normal)
-         tau_w = dot_product(tau_w_vec, tangent)
+         tau_w_vec = -1.0_RP * matmul(tau, normal)
+         tau_w_1 = dot_product(tau_w_vec, tangent_1) * tangent_1
+         tau_w_2 = dot_product(tau_w_vec, tangent_2) * tangent_2
 
-         ! get the value of the friction velocity with the sign of the wall shear stress, so that the shear stress can be fully
-         ! recovered if needed
-         u_tau = sqrt(abs(tau_w) / Q(IRHO)) * sign(1.0_RP, tau_w)
+         tangent_3 = freestream_dir - dot_product(freestream_dir, normal) * normal
+         norm_t3 = sqrt(dot_product(tangent_3, tangent_3))
+         if (norm_t3 > tiny(1.0_RP)) then
+            tangent_3 = tangent_3 / norm_t3
+         else
+            tangent_3 = [0.0_RP, 0.0_RP, 0.0_RP]
+         end if
+         c1 = dot_product(tau_w_1, tangent_3)
+         c2 = dot_product(tau_w_2, tangent_3)
+         
+         tau_w_3 = c1 * tau_w_1 + c2 * tau_w_2         
+
+         u_tau = sqrt(dot_product(tau_w_3, tau_w_3) / Q(IRHO)) * sign(1.0_RP, dot_product(tau_w_3, freestream_dir))
+         
 
       End Subroutine getFrictionVelocity
    END Module Physics_NSSA
