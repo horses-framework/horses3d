@@ -335,6 +335,14 @@
                   self % tFinal         = huge(self % tFinal)
 !~                  error stop '"final time" keyword must be specified for time-accurate integrators'
                ENDIF
+!              Check that the final time is bigger than the initial time
+               if ( self % tFinal .lt. initial_time ) then
+                  if ( MPI_Process % isRoot ) then
+                     write(STD_OUT,'(A,ES12.5,A,ES12.5,A)') "*** ERROR: Final time (", self % tFinal, &
+                          ") is earlier than the initial/restart time (", initial_time, ")."
+                  end if
+                  error stop
+               end if
                self % integratorType = TIME_ACCURATE
             CASE DEFAULT ! Using 'steady-state' even if not specified in input file
                self % integratorType = STEADY_STATE
