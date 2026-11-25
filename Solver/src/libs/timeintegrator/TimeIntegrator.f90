@@ -110,6 +110,7 @@
          logical                               :: limit
          real(RP)                              :: limiter_minimum
          integer                               :: adaptationType  ! 0 for Truncation Error and 1 for Reinforcement Learning (VI algorithm)
+         character(len=LINE_LENGTH)            :: simulationType
 
 !        --------------------------------------------------
 !        Construct the pAdaptation object 
@@ -327,7 +328,9 @@
 !        Integrator-dependent initializations
 !        ------------------------------------
 !
-         SELECT CASE (controlVariables % StringValueForKey("simulation type",LINE_LENGTH))
+         simulationType = controlVariables % StringValueForKey("simulation type",LINE_LENGTH)
+         call toLower(simulationType)
+         SELECT CASE (simulationType)
             CASE ('time-accurate')
                IF (controlVariables % containsKey("final time")) THEN
                   self % tFinal         = controlVariables % doublePrecisionValueForKey("final time")

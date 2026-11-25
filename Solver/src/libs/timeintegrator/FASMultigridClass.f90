@@ -25,6 +25,7 @@ module FASMultigridClass
    use FileReadingUtilities      , only: getFileName
    use MPI_Process_Info          , only: MPI_Process
    use FileReadingUtilities      , only: getIntArrayFromString
+   use Utilities                 , only: toLower
    use MatrixClass
    use CSRMatrixClass         , only: csrMat_t
    use AnalyticalJacobian     , only: AnJacobian_t
@@ -169,6 +170,7 @@ module FASMultigridClass
       integer                                        :: zoneID                ! Zone counter
       logical                                        :: conformingBoundaries  ! Is the mesh conforming on all boundaries?
       character(len=LINE_LENGTH)                     :: tmpc
+      character(len=LINE_LENGTH)                     :: simulationType
       integer                                        :: i
       !-----------------------------------------------------------
 
@@ -238,7 +240,9 @@ module FASMultigridClass
 !
 !     Pseudo time stepping variables
 !     -------------------------
-      if ( trim(controlVariables % StringValueForKey("simulation type",LINE_LENGTH)) == "time-accurate" ) then
+      simulationType = controlVariables % StringValueForKey("simulation type",LINE_LENGTH)
+      call toLower(simulationType)
+      if ( trim(simulationType) == "time-accurate" ) then
          ! is the simulation type is time-accurate and we use FAS
          DualTimeStepping = .true.
          Compute_dt = .true.

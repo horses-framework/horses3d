@@ -14,7 +14,7 @@ MODULE BDFTimeIntegrator
    use DGSEMClass
    use StorageClass              , only: SolutionStorage_t
    use StopwatchClass            , only: Stopwatch
-   use Utilities                 , only: AlmostEqual
+   use Utilities                 , only: AlmostEqual, toLower
    use MPI_Process_Info          , only: MPI_Process
    implicit none
    
@@ -93,6 +93,7 @@ contains
       type(DGSem)            , intent(in)    :: sem
       !--------------------------------------------------------
       integer :: DimPrb, globalDimPrb
+      character(len=LINE_LENGTH) :: simulationType
       !--------------------------------------------------------
       
 !
@@ -101,7 +102,9 @@ contains
 
       Adaptive_dt = controlVariables % logicalValueForKey("implicit adaptive dt")
       this % JacByConv = controlVariables % LogicalValueForKey("jacobian by convergence")
-      if (controlVariables % StringValueForKey("simulation type",LINE_LENGTH) == 'time-accurate') then
+      simulationType = controlVariables % StringValueForKey("simulation type",LINE_LENGTH)
+      call toLower(simulationType)
+      if (simulationType == 'time-accurate') then
          this % TimeAccurate = .TRUE.
       else
          this % TimeAccurate = .FALSE.

@@ -96,6 +96,7 @@ module pAdaptationClassRL
       character(LINE_LENGTH)         :: paramFile
       character(LINE_LENGTH)         :: in_label
       character(LINE_LENGTH)         :: agentFile
+      character(LINE_LENGTH)         :: simulationType
       character(20*BC_STRING_LENGTH) :: confBoundaries, R_acoustic_sources
       character(LINE_LENGTH)         :: R_Nmax, R_Nmin, R_OrderAcrossFaces, replacedValue, R_mode, R_interval, R_Jump, cwd, R_ErrorType, R_ErrorVariable, R_observer, R_acoustic_variable
       logical      , allocatable     :: R_increasing, reorganize_z, R_restart, R_ErrorEstimation, R_acoustics
@@ -384,7 +385,9 @@ module pAdaptationClassRL
       this % solutionFileName = trim(getFileName(controlVariables % stringValueForKey("solution file name", requestedLength = LINE_LENGTH)))
       this % saveGradients    = controlVariables % logicalValueForKey("save gradients with solution")
       this % saveSensor       = controlVariables % logicalValueForKey("save sensor with solution")
-      if ( trim( controlVariables % StringValueForKey("simulation type",LINE_LENGTH) ) == 'time-accurate' ) this % UnSteady = .TRUE.
+      simulationType = controlVariables % StringValueForKey("simulation type",LINE_LENGTH)
+      call toLower(simulationType)
+      if ( trim(simulationType) == 'time-accurate' ) this % UnSteady = .TRUE.
       
       
 !     Adaptation overenriching
