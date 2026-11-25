@@ -111,6 +111,8 @@
          real(RP)                              :: limiter_minimum
          integer                               :: adaptationType  ! 0 for Truncation Error and 1 for Reinforcement Learning (VI algorithm)
          character(len=LINE_LENGTH)            :: simulationType
+         logical                               :: imexStepChanges
+         real(RP)                              :: nStepsToFinal
 
 !        --------------------------------------------------
 !        Construct the pAdaptation object 
@@ -362,6 +364,31 @@
          call self % TauEstimator % construct(controlVariables, sem)
 
          call self % LambVectorSave % Configure(controlVariables, initial_time)
+
+!        The IMEX matrix is factorized for the first dt only, so nothing may change or shorten the step (see CorrectDt)
+         if ( self % integration_method == IMEX_SOLVER ) then
+            imexStepChanges = self % Compute_dt .or. self % adaptive_dt                   .or. &
+                              self % autosave % mode           == AUTOSAVE_BY_TIME        .or. &
+                              surfacesMesh % autosave % mode   == AUTOSAVE_BY_TIME        .or. &
+                              self % LambVectorSave % mode     == AUTOSAVE_BY_TIME        .or. &
+                              self % pAdaptator % adaptation_mode == ADAPT_DYNAMIC_TIME
+            if ( (.not. imexStepChanges) .and. (self % integratorType == TIME_ACCURATE) &
+                                         .and. (self % tFinal < huge(self % tFinal)) ) then
+               nStepsToFinal = (self % tFinal - initial_time) / self % dt
+               imexStepChanges = .not. AlmostEqual(nStepsToFinal, anint(nStepsToFinal), 1.0e-10_RP)
+            end if
+
+            if ( imexStepChanges ) then
+               if ( MPI_Process % isRoot ) then
+                  write(STD_OUT,'(A)') '*** ERROR: IMEX can only be used with a fixed time step. It requires:'
+                  write(STD_OUT,'(A)') '***    - "dt", without "cfl" or "adaptive dt"'
+                  write(STD_OUT,'(A)') '***    - "autosave mode = iteration", and no time-based surface or Lamb vector saves'
+                  write(STD_OUT,'(A)') '***    - no time-based p-adaptation'
+                  write(STD_OUT,'(A)') '***    - "final time" - initial/restart time to be a multiple of "dt"'
+               end if
+               error stop
+            end if
+         end if
 
          if (.not. MPI_Process % isRoot ) return
 
