@@ -18,7 +18,7 @@
       USE Physics
       USE ExplicitMethods
       USE IMEXMethods
-      use AutosaveClass                   , only: Autosave_t, AUTOSAVE_BY_TIME, Autosave_LambVectorConfigure
+      use AutosaveClass                   , only: Autosave_t, AutosaveLambVector_t, AUTOSAVE_BY_TIME
       use StopwatchClass
       use MPI_Process_Info
       use TimeIntegratorDefinitions
@@ -53,7 +53,7 @@
          type(Autosave_t)                       :: autosave
          class(pAdaptation_t), allocatable      :: pAdaptator
          type(adaptiveTimeStep_t)               :: adaptiveTimeStep
-         type(Autosave_t)                       :: lambSave
+         type(AutosaveLambVector_t)             :: LambVectorSave
          type(MultiTauEstim_t)                  :: TauEstimator
          character(len=LINE_LENGTH)             :: integration_method
          integer                                :: RKStep_key
@@ -350,7 +350,7 @@
 
          call self % TauEstimator % construct(controlVariables, sem)
 
-         call Autosave_LambVectorConfigure(self % lambsave, controlVariables, initial_time)
+         call self % LambVectorSave % Configure(controlVariables, initial_time)
 
          if (.not. MPI_Process % isRoot ) return
 
@@ -950,7 +950,7 @@
 #endif
          end if
          ! Lamb vector autosave
-         if ( self % lambsave % Autosave(k+1) ) then
+         if ( self % LambVectorSave % Autosave(k+1) ) then
             call sem % mesh % SaveLambVector(k+1,t,SolutionFileName, controlVariables)
          end if
 !
@@ -1138,7 +1138,7 @@
       self % pAdaptator % performPAdaptationT = .FALSE.
       self % autosave   % performAutosave = .FALSE.
       surfacesMesh % autosave % performAutosave = .FALSE.
-      self % lambsave   % performAutosave = .FALSE.
+      self % LambVectorSave % performAutosave = .FALSE.
       dt_out = dt_in
 
 !
@@ -1175,7 +1175,7 @@
                end if
 
                self % autosave % nextAutosaveTime = self % autosave % nextAutosaveTime + self % autosave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % LambVectorSave % nextAutosaveTime],1)
             end if
 
          case (ADAPT)
@@ -1195,7 +1195,7 @@
                end if
 
                self % pAdaptator % nextAdaptationTime = self % pAdaptator % nextAdaptationTime + self % pAdaptator % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % LambVectorSave % nextAutosaveTime],1)
             end if
 
          case (SURFSAVE)
@@ -1215,17 +1215,17 @@
                end if
 
                surfacesMesh % autosave % nextAutosaveTime = surfacesMesh % autosave % nextAutosaveTime + surfacesMesh % autosave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % LambVectorSave % nextAutosaveTime],1)
             end if
          
          case (LAMBSAVE)
 
-            if ( self % lambsave % nextAutosaveTime < (t + dt_out) ) then
-               dt_out = self % lambsave % nextAutosaveTime - t
-               self % lambsave % performAutosave = .TRUE.
+            if ( self % LambVectorSave % nextAutosaveTime < (t + dt_out) ) then
+               dt_out = self % LambVectorSave % nextAutosaveTime - t
+               self % LambVectorSave % performAutosave = .TRUE.
 
-               self % lambsave % nextAutosaveTime = self % lambsave % nextAutosaveTime + self % lambsave % time_interval
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               self % LambVectorSave % nextAutosaveTime = self % LambVectorSave % nextAutosaveTime + self % LambVectorSave % time_interval
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % LambVectorSave % nextAutosaveTime],1)
             end if
 
          case (DONT_KNOW)
@@ -1233,9 +1233,9 @@
             if (  self % pAdaptator % adaptation_mode == ADAPT_DYNAMIC_TIME .or. &
                   surfacesMesh % autosave % mode      == AUTOSAVE_BY_TIME .or. &
                   self % autosave % mode              == AUTOSAVE_BY_TIME .or. &
-                  self % lambsave % mode              == AUTOSAVE_BY_TIME) then
+                  self % LambVectorSave % mode              == AUTOSAVE_BY_TIME) then
 
-               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % lambsave % nextAutosaveTime],1)
+               next_time_will = minloc([self % autosave % nextAutosaveTime, self % pAdaptator % nextAdaptationTime, surfacesMesh % autosave % nextAutosaveTime, self % LambVectorSave % nextAutosaveTime],1)
                dt_temp = self % CorrectDt (t, dt_out)
                dt_out  = dt_temp
             else

@@ -6,7 +6,7 @@ module AutosaveClass
 
    private
    public   Autosave_t, AUTOSAVE_BY_TIME, AUTOSAVE_BY_ITERATION, AUTOSAVE_UNDEFINED
-   public   Autosave_LambVectorConfigure
+   public   AutosaveLambVector_t
 
    integer, parameter :: AUTOSAVE_UNDEFINED    = 0
    integer, parameter :: AUTOSAVE_BY_TIME      = 1
@@ -23,6 +23,11 @@ module AutosaveClass
          procedure   :: Configure => Autosave_Configure
          procedure   :: Autosave  => Autosave_Autosave
    end type Autosave_t
+
+   type, extends(Autosave_t)  :: AutosaveLambVector_t
+         contains
+         procedure   :: Configure => AutosaveLambVector_Configure
+   end type AutosaveLambVector_t
 
    contains
 !
@@ -166,10 +171,10 @@ module AutosaveClass
       end select
    end function Autosave_Autosave
 
-   subroutine Autosave_LambVectorConfigure(self, controlVariables, t0)
+   subroutine AutosaveLambVector_Configure(self, controlVariables, t0)
       use mainKeywordsModule, only: saveLambVectorKey, saveLambVectorDivergenceKey
       implicit none
-      class(Autosave_t)          :: self
+      class(AutosaveLambVector_t) :: self
       class(FTValueDictionary)   :: controlVariables
       real(kind=RP), intent(in)  :: t0
 !
@@ -255,6 +260,6 @@ module AutosaveClass
       self % nextAutosaveTime = t0 + self % time_interval
       self % performAutosave = .false.
          
-   end subroutine Autosave_LambVectorConfigure
+   end subroutine AutosaveLambVector_Configure
 
 end module AutosaveClass
