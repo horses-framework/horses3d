@@ -110,6 +110,7 @@
          logical                               :: limit
          real(RP)                              :: limiter_minimum
          integer                               :: adaptationType  ! 0 for Truncation Error and 1 for Reinforcement Learning (VI algorithm)
+         character(len=LINE_LENGTH)            :: simulationType
 
 !        --------------------------------------------------
 !        Construct the pAdaptation object 
@@ -327,7 +328,9 @@
 !        Integrator-dependent initializations
 !        ------------------------------------
 !
-         SELECT CASE (controlVariables % StringValueForKey("simulation type",LINE_LENGTH))
+         simulationType = controlVariables % StringValueForKey("simulation type",LINE_LENGTH)
+         call toLower(simulationType)
+         SELECT CASE (simulationType)
             CASE ('time-accurate')
                IF (controlVariables % containsKey("final time")) THEN
                   self % tFinal         = controlVariables % doublePrecisionValueForKey("final time")
@@ -335,6 +338,14 @@
                   self % tFinal         = huge(self % tFinal)
 !~                  error stop '"final time" keyword must be specified for time-accurate integrators'
                ENDIF
+!              Check that the final time is bigger than the initial time
+               if ( self % tFinal .lt. initial_time ) then
+                  if ( MPI_Process % isRoot ) then
+                     write(STD_OUT,'(A,ES12.5,A,ES12.5,A)') "*** ERROR: Final time (", self % tFinal, &
+                          ") is earlier than the initial/restart time (", initial_time, ")."
+                  end if
+                  error stop
+               end if
                self % integratorType = TIME_ACCURATE
             CASE DEFAULT ! Using 'steady-state' even if not specified in input file
                self % integratorType = STEADY_STATE
