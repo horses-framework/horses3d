@@ -353,7 +353,8 @@ module TessellationTypes
       
       type(PointLinkedList) :: PointLinkedList_Construct
       
-      PointLinkedList_Construct% head => null()
+      PointLinkedList_Construct% head        => null()
+      PointLinkedList_Construct% NumOfPoints =  0
    
    end function PointLinkedList_Construct
 !
@@ -378,7 +379,6 @@ module TessellationTypes
          this% head% prev => this% head
       else
          current => this% head% prev
-         currentNext => current% next
          allocate(currentNext) 
          call currentNext% copy(point)
          currentNext% next => this% head
@@ -390,6 +390,8 @@ module TessellationTypes
       end if
       
       nullify(current, currentNext)
+
+      this% NumOfPoints = this% NumOfPoints + 1
    
    end subroutine PointLinkedList_Add
 !
@@ -422,6 +424,8 @@ module TessellationTypes
       dataNext% prev => dataPrev
    
       nullify(dataPrev, dataNext)
+
+      this% NumOfPoints = this% NumOfPoints - 1
    
    end subroutine PointLinkedList_Remove
 !
@@ -454,6 +458,8 @@ module TessellationTypes
       this% head% prev => dataPrev 
    
       nullify(dataPrev)
+
+      this% NumOfPoints = this% NumOfPoints - 1
    
    end subroutine PointLinkedList_RemoveLast
 !
@@ -470,18 +476,22 @@ module TessellationTypes
       class(point_type), pointer :: current, next 
       integer                    :: i
       
-      if( this% NumOfPoints .eq. 0 ) return
+      if( this% NumOfPoints .eq. 0 ) then
+         nullify(this% head)
+         return
+      end if
       
       current => this% head
-      next    => current% next
 
-      do i = 2, this% NumOfPoints
+      do i = 1, this% NumOfPoints - 1
+         next => current% next
          deallocate(current)
          current => next
-         next    => current% next
       end do
+      deallocate(current)
       
       this% NumOfPoints = 0
+      nullify(this% head)
       
    end subroutine PointLinkedList_Destruct
 !
@@ -545,7 +555,6 @@ module TessellationTypes
          this% head% prev => this% head
       else
          current => this% head% prev
-         currentNext => current% next
          allocate(currentNext) 
          call currentNext% copy(object)
          currentNext% next => this% head
@@ -590,7 +599,8 @@ module TessellationTypes
       
       deallocate(data)
       
-      this% NumOfObjs = this% NumOfObjs - 1
+      this% head      => null()
+      this% NumOfObjs =  0
       
       nullify(dataPrev)
       

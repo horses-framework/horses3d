@@ -126,6 +126,7 @@ module pAdaptationClassTE
       character(LINE_LENGTH)         :: paramFile
       character(LINE_LENGTH)         :: in_label
       character(20*BC_STRING_LENGTH) :: confBoundaries
+      character(LINE_LENGTH)         :: simulationType
       character(LINE_LENGTH)         :: R_Nmax, R_Nmin, R_TruncErrorType, R_TruncErrorForm, R_OrderAcrossFaces, replacedValue, R_mode, R_interval, R_pSmoothingMethod, R_EstimFiles, R_EstimFilesNum
       logical      , allocatable     :: R_increasing, R_TEFiles, reorganize_z, R_restart
       real(kind=RP), allocatable     :: TruncError, R_pSmoothing, R_cTruncError
@@ -393,7 +394,9 @@ module pAdaptationClassTE
       this % solutionFileName = trim(getFileName(controlVariables % stringValueForKey("solution file name", requestedLength = LINE_LENGTH)))
       this % saveGradients    = controlVariables % logicalValueForKey("save gradients with solution")
       this % saveSensor       = controlVariables % logicalValueForKey("save sensor with solution")
-      if ( trim( controlVariables % StringValueForKey("simulation type",LINE_LENGTH) ) == 'time-accurate' ) this % UnSteady = .TRUE.
+      simulationType = controlVariables % StringValueForKey("simulation type",LINE_LENGTH)
+      call toLower(simulationType)
+      if ( trim(simulationType) == 'time-accurate' ) this % UnSteady = .TRUE.
       
       
 !     Construct the truncation error

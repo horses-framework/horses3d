@@ -31,7 +31,7 @@
                     Number of time steps = 1000000.0
                          Output interval = 100
                    Convergence tolerance = 1.0e-10
-                         Simulation type = time-accurate
+                         Simulation type = Time-accurate
                               Final time = 1.0
                            Autosave mode = Iteration  ! Time
                        Autosave interval = 1000000   ! 1.0
