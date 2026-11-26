@@ -279,15 +279,22 @@ module NoSlipWallBCClass
          real(kind=RP),          intent(in)    :: t
          real(kind=RP),          intent(in)    :: nHat(NDIM)
          real(kind=RP),          intent(inout) :: Q(NCONS)
+         real(kind=RP)                         :: e_int, invRho
 
 #if defined (SPALARTALMARAS)
          Q(IRHOTHETA)   = -Q(IRHOTHETA)
 #endif
+         ! internal energy BEFORE overwriting the momentum
+         invRho = 1.0_RP / Q(IRHO)
+         e_int  = invRho*(Q(IRHOE) - 0.5_RP*invRho*(POW2(Q(IRHOU))+POW2(Q(IRHOV))+POW2(Q(IRHOW))))
+
          Q(IRHOU:IRHOW) = 2.0_RP * Q(IRHO)*self % vWall - Q(IRHOU:IRHOW)
 !        This boundary condition should be
 !        ---------------------------------
          !Q(IRHOU:IRHOW) = Q(IRHOU:IRHOW) - 2.0_RP * sum(Q(IRHOU:IRHOW)*nHat)*nHat
 
+         ! rebuild total energy from the PRESERVED internal energy + the new kinetic energy
+         Q(IRHOE) = Q(IRHO)*e_int + 0.5_RP*invRho*(POW2(Q(IRHOU))+POW2(Q(IRHOV))+POW2(Q(IRHOW)))
 
          !Isothermal BC
          Q(IRHOE) = Q(IRHOE) + self % wallType * (Q(IRHO) * self % Twall / (refValues % T * dimensionless % gammaM2 * thermodynamics % gammaMinus1) - Q(IRHOE))
