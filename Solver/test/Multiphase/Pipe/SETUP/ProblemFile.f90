@@ -558,12 +558,12 @@ end module ProblemFileFunctions
             CHARACTER(LEN=29)                  :: testName           = "Multiphase:: Pipe"
             TYPE(FTAssertionsManager), POINTER :: sharedManager
             LOGICAL                            :: success
-            real(kind=RP), parameter :: residuals_saved(5) = [115.279163488786_RP, &
-                                                              218.587148493799_RP, &
-                                                              147.034918533523_RP, &
-                                                              865.653084759232_RP, &
-                                                              72786.6199585908_RP ]
-            real(kind=RP), parameter              :: entropyRate_saved = -49.577609575581214_RP
+            real(kind=RP), parameter :: residuals_saved(5) = [375.080675848369_RP, &
+                                                              118.534930235557_RP, &
+                                                              76.4890538171159_RP, &
+                                                              916.997750148407_RP, &
+                                                              78726.5608910890_RP ]
+            real(kind=RP), parameter              :: entropyRate_saved = -49.472923534366949_RP
             integer :: i
 
             CALL initializeSharedAssertionsManager
@@ -577,7 +577,7 @@ end module ProblemFileFunctions
             CALL FTAssertEqual(expectedValue = residuals_saved(1)+100.0_RP, &
                                actualValue   = monitors % residuals % values(1,1)+100.0_RP, &
                                tol           = 1.d-11, &
-                               msg           = "Continuity Residual")
+                               msg           = "Concentration Residual")
 
             CALL FTAssertEqual(expectedValue = residuals_saved(2)+100.0_RP, &
                                actualValue   = monitors % residuals % values(2,1)+100.0_RP, &
@@ -597,13 +597,13 @@ end module ProblemFileFunctions
             CALL FTAssertEqual(expectedValue = residuals_saved(5)+100.0_RP, &
                                actualValue   = monitors % residuals % values(5,1)+100.0_RP, &
                                tol           = 1.d-11, &
-                               msg           = "Energy Residual")
+                               msg           = "Div-v Residual")
 
             CALL sharedManager % summarizeAssertions(title = testName,iUnit = 6)
    
             IF ( sharedManager % numberOfAssertionFailures() == 0 )     THEN
                WRITE(6,*) testName, " ... Passed"
-               WRITE(6,*) "This test case has no expected solution yet, only checks the residual after 100 iterations."
+               WRITE(6,*) "This test case has no expected solution yet, only checks the residual after 20 iterations."
             ELSE
                WRITE(6,*) testName, " ... Failed"
                WRITE(6,*) "NOTE: Failure is expected when the max eigenvalue procedure is changed."
