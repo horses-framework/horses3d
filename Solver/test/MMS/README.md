@@ -51,6 +51,34 @@ Ubuntu 24.04, do one of the following:
 With pip, gmsh also needs the system libraries that the workflow installs:
 `sudo apt install libglu1-mesa libgl1 libxcursor1 libxft2 libxinerama1 libfontconfig1`.
 
+### The scripts and their options
+
+The guide uses three scripts in `Solver/test/MMS`:
+
+* `run.py` runs a case. It generates and compiles the problem file, makes the meshes,
+  runs the solver for each polynomial order P and each mesh, and prints the errors and the
+  orders of convergence.
+* `plot.py` draws the errors of the last runs of a case.
+* `generate.py` writes the problem file of a case without running it (step 4).
+
+You call `run.py` with the name of a case, `NS`, `Euler`, `NSSA`, `iNS`, `MU` or `CAA`, and these options:
+
+| Option | What it does |
+|---|---|
+| `--P 3 4` | Runs these polynomial orders. By default, it runs the orders of the case in `sweeps.json`, 3 to 6. |
+| `--meshes 4 8` | Runs these meshes, given by the number N of elements per side of the N x N x N cube. By default, it runs meshes 4, 8 and 16. |
+| `--check` | Compares the errors with `<case>/reference.csv`, and fails if one differs by more than a relative 1e-3. |
+| `--set "KEY = VALUE"` | Changes a key of the control file for this run. Separate several keys with `;`. |
+| `--force` | Runs again the runs that `<case>/errors.csv` already has for the same solver, problem file, control file and build settings. Without it, `run.py` skips them. |
+| `--keep` | Keeps the solution files of the runs that it makes, in `<case>/RESULTS`. |
+| `--write-reference` | Writes `<case>/reference.csv` from the errors of the default sweep (step 8). |
+| `--merge FILE ...` | Doesn't run the solver: replaces `<case>/errors.csv` with the rows of these files, such as the `errors.csv` of a GitHub run, and reports them. Give it the `--P`, `--meshes` and `--set` of those runs. |
+| `--home DIR` | Uses the HORSES3D `Solver` directory DIR instead of the one in this checkout. |
+
+For each mesh N and order P, `run.py` writes the control file that it runs and the
+solver log to `<case>/CONTROL/`, as `N<N>_P<P>.control` and `N<N>_P<P>.log`, and adds the
+errors to `<case>/errors.csv`. To list the options, run `python3 run.py --help`.
+
 ### 1. Build the solver
 
 `run.py` runs the solver executable from `Solver/bin`, so you need to build the solver for
@@ -92,43 +120,59 @@ so the error of a run measures the error of the scheme.
 
 The default solution makes every term of the equations active from the first time step.
 For most changes to the solver, you can keep it. `FLOW` and `cells` in `generate.py`
-define it, and it's periodic on the cube [-1,1]^3:
+define it, and it's periodic on the cube $[-1,1]^3$:
 
-```
-rho     = 1 + 0.2 sin(pi x) cos(pi y) sin(pi z) cos(t)
-(u,v,w) = cos(t) [ (0.3 sin(pi z), 0.3 cos(pi z), 0) + 0.03 A + 0.15 B ]
-p       = 1 + 0.1 sin(pi x) sin(pi y) sin(pi z) cos(t)
+$$
+\begin{aligned}
+\rho &= 1 + 0.2\sin(\pi x)\cos(\pi y)\sin(\pi z)\cos t \\
+(u, v, w) &= \cos t\ \big[(0.3\sin(\pi z),\ 0.3\cos(\pi z),\ 0) + 0.03\mathbf{A} + 0.15\mathbf{B}\big] \\
+p &= 1 + 0.1\sin(\pi x)\sin(\pi y)\sin(\pi z)\cos t
+\end{aligned}
+$$
 
-A = ( sin(pi x) cos(pi y) cos(pi z), cos(pi x) sin(pi y) cos(pi z), -2 cos(pi x) cos(pi y) sin(pi z) )
-B = ( sin(pi x) cos(pi y) cos(pi z), cos(pi x) sin(pi y) cos(pi z),    cos(pi x) cos(pi y) sin(pi z) )
-```
+where
 
-A is divergence-free and makes the vorticity vary. B is irrotational and compresses the
-flow. The shear term (0.3 sin(pi z), 0.3 cos(pi z), 0) keeps |omega| > 0 everywhere,
+$$
+\mathbf{A} = \begin{pmatrix}
+\sin(\pi x)\cos(\pi y)\cos(\pi z) \\
+\cos(\pi x)\sin(\pi y)\cos(\pi z) \\
+-2\cos(\pi x)\cos(\pi y)\sin(\pi z)
+\end{pmatrix},
+\qquad
+\mathbf{B} = \begin{pmatrix}
+\sin(\pi x)\cos(\pi y)\cos(\pi z) \\
+\cos(\pi x)\sin(\pi y)\cos(\pi z) \\
+\cos(\pi x)\cos(\pi y)\sin(\pi z)
+\end{pmatrix}
+$$
+
+$\mathbf{A}$ is divergence-free and makes the vorticity vary. $\mathbf{B}$ is irrotational
+and compresses the flow. The shear term $(0.3\sin(\pi z),\ 0.3\cos(\pi z),\ 0)$ keeps
+$\lvert\boldsymbol{\omega}\rvert \gt 0$ everywhere,
 which keeps the Spalart-Allmaras source term smooth (see the conditions below).
 
 | Case | Fields | Where in `generate.py` |
 |---|---|---|
-| `NS`, `Euler`, `iNS` | rho, (u,v,w) and p above | `FLOW`, `cells` |
-| `NSSA` | the same, and theta = 1 + 0.5 cos(pi x) cos(pi y) cos(pi z) cos(t) | `spalart_allmaras` |
-| `MU` | c = 0.5 [1 + 0.8 cos(pi x) cos(pi y) cos(pi z) cos(t)], between 0.1 and 0.9, with (u,v,w) and p above; the density is the mixture c rho1 + (1 - c) rho2 of the two fluids in the control file | `multiphase` |
-| `CAA` | the perturbations u' = cos(t) B and p' = sin(pi x) sin(pi y) sin(pi z) cos(t), and rho' = 0, on the uniform base flow in the control file | `acoustics` |
+| `NS`, `Euler`, `iNS` | $\rho$, $(u, v, w)$ and $p$ above | `FLOW`, `cells` |
+| `NSSA` | the same, and $\theta = 1 + 0.5\cos(\pi x)\cos(\pi y)\cos(\pi z)\cos t$ | `spalart_allmaras` |
+| `MU` | $c = 0.5\big[1 + 0.8\cos(\pi x)\cos(\pi y)\cos(\pi z)\cos t\big]$, between 0.1 and 0.9, with $(u, v, w)$ and $p$ above; the density is the mixture $c\rho_1 + (1 - c)\rho_2$ of the two fluids in the control file | `multiphase` |
+| `CAA` | the perturbations $\mathbf{u}' = \cos t\ \mathbf{B}$ and $p' = \sin(\pi x)\sin(\pi y)\sin(\pi z)\cos t$, and $\rho' = 0$, on the uniform base flow in the control file | `acoustics` |
 
 To use a different solution, edit these expressions in `generate.py`. The source term,
 the initial condition and the error computation all follow from them. A new solution
 must meet these conditions:
 
 * It's smooth. The source term contains derivatives of the solution, up to the fourth
-  derivative of c in MU. A jump would make the source term infinite, and the order of
+  derivative of $c$ in MU. A jump would make the source term infinite, and the order of
   convergence would mean nothing. To model a shock, use a steep but smooth front, as in
-  the example below. In NSSA, keep |omega| > 0 everywhere: with no walls, only the
-  production term cb1 |omega| rho theta of Spalart-Allmaras remains, and it isn't smooth
-  where omega = 0.
-* It's periodic with period 2 in x, y and z, because the meshes are periodic cubes
-  [-1,1]^3. Build it from sin(pi x), cos(pi x) and so on.
-* It's physically valid: rho > 0 and p > 0 in the compressible cases, theta >= 0 in NSSA
-  (the solver uses the theta >= 0 branch of Spalart-Allmaras), and c in [0, 1] in MU (the
-  solver clips c to this range).
+  the example below. In NSSA, keep $\lvert\boldsymbol{\omega}\rvert \gt 0$ everywhere:
+  with no walls, only the production term $c_{b1}\lvert\boldsymbol{\omega}\rvert\rho\theta$
+  of Spalart-Allmaras remains, and it isn't smooth where $\boldsymbol{\omega} = 0$.
+* It's periodic with period 2 in $x$, $y$ and $z$, because the meshes are periodic cubes
+  $[-1,1]^3$. Build it from $\sin(\pi x)$, $\cos(\pi x)$ and so on.
+* It's physically valid: $\rho \gt 0$ and $p \gt 0$ in the compressible cases,
+  $\theta \ge 0$ in NSSA (the solver uses the $\theta \ge 0$ branch of Spalart-Allmaras),
+  and $c \in [0, 1]$ in MU (the solver clips $c$ to this range).
 * It's stable with the time step of the control file. A faster flow might need a smaller
   `dt` (see step 5).
 * It keeps every term active. A term that vanishes for your solution isn't tested.
@@ -149,9 +193,10 @@ delta = 0.3                    # width of the front: smaller is steeper
 FLOW = dict(rho=1 + 0.2*sp.tanh(sp.sin(pi*(x - t))/delta),
 ```
 
-The function tanh(sin(pi (x - t))/delta) is close to 1 or -1. It jumps smoothly wherever
-sin(pi (x - t)) changes sign: up at x = t and down at x = t ± 1. The jumps move in x at
-speed 1, and their width is proportional to delta. NS, Euler, NSSA and iNS all take their
+The function $\tanh\big(\sin(\pi(x - t))/\delta\big)$, where $\delta$ is `delta`, is close
+to 1 or $-1$. It jumps smoothly wherever $\sin(\pi(x - t))$ changes sign: up at $x = t$
+and down at $x = t \pm 1$. The jumps move in $x$ at speed 1, and their width is
+proportional to $\delta$. NS, Euler, NSSA and iNS all take their
 density from `FLOW`.
 
 Run the case without `--check`, because the reference errors are for the default
@@ -161,10 +206,10 @@ solution:
 python3 run.py NS --P 3 --meshes 4 8 16
 ```
 
-With delta = 0.3, the order of the total error at P = 3 is 0.6 between meshes 4 and 8,
+With $\delta = 0.3$, the order of the total error at P = 3 is 0.6 between meshes 4 and 8,
 and 2.4 between meshes 8 and 16. The total is mostly the energy error, though: the
 density, which carries the front, converges at only about order 1 between meshes 8 and
-16, because mesh 16 only starts to resolve the front. With delta = 0.1, the order of the
+16, because mesh 16 only starts to resolve the front. With $\delta = 0.1$, the order of the
 total between meshes 8 and 16 is 0.2, so a steeper front needs finer meshes.
 
 Undo the change before you go on, or the `--check` runs of step 6 fail:
@@ -277,10 +322,10 @@ then a table of errors and orders of convergence. If you leave out `--P` and `--
 `run.py` runs the default sweep in `sweeps.json`, P = 3 to 6 on meshes 4, 8 and 16, which
 takes much longer.
 
-`run.py` skips the runs that it has already done with the same build. To run them again,
-use `--force`. `--keep` keeps the solution files only of the runs that `run.py` makes, so
-combine it with `--force` for runs already done. Only one `run.py` at a time can work on
-a case.
+`run.py` skips the runs that it has already done with the same solver, problem file,
+control file and build settings. To run them again, use `--force`. `--keep` keeps the
+solution files only of the runs that `run.py` makes, so combine it with `--force` for
+runs already done. Only one `run.py` at a time can work on a case.
 
 These are the most common commands:
 
@@ -418,7 +463,7 @@ or if a run of the default sweep has no row there. Runs with `--set`, and meshes
 orders outside the default sweep, are not compared; the last lines of the output say how
 many runs were.
 
-The meshes are periodic cubes [-1,1]^3 with N^3 elements, made by the cartesian-box
+The meshes are periodic cubes $[-1,1]^3$ with $N^3$ elements, made by the cartesian-box
 generator of [horses3d-meshes](https://github.com/horses-framework/horses3d-meshes)
 (Gmsh Python API). `run.py` downloads the script at a fixed commit into `MESH/`, or uses
 `$HORSES3D_MESHES_DIR/cartesian-box/` if that variable points to a clone, and runs it
@@ -502,7 +547,7 @@ gives the order of every variable between consecutive meshes, and the lowest of 
   `horses3d.ns` (Gauss nodes, standard volume integral, Roe flux), and NS the split form
   on Gauss-Lobatto nodes. The two MU fluids have different densities, viscosities and
   sound speeds, so that the mixture laws, which weight each property by the
-  concentration, are exercised. CAA runs a base flow with rho0 = 1.2 and c0^2 = 1.5.
+  concentration, are exercised. CAA runs a base flow with $\rho_0 = 1.2$ and $c_0^2 = 1.5$.
 * Not tested: Riemann solvers other than matrix dissipation and Roe in the compressible
   cases, and other than the exact one in iNS and MU; two-point fluxes other than
   Chandrasekar (NS) and Skew-symmetric 2 (iNS); BR2 and IP; gradient variables other than
@@ -520,13 +565,13 @@ gives the order of every variable between consecutive meshes, and the lowest of 
 
 * NS and NSSA use the default Sutherland constants, so do not set `sutherland temperature`
   or `sutherland reference temperature`. NSSA uses the default Spalart-Allmaras constants;
-  with no walls the wall distance is huge and only the production cb1 |omega| rho theta
-  remains, so the field keeps |omega| > 0. CAA assumes a uniform base flow and no Lamb
+  with no walls the wall distance is huge and only the production $c_{b1}\lvert\boldsymbol{\omega}\rvert\rho\theta$
+  remains, so the field keeps $\lvert\boldsymbol{\omega}\rvert \gt 0$. CAA assumes a uniform base flow and no Lamb
   vector. Gravity is not included.
 * The time steps of the control files are stable up to P = 6 on mesh 16, the finest
   pair of the default sweeps, where twice the step is still stable in every case; higher
   orders or finer meshes may need a smaller `dt`, with more steps to keep the final time.
-  In MU the explicit step is limited by Cahn-Hilliard: the limit scales like h^4, falls
+  In MU the explicit step is limited by Cahn-Hilliard: the limit scales like $h^4$, falls
   steeply with P and grows with the chemical characteristic time. With 20000 s (a small
   mobility), dt = 1e-6 is stable; at P = 6 on mesh 16, 2.5 times this step is stable and
   5 times diverges.
