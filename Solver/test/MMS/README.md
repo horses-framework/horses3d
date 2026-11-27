@@ -124,9 +124,9 @@ define it, and it's periodic on the cube $[-1,1]^3$:
 
 $$
 \begin{aligned}
-\rho &= 1 + 0.2\sin(\pi x)\cos(\pi y)\sin(\pi z)\cos t \\
-(u, v, w) &= \cos t\ \big[(0.3\sin(\pi z),\ 0.3\cos(\pi z),\ 0) + 0.03\mathbf{A} + 0.15\mathbf{B}\big] \\
-p &= 1 + 0.1\sin(\pi x)\sin(\pi y)\sin(\pi z)\cos t
+\rho &= 1 + 0.2\sin(\pi x)\cos(\pi y)\sin(\pi z)\cos(t) \\
+(u, v, w) &= \cos(t)\ \big[(0.3\sin(\pi z),\ 0.3\cos(\pi z),\ 0) + 0.03\mathbf{A} + 0.15\mathbf{B}\big] \\
+p &= 1 + 0.1\sin(\pi x)\sin(\pi y)\sin(\pi z)\cos(t)
 \end{aligned}
 $$
 
@@ -154,9 +154,9 @@ which keeps the Spalart-Allmaras source term smooth (see the conditions below).
 | Case | Fields | Where in `generate.py` |
 |---|---|---|
 | `NS`, `Euler`, `iNS` | $\rho$, $(u, v, w)$ and $p$ above | `FLOW`, `cells` |
-| `NSSA` | the same, and $\theta = 1 + 0.5\cos(\pi x)\cos(\pi y)\cos(\pi z)\cos t$ | `spalart_allmaras` |
-| `MU` | $c = 0.5\big[1 + 0.8\cos(\pi x)\cos(\pi y)\cos(\pi z)\cos t\big]$, between 0.1 and 0.9, with $(u, v, w)$ and $p$ above; the density is the mixture $c\rho_1 + (1 - c)\rho_2$ of the two fluids in the control file | `multiphase` |
-| `CAA` | the perturbations $\mathbf{u}' = \cos t\ \mathbf{B}$ and $p' = \sin(\pi x)\sin(\pi y)\sin(\pi z)\cos t$, and $\rho' = 0$, on the uniform base flow in the control file | `acoustics` |
+| `NSSA` | the same, and $\theta = 1 + 0.5\cos(\pi x)\cos(\pi y)\cos(\pi z)\cos(t)$ | `spalart_allmaras` |
+| `MU` | $c = 0.5\big[1 + 0.8\cos(\pi x)\cos(\pi y)\cos(\pi z)\cos(t)\big]$, between 0.1 and 0.9, with $(u, v, w)$ and $p$ above; the density is the mixture $c\rho_1 + (1 - c)\rho_2$ of the two fluids in the control file | `multiphase` |
+| `CAA` | the perturbations $\mathbf{u}' = \cos(t)\ \mathbf{B}$ and $p' = \sin(\pi x)\sin(\pi y)\sin(\pi z)\cos(t)$, and $\rho' = 0$, on the uniform base flow in the control file | `acoustics` |
 
 To use a different solution, edit these expressions in `generate.py`. The source term,
 the initial condition and the error computation all follow from them. A new solution
