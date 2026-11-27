@@ -37,7 +37,7 @@
 !----------------------- Time integration:-
                         Time integration = Explicit
   Compute time derivative after timestep = .true.
-                                      dt = 1.0e-05
+                                      dt = 5.0e-06
                     Number of time steps = 20
                          Output interval = 1
                          Simulation type = time-accurate

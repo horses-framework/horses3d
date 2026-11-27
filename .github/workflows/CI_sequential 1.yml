@@ -251,6 +251,24 @@ jobs:
           ./bin/Sorting
         if: '!cancelled()'
 
+#        
+# 7) MULTIPHASE INTERFACE PENALTY TEST
+# ------------------------------------
+
+      - name: Build MultiphaseInterfacePenalty
+        working-directory: ./Solver/test/Components/MultiphaseInterfacePenalty
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          make MODE=${{matrix.mode}} COMPILER=${{matrix.compiler}} COMM=${{matrix.comm}} ENABLE_THREADS=${{matrix.enable_threads}} WITH_MKL=${{matrix.mkl}} EXTRA_FFLAGS="${{ env.EXTRA_COV }}"
+        if: '!cancelled()'
+
+      - name: Run MultiphaseInterfacePenalty
+        working-directory: ./Solver/test/Components/MultiphaseInterfacePenalty
+        run: |
+          source /opt/intel/oneapi/setvars.sh || true
+          ./bin/MultiphaseInterfacePenalty MUInterfacePenalty.control
+        if: '!cancelled()'
+
 ########################################################################
 #######                         EULER                           ########
 ########################################################################
