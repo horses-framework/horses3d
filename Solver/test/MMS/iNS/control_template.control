@@ -1,0 +1,56 @@
+!  MMS, incompressible Navier-Stokes. run.py fills the mesh, the solution file and the order.
+!-------------------------- Configuration:-
+                          Mesh file name = {MESH_FILE}
+                      Solution file name = {SOLUTION_FILE}
+                                 Restart = .false.
+                       Restart file name = {SOLUTION_FILE}
+!-------------------- Physical parameters:-
+                        Density (kg/m^3) = 1.0
+                       Viscosity (Pa.s)  = 0.01
+       Artificial compressibility factor = 100.0
+!------------------------- Discretization:-
+                        Polynomial order = {P}
+                    Discretization nodes = Gauss-Lobatto
+                          Riemann solver = Exact
+                 Inviscid discretization = Split-form
+                               Averaging = Skew-symmetric 2
+                  Viscous discretization = BR1
+!----------------------- Time integration:-
+                        Time integration = Explicit
+                         Simulation type = time-accurate
+                   Convergence tolerance = 1.0e-10
+                           Autosave mode = Iteration
+                       Autosave interval = 999999999
+                                      dt = 1.0e-4
+                    Number of time steps = 200
+                         Output interval = 1000
+!-------------------- Boundary conditions:-
+#define boundary Left
+   type = periodic
+   coupled boundary = Right
+#end
+
+#define boundary Right
+   type = periodic
+   coupled boundary = Left
+#end
+
+#define boundary Bottom
+   type = periodic
+   coupled boundary = Top
+#end
+
+#define boundary Top
+   type = periodic
+   coupled boundary = Bottom
+#end
+
+#define boundary Back
+   type = periodic
+   coupled boundary = Front
+#end
+
+#define boundary Front
+   type = periodic
+   coupled boundary = Back
+#end

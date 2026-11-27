@@ -1,0 +1,177 @@
+name: MMS convergence
+
+# Manufactured-solution convergence study, run by hand from the Actions tab.
+# See Solver/test/MMS/README.md. Each case and polynomial order runs in its own job,
+# so a sweep fits in the 6-hour limit of a job; a final job per case merges them.
+
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: Equation set
+        type: choice
+        options: [all, NS, Euler, NSSA, iNS, MU, CAA]
+        default: all
+      P:
+        description: Polynomial orders; empty for the orders of each case in Solver/test/MMS/sweeps.json
+        default: ""
+      meshes:
+        description: Elements per side of the cube meshes; empty for those of each case in sweeps.json
+        default: ""
+      set:
+        description: Control file changes for every selected case, e.g. "Reynolds number = 100; Riemann solver = Roe" with case NS
+        default: ""
+      check:
+        description: Also compare the errors with reference.csv (committed control files only); a failed run always fails
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+env:
+  SET: ${{ inputs.set }}
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      cases: ${{ steps.lists.outputs.cases }}
+      jobs: ${{ steps.lists.outputs.jobs }}
+      sweeps: ${{ steps.lists.outputs.sweeps }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: Solver/test/MMS/sweeps.json
+          sparse-checkout-cone-mode: false
+
+      - id: lists
+        env:
+          CASE: ${{ inputs.case }}
+          P: ${{ inputs.P }}
+          MESHES: ${{ inputs.meshes }}
+        run: |
+          # Orders and meshes separated by spaces or commas; empty for the defaults of each case
+          set -f
+          P=$(echo ${P//,/ }); MESHES=$(echo ${MESHES//,/ })
+          for n in $P $MESHES; do
+            [[ $n =~ ^[1-9][0-9]*$ ]] || { echo "::error::P and meshes must be positive integers, not '$n'"; exit 1; }
+          done
+          if [ "$CASE" = all ]; then cases="NS Euler NSSA iNS MU CAA"; else cases="$CASE"; fi
+          # One run job per case and order, and the orders and meshes of each case
+          python3 - $cases >> "$GITHUB_OUTPUT" <<'EOF'
+          import json, os, sys
+          defaults = json.load(open("Solver/test/MMS/sweeps.json"))
+          cases = sys.argv[1:]
+          sweeps = {}
+          for c in cases:
+              d = defaults.get(c, defaults["default"])
+              sweeps[c] = {"P": os.environ["P"] or " ".join(map(str, d["P"])),
+                           "meshes": os.environ["MESHES"] or " ".join(map(str, d["meshes"]))}
+          print("cases=" + json.dumps(cases))
+          print("jobs=" + json.dumps([{"case": c, "P": int(p)} for c in cases for p in sweeps[c]["P"].split()]))
+          print("sweeps=" + json.dumps(sweeps))
+          EOF
+
+  run:
+    name: MMS ${{ matrix.case }} P=${{ matrix.P }}
+    needs: setup
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.setup.outputs.jobs) }}
+    env:
+      CASE: ${{ matrix.case }}
+      ORDER: ${{ matrix.P }}
+      MESHES: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].meshes }}
+      CHECK: ${{ inputs.check }}
+      OMP_NUM_THREADS: 4
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Gmsh and SymPy
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libglu1-mesa libgl1 libxcursor1 libxft2 libxinerama1 libfontconfig1
+          pip install sympy==1.14.0 gmsh==4.15.2
+
+      - name: Build HORSES3D
+        working-directory: Solver
+        run: |
+          solver=$(python3 -c "import sys; sys.path.insert(0, 'test/MMS'); from generate import CASES; print(CASES['$CASE'][1])")
+          gfortran --version | head -1
+          ./configure
+          make $solver COMPILER=gfortran MODE=RELEASE COMM=SEQUENTIAL ENABLE_THREADS=YES WITH_MKL=NO
+
+      - name: Run
+        run: |
+          args=(--P $ORDER --meshes $MESHES)
+          if [ -n "$SET" ]; then args+=(--set "$SET"); fi
+          if [ "$CHECK" = "true" ]; then args+=(--check); fi
+          python3 Solver/test/MMS/run.py "$CASE" "${args[@]}"
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: run-${{ matrix.case }}-P${{ matrix.P }}
+          path: |
+            Solver/test/MMS/${{ matrix.case }}/errors.csv
+            Solver/test/MMS/${{ matrix.case }}/CONTROL/
+            Solver/test/MMS/${{ matrix.case }}/SETUP/make.log
+            Solver/test/MMS/${{ matrix.case }}/SETUP/ProblemFile.f90
+
+  report:
+    name: MMS ${{ matrix.case }}
+    needs: [setup, run]
+    if: ${{ !cancelled() && needs.setup.result == 'success' }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(needs.setup.outputs.cases) }}
+    env:
+      CASE: ${{ matrix.case }}
+      P: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].P }}
+      MESHES: ${{ fromJSON(needs.setup.outputs.sweeps)[matrix.case].meshes }}
+      CHECK: ${{ inputs.check }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install Python packages
+        run: pip install sympy==1.14.0 matplotlib
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: run-${{ matrix.case }}-P*
+          path: runs
+
+      - name: Merge, report and plot
+        run: |
+          # A single artifact is extracted into runs/ itself, several into runs/<name>/
+          shopt -s globstar nullglob
+          csvs=(runs/**/errors.csv)
+          if [ ${#csvs[@]} -eq 0 ]; then echo "::error::No errors.csv from the run jobs"; exit 1; fi
+          args=(--P $P --meshes $MESHES --merge "${csvs[@]}")
+          if [ -n "$SET" ]; then args+=(--set "$SET"); fi
+          if [ "$CHECK" = "true" ]; then args+=(--check); fi
+          # Runs without a result or a failed check fail the job, after the plot and the files are saved
+          status=0
+          python3 Solver/test/MMS/run.py "$CASE" "${args[@]}" || status=$?
+          python3 Solver/test/MMS/plot.py "$CASE"
+          cp Solver/test/MMS/$CASE/errors.csv Solver/test/MMS/$CASE/convergence.png runs/
+          exit $status
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mms-${{ matrix.case }}
+          path: runs/
